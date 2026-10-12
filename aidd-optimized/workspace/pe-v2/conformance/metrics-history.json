@@ -1,0 +1,182 @@
+[
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "trace",
+   "stale",
+   "provenance",
+   "drift"
+  ],
+  "metrics": {
+   "requirements": 0,
+   "orphans": 0,
+   "ghosts": 0,
+   "stale": 0,
+   "untagged": 17,
+   "under_confirmed": 0,
+   "llm_leaks": 3,
+   "open_assumptions": 18,
+   "erd_statuses": 0
+  },
+  "blocking": 3,
+  "major": 18
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "trace",
+   "stale",
+   "provenance",
+   "drift"
+  ],
+  "metrics": {
+   "requirements": 0,
+   "orphans": 0,
+   "ghosts": 0,
+   "stale": 0,
+   "untagged": 18,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 18,
+   "erd_statuses": 0
+  },
+  "blocking": 1,
+  "major": 19
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "trace",
+   "stale",
+   "provenance",
+   "drift"
+  ],
+  "metrics": {
+   "requirements": 0,
+   "orphans": 0,
+   "ghosts": 0,
+   "stale": 1,
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 0,
+   "open_assumptions": 18,
+   "erd_statuses": 0
+  },
+  "blocking": 0,
+  "major": 21
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "provenance"
+  ],
+  "metrics": {
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 19
+  },
+  "blocking": 1,
+  "major": 19
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "provenance"
+  ],
+  "metrics": {
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 19
+  },
+  "blocking": 0,
+  "major": 0
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "provenance"
+  ],
+  "metrics": {
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 19
+  },
+  "blocking": 1,
+  "major": 19
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "provenance"
+  ],
+  "metrics": {
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 19
+  },
+  "blocking": 1,
+  "major": 19
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "provenance"
+  ],
+  "metrics": {
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 1,
+   "open_assumptions": 19
+  },
+  "blocking": 1,
+  "major": 19
+ },
+ {
+  "date": "2026-10-09",
+  "sweeps": [
+   "trace",
+   "stale",
+   "provenance",
+   "drift"
+  ],
+  "metrics": {
+   "requirements": 0,
+   "orphans": 0,
+   "ghosts": 0,
+   "stale": 2,
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 0,
+   "open_assumptions": 19,
+   "erd_statuses": 0
+  },
+  "blocking": 0,
+  "major": 22
+ },
+ {
+  "date": "2026-10-11",
+  "sweeps": [
+   "trace",
+   "stale",
+   "provenance",
+   "drift"
+  ],
+  "metrics": {
+   "requirements": 0,
+   "orphans": 0,
+   "ghosts": 0,
+   "stale": 2,
+   "untagged": 19,
+   "under_confirmed": 0,
+   "llm_leaks": 0,
+   "open_assumptions": 19,
+   "erd_statuses": 0
+  },
+  "blocking": 0,
+  "major": 22
+ }
+]

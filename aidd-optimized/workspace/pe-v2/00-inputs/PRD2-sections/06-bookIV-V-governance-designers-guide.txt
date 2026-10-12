@@ -1,0 +1,750 @@
+=== PAGE 204 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 204 of 312 
+Book IV is the design governance layer of this specification. It records the mandatory scope decisions, resolves cross Book precedence, carries the three consolidated flows (Sales 
+Order to Delivery, Design to Source, and the physical Traceability Contract), supplies the executable pricing condition model, the production version and planning algorithm 
+baseline, the remaining module completion requirements, the architecture decision records, and the design and development gates with authoring standards. Where an artifact must 
+live outside a specification (Figma prototypes, OpenAPI files, executed test evidence), this Book defines the artifact, its owner, its repository and its acceptance criterion, so 
+the specification governs it without pretending to contain it. 
+1.	Controlling	Baseline,	Precedence	and	Decision	Register 1.1	Version	and	Precedence	Register Controlled Item Standing Precedence Rule 
+This document — Unified Build Specification Controlling The controlling document. Book IV has precedence over Books I–III where they conflict; within a Book, the conflict register 
+§1.3 resolves precedence Book I — Manufacturing Core Contained Functional baseline for its modules Book II — Material Management Contained Controls the material object, valuation and 
+account determination Book III — Enterprise Completeness Contained Controls flows FL-01…FL-08, integration, security, resilience, planning, global model, CAD integration and 
+delivery framework Inventory & Warehouse Module Spec V3.0 (Mar 2026) — external Version-locked into the baseline. Deltas flagged “DELTA to INV x.x” in Books I–II control over the 
+referenced INV section. Cross reference validation executes at design gate DG-1 (§9) Accounting Module Implementation Spec V2.0 (Mar 2026) — external Version-locked. Same delta 
+rule. O2C/P2P/close behavior validated per FL-01/FL-03/FL-06 test packs 1.2	Mandatory	Scope	Decision	Register	(DEC-01	…	DEC-10) These decisions are 
+recorded as the controlling scope baseline. Each names its go-live commitment and its phase trigger. Changing any DEC row is a steering-committee change-control action, not an 
+editorial one. ID Decision Recorded Outcome DEC-01 Scheduling at go-live RESOLVED — Book III Part E controls and supersedes Book I Part D §11. Go-live delivers finite-capacity 
+buckets, batch resources, freeze horizons and CTP with soft capacity reservation (Part E §6 boundary table). The Book I §11 rows are re-read accordingly: its “Phase 1 infinite 
+capacity” row is void; interactive drag rescheduling remains Phase 2; solver-based optimization remains Phase 3. See conflict C-01 DEC-02 Actual costing Standard costing is the 
+go-live and Phase 2 method (Book I Part I §5). Periodic actual costing / material ledger is a Phase 3 decision gate; the per-order and per-batch actuals needed for it are already 
+captured, so no schema rework is expected. Until then, margin truth is the three-view report (quoted/standard/actual per order, Book I Part B §6) 
+
+=== PAGE 205 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 205 of 312 
+ID Decision Recorded Outcome DEC-03 Product configuration Go-live: structured ETO configuration attributes + template designs + Copy From variant authoring (Books I B §3.2, C §3.3). 
+Configurable 150% BOMs, option rules and configurable routings: Phase 3, architected via the characteristics layer (Book II §2.4). No configurator at go-live is a recorded 
+limitation, not an omission DEC-04 Carrier / TMS Go-live: manual carrier selection, PRO/BOL capture, freight accrual #26, POD capture per Flow A §2. Carrier API integration 
+(rating, tendering, tracking, e-POD) is Phase 3 as interface IF-21 (reserved in the catalog). Freight claims process is in scope at go-live (Flow A stage 14) DEC-05 Supplier / 
+customer electronic integration Phase 2: supplier EDI 850/855/856/810 (IF-01/02 upgrade) for the top-volume vendors. Phase 3: supplier portal and customer portal incl. drawing 
+responses (Book I C §5.2 transmittals stay email-based until then). All Phase 1 processes function without these channels DEC-06 Field service and installed base Installed-base 
+record and warranty entitlement engine are IN at go-live (§7.4 of this Book) because RMA adjudication depends on them. Field service execution (dispatch, technician work orders, 
+service billing beyond RMA RC4) is OUT until a Phase 3 scope decision DEC-07 Multi-plant / global first delivery Go-live scope: one manufacturing plant, four legal entities, 
+intercompany merchandise flow FL-07 live. Plant-2 activation and international expansion execute per the pre-specified packages (Book III Part F §5–6); the activation trigger is a 
+signed steering decision plus the FL-04/FL-07/FL-08 multi-plant test packs DEC-08 Machine and test-equipment integration Phase 1: manual capture with instrument-ID binding and 
+calibration interlock (Book I Part E §3). Phase 2: CSV import from test sets. Phase 3: direct interfaces and OEE/downtime automation (IF-20). Manual fallback remains specified for 
+every phase DEC-09 Quality maturity Phase 2: SPC (control charts, capability, trend alerts on IP-INP/FIN characteristics) and audit management. Control plans/FMEA/APQP/PPAP: 
+implemented only where a customer contract demands them, activated per customer flag; otherwise excluded. Deviation/waiver control is IN at go-live (§7.3) DEC-10 Application 
+architecture Modular monolith with enforced bounded contexts, single relational database with schema-per-context ownership, log-based event broker with transactional outbox. 
+Approved through the ADR set in §8 1.3	Conflict	Register ID Conflict Resolution Status C-01 Book I Part D §11 (infinite-capacity Phase 1) vs Book III Part E §6 (finite CTP 
+at go-live) DEC-01: Book III Part E controls; Book I §11 superseded as described Closed 
+C-03 AVL “Price Basis / Lead Time” columns (Book I G §2.2) vs purchasing info records (Book II §7.2) Already resolved in Book II §7.5: info record owns commercial terms; AVL columns 
+are read-through views. Recorded here for the register Closed 
+C-04 Completeness claims vs scope language The benchmark language on the cover governs all external descriptions. Nothing stronger may be claimed Closed 
+
+=== PAGE 206 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 206 of 312 
+ID Conflict Resolution Status C-05 Statistical safety stock “Phase 2” (Book I A §10.2) vs any assumption of go-live statistical buffers Static safety stock at go-live stands; the 
+reserved Suggested SS columns remain read-only until the Phase 2 engine ships Closed 
+C-06 Two ATP definitions (Book I B §4.3 vs Book III availability semantics in Book II §8) The single Availability definition in Book II §8 controls; Book I §4.3 is its order-entry 
+application Closed 
+Build Note: Register discipline: any newly discovered cross-Book contradiction gets a C-row here with an owner and a resolution before the affected module passes design gate DG-1. 
+A build that codes around an unregistered conflict fails review by definition. 2.	Flow	A	—	Sales	Order	to	Delivery	(FL-09) FL-09 consolidates 
+the fulfillment path that FL-01/FL-02 cover commercially into one execution design across MTS, MTO and ETO branches, and adds the objects the fulfillment design must carry: 
+schedule lines, deterministic delivery split/merge, allocation and backorder processing, carrier/POD closure and controlled PGI reversal. Everything here extends Book I Part B and 
+INV 5.7/Part A §5 without changing them. 2.1	Order	Schedule	Lines	(new	sub-object	of	the	SO	line) Field Type Req Specification Sched # Auto 
+Auto 10, 20, 30 within the SO line; created automatically (one per line by default; more on split) Requested Qty / Date Number + date Yes Customer ask at schedule granularity; 
+header/line dates default the first schedule Confirmed Qty / Date Number + date Auto Written by ATP (MTS) or CTP (MTO/ETO) with the supply/capacity constraint named and the plan 
+snapshot ID stored (Book III Part E §3) Delivered Qty / Open Qty Numbers Auto Rolled from delivery postings; Open = Confirmed − Delivered − Cancelled Backorder Flag Badge Auto Set 
+when Confirmed < Requested or a confirmed schedule slips; feeds the Backorder Workbench §2.2 Peg Reference Link Auto Reservation / WO / PR / planned order pegged to this schedule 
+(pegging is schedule-level from this Book forward; line-level pegs in Book I read as schedule 10) Status Badge Auto Open → Confirmed → Allocated/Pegged → Delivery Due → Partially 
+Delivered → Delivered → Closed / Cancelled Rules: delivery documents consume schedule lines, never raw order lines; a schedule line is the unit of confirmation, allocation, 
+backorder and closure. Invoice-relevant quantities roll up from schedules to the line so ACC contracts are untouched. Migration: existing open SO lines convert to single-schedule 
+lines automatically. 2.2	Allocation	and	Backorder	Processing • Allocation applies when available supply of an MTS material is less than the sum of confirmed 
+schedules due in the horizon. Priority order: contractual customer buffers (Book I A §10.3) first, 
+
+=== PAGE 207 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 207 of 312 
+then customer priority class (A/B/C on the customer master, Sales Director owned), then requested date, then order entry time. Fair-share within a class prorates by open quantity. 
+• Backorder Workbench (screen OM-BO-001, /sales/backorders): all backordered and at-risk schedules with supply options (incoming POs/WOs with dates, substitutable stock per 
+approved alternates), one-click re-promise proposals, and mass re-confirmation runs after each MRP run. Every reallocation that takes confirmed supply from one order to another 
+requires Sales Director approval and writes an audit pair on both orders. • Substitution at allocation follows engineering-approved alternates only (Book I C §3.2); customer-visible 
+substitutions additionally require CS confirmation per customer policy flag. 2.3	Delivery	Split	and	Merge	Rules	(deterministic) Rule Behavior Split — 
+mandatory Different ship-to sites; different Incoterms; hazmat segregation (oil totes vs electronics per hazmat profile); over-dimensional units needing permits ship alone; 
+customer “no partial” flag forces full-quantity waiting instead of split Split — planner elective Date-window separation (schedules > N days apart, default 7); equipment type 
+differences (flatbed vs van); weight/volume over vehicle capacity auto-proposes a split with the load plan Merge — allowed Same customer + ship-to + Incoterms + date window across 
+orders when the customer consolidation rule (Book I B §2.1 Commercial tab) permits; hazmat compatibility checked; merged deliveries keep per-order packing list sections Determinism 
+The Delivery Creation run (nightly + on-demand from the cockpit) applies these rules identically every time; every split/merge decision stores the rule ID that fired, so an 
+unexpected grouping is explainable (E-DLV-01 messages name the rule) 2.4	Delivery	Cockpit	and	Carrier/POD	Closure Element Specification Delivery Cockpit 
+(OM-DLV-001, /sales/deliveries) Work queue of deliveries by status (Planned → Released → Picking → Packed → Quality Cleared → Loaded → PGI → Delivered/Closed) with readiness flags per 
+Flow A stage 7 (supply, quality, credit, documents) on one object — the single answer to “can this ship today?” Load planning fields Vehicle/equipment type, permit checklist for 
+over-dimensional loads (existing Book I B §5.1), loading sequence per HU, dock door and appointment slot (plant calendar); loading scan SP-18 confirms sequence Carrier and tracking 
+(Phase 1 manual per DEC-04) Carrier, PRO/BOL #, planned transit days; tracking status manual until IF-21; expected-POD date = ship date + transit POD / Claim object (OM-POD) Per 
+delivery: POD status Expected → Received / Exception → Resolved/Closed; receiver name, date, condition notes, signed document upload. Exceptions open a Claim record: type (shortage, 
+damage, refusal), quantity/value, carrier claim reference, resolution (credit via CMR, redelivery, repair) — claims reuse RMA/credit paths, never invent parallel ones. Missing POD 
+after expected date + N days alerts (W.2 rule) Final milestone POD receipt (or site acceptance for ETO) fires the Delivery/Commissioning milestone (Book I B §4.4) exactly once, 
+idempotent on delivery ID 2.5	PGI	Reversal	and	Delivery	Correction	(controlled) 
+
+=== PAGE 208 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 208 of 312 
+Case Rule Before invoice posted Shipping Manager may reverse PGI within the same fiscal period: atomic mirror of postings #25/#26/#27, serial statuses restored (Shipped → Reserved, 
+customer/site cleared with history retained), HUs → Loaded, delivery → Packed, invoice request withdrawn. Reason mandatory; reversal references the original PGI document After 
+invoice posted No direct PGI reversal. Path is credit/rebill (ACC 4) or RMA (FL-05) depending on whether goods physically returned; the delivery record links the correction chain 
+Partial PGI failure Structurally impossible (single transaction, Book III Part B §2.3); a failed PGI leaves the delivery at Loaded with the error surfaced — never a half-posted 
+state Genealogy Reversal writes reversal events per the Traceability Contract (§4.3); shipped events are never deleted Tests TC-O2C-061…070 added: reversal before/after invoice, 
+same-period guard, serial restoration audit, double-reversal block, claim-driven credit 2.6	Flow	A	Design	Deliverables	and	Gate • BPMN swimlane set (Sales, 
+Pricing, Credit/Finance, Planning, Engineering, Production, Warehouse, Quality, Shipping, Carrier, Accounting) and sequence diagrams for confirmation, promise, delivery creation, 
+PGI, POD and billing — repository: the design vault, IDs BPMN-FLA-01…; acceptance: every diagram element carries the REQ/IF/TC references it implements. • UX pack for order 
+workbench, promise dialog, allocation/backorder, delivery cockpit, pick/pack/load, PGI confirmation, POD/claim — Figma library per §9 standards, approved states per the screen 
+template. • Test pack TC-FLA-001…080 covering the 16 stages incl. every mandatory exception class (duplicate customer PO, blocked customer, tax outage, soft-reservation expiry, 
+split/merge determinism, wrong serial at pick, repack, failed PSI, carrier rejection, double PGI, POD exception, close reconciliation). 
+3.	Flow	B	—	Design-to-Source:	Engineering	to	Purchasing	(FL-10) FL-10 is the dedicated design to source flow. It governs how an engineering 
+need becomes a revision-correct, compliance-checked purchase, and how engineering change hits open purchase documents. It composes existing objects (ER, EBOM, MCR, AVL, IR, RFQ, 
+PO, GRN, ECO) and adds three new controls: release levels, the long-lead purchase release, and the immutable supplier technical package. 3.1	Release	Levels	(new	control	
+on	the	design	package) Release Level Rule Concept Design exploration; nothing purchasable or buildable; placeholders may exist (MCR running) Preliminary / RFQ Package 
+may go to suppliers for quotation only, watermarked NOT FOR MANUFACTURE; RFQs allowed, POs blocked (E-DTS-01) Long-Lead Purchase Release (LLR) Named long-lead items purchasable 
+under §3.2 controls before full design release; production use still blocked Approved for Purchase Commercial/technical spec final for buying; POs unrestricted per normal rules; 
+production release may still be pending 
+
+=== PAGE 209 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 209 of 312 
+Release Level Rule Released for Production Existing meaning (Book I C §3.4/§6): MBOM/routing/drawings/plans effective for WOs Superseded / Obsolete Existing meanings; open-document 
+and stock disposition per ECO/supersession engines The release level lives on the Engineering Request deliverables package and stamps every document and EBOM revision it covers; 
+RFQ and PO line validations read it. Levels only move forward except via ECO. 3.2	Long-Lead	Purchase	Release	(LLR	object) Field / Rule Specification 
+LLR-{YYYY}-{SEQ:4} Items (long-lead flagged: core steel, copper, bushings, tap changers per estimate), quantity and value caps, revision basis (exact package version §3.3), risk 
+class (Low: catalog component / Medium: parametric spec stable / High: geometry still moving) Approvals Engineering Manager + Purchasing Manager; Controller joins above $100k 
+exposure or risk class High; approval records the accepted cancellation exposure PO behavior POs created under an LLR carry the flag Long-Lead — Preliminary Revision and the 
+package version; vendor terms must include the negotiated change/cancellation clause reference Exposure tracking Running exposure = open LLR PO value + cancellation fees; visible 
+on the ETO order cost panel (feeds committed cost, §7.6) and on the LLR record; breaching the cap blocks further POs (E-DTS-02) Change handling Any ECO touching an LLR item forces 
+the ECO open-document disposition (Book I C §4.2) plus a commercial decision per PO: proceed / change order to vendor / stop with exposure booking; unresolved LLR impacts block ECO 
+release Closure LLR closes when final release confirms the purchased revision (no-change path) or every affected PO has a disposition (change path); the ETO order cannot invoice 
+its Materials milestone with an open LLR exposure decision 3.3	Supplier	Technical	Package	(STP	object) Element Specification STP-{SEQ:6} Immutable bundle: drawing 
+IDs + revisions (released renditions only), specifications, characteristics/tolerances extract, quality clauses (Q1–Q5), certificate requirements, origin/compliance requirements, 
+acceptance criteria; SHA-256 checksum over the manifest Versioning Any content change = new STP version; old versions never mutate. RFQ and PO lines reference exactly one STP 
+version; a superseded STP cannot attach to new documents (E-DTS-03) Vendor acknowledgement Confirmation capture (IF-02) extends with package acknowledgement: vendor confirms 
+qty/date/price AND the STP version; state Acknowledged / Exception (deviation raised) / Rejected. Receipt against a PO whose vendor never acknowledged a revised STP hard-blocks 
+(E-DTS-04) Deviation requests Vendor-proposed alternates/deviations create a Supplier Deviation record routed to Engineering + Quality (workflow W.4 addition); approval scope: 
+affected lots/orders, expiry; approved deviations link into genealogy so affected serials are queryable (Traceability rule §4.3) 
+
+=== PAGE 210 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 210 of 312 
+Element Specification Receipt validation GRN validates the batch/certificates against the STP requirements (extends E-QM-06); wrong-revision documentation at receipt blocks 
+acceptance with the STP diff shown 3.4	FL-10	Stage	Contract Stage Controlling Specification Evidence 1 Trigger (ETO order, ECO, obsolescence, NCR, make/buy review) ER 
+auto-create Book I C §2; ECR sources §4.1 Trigger type, owner, due date, linked SO/WO/ECR 2 Preliminary design + placeholders Book I C §3; Book II §4.3 Preliminary release level; 
+placeholder MCRs open 3 Material creation (MCR) Book II §4.2 Activation blocked until mandatory views complete 4 Make/buy + source strategy Book II §3.6 procurement type; alternates 
+Book I C §3.2 Approved decision, effective date, owner 5 Long-lead release decision §3.2 LLR Caps, risk class, exposure acceptance 6 Purchase specification package §3.3 STP Immutable 
+package ID + checksum on RFQ/PO line 7 Source determination Book II §7.5 order; AVL qualification Book I G §2.2 Eligible source + reason; EX-09 exception on none 8 RFQ / technical 
+bid Book I G §4 + sealed/technical-commercial split scoring (technical pass/fail by Engineering before commercial opens; weighted award grid) 
+Bid versions, deviation list, award approval, AVL/IR write-back 
+9 PR + budget approval Book I G §3; ACC 21/22 Approval + budget evidence 10 PO creation/release Book I G §5 + STP version + LLR flag where applicable Released PO revision + 
+transmission record 11 Supplier acknowledgement §3.3 acknowledgement states Acknowledged/Exception/Rejected per line 12 Engineering change impact Book I C §4.2 dispositions + §3.2 
+LLR commercial decisions + PO revision mechanics Book I G §5.3 Per-line disposition before effectivity 
+13 ASN/receipt/provenance GRN + batch provenance Book II §15.1; ASN Phase 2 per DEC-05 Traceability chain starts (T01/T02) 14 Incoming quality Plans Book I A §6; certificates vs STP 
+§3.3 Accept/conditional/reject/RTV/NCR/SCAR 15 Release to production Stock status rules; genealogy T03/T04 Unrestricted stock with lineage 16 Closure PO matched/closed (FL-03), ECO 
+impacts resolved, no open deviation, LLR closed Reconciliation clean; test evidence filed 
+Test pack TC-DTS-001…040 must cover, at minimum, long-lead purchase followed by engineering change with supplier work started, vendor alternate proposal with preserved 
+traceability, wrong-revision receipt hard-block, and no-valid-source exception routing. 
+
+=== PAGE 211 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 211 of 312 
+4.	Flow	C	—	End-to-End	Traceability	Contract	(FL-11) FL-11 turns the scan points (Book I Part F) and genealogy model into a physical contract: a 
+canonical event dictionary, the mandatory schema, immutable correction rules, completeness controls and the required outputs. The genealogy tables of Book I Part F §5 remain the 
+storage design; this section is their binding data contract. 4.1	Canonical	Event	Dictionary Event Captured At (source) Mandatory Identity and Evidence T01 Supplier 
+source PO release (FL-10 stage 10) Vendor, vendor site, PO line, manufacturer/MPN, STP version T02 Receipt identity GRN (SP-01…03) GRN, internal batch/serial, vendor batch/heat, 
+qty, CoO, dates, certificate checksums T03 Incoming quality Inspection close (INV 6.1) Plan + revision, sample, results, instrument (SP-14), inspector, disposition, NCR/SCAR refs 
+T04 Stock movement Every movement (SP-04/06/15/21) From/to bin, stock status, ownership bucket, batch/serial/HU, qty, user/device T05 Reservation/issue Issue/backflush (SP-08/09) 
+SO/WO/op, material, batch/serial, qty, source bin, operator, event ID T06 Parent-child install/remove SP-12 (+ rework removals) Parent serial, child serial, op, installed/removed, 
+reason T07 Operation confirmation SP-10/11 WO/op, MBOM+routing revisions, good/scrap/rework, labor, tool/machine ID, capture-template data T08 Test/inspection Final test / IPQC 
+(Book I E §4) Serial, plan revision, run #, results, instrument calibration state, tester, attachments T09 Finished receipt FG receipt (Book I D §8.1) Serial, WO, standard cost 
+version, location, quality status T10 Pack/HU SP-16/17 HU/SSCC, contents, weights, label IDs, packaging item, seals T11 Ship/deliver SP-18 + PGI + POD (§2.4) Shipment, BOL, 
+carrier, customer, site, PGI doc, POD, condition T12 Return/service SP-19 + RMA/RWO events RMA, condition, repair/removal/install events, replacement serial, disposition T13 
+Recall/containment Campaign actions (FL-08) Campaign, population version, holds, notifications, recovery, exceptions, effectiveness 4.2	Mandatory	Event	Schema • Identity: 
+event_id (UUID), event_type + schema_version, business object key, entity, plant, source transaction + line. • Causality: correlation_id, causation_id, prior/reversal event 
+reference, user/device/integration principal, originating requirement (REQ id) where rule-driven. • Time: occurred_at UTC, recorded_at UTC, original offline timestamp when replayed 
+(Book I F §2), monotonic sequence within the object. • Product: material, revision/effectivity actually used (not current — rule §4.3), batch/serial, parent/child, qty + UoM. • 
+Location/ownership: warehouse/bin/status, owner type/ref, peg type/ref, supplier/customer/site. 
+
+=== PAGE 212 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 212 of 312 
+• Process references: PO/GRN/SO/delivery/WO/op/inspection/HU/shipment/RMA/campaign as applicable per event type (dictionary defines the required set per type). • Evidence: 
+certificate/document/test/instrument links with checksums, result/disposition. • Integrity: append-only insert, row hash chained per object (tamper evidence), correction status 
+(Active / Reversed / Replacement), retention class. 4.3	Correction	and	Reconciliation	Rules	(binding) Rule Required Behavior No destructive edit Genealogy rows are 
+never updated or deleted. Corrections = reversal event + replacement event, both referencing the original (correction UI guides the pair). Database privileges enforce this, not 
+convention Transaction/event parity Every traceability-relevant posting produces exactly one accepted event; every event resolves to a valid source transaction or an approved 
+manual-exception record. Daily parity job counts both sides per type Serial uniqueness A serial has at most one active location, HU, parent and ownership state; violations are 
+structurally prevented by the active-link constraint (serial_link model, Book I F §5) and monitored Batch quantity balance Received + produced + positive adjustments = on-hand + 
+consumed + scrapped + shipped + returned, within UoM rounding tolerance; imbalance rows go to the completeness dashboard with owner Revision proof Consumption and shipment events 
+store the engineering/document revision actually effective at execution (from the WO frozen revisions), never resolved-at-query-time Certificate lineage Certificate files and 
+checksums are immutable; a replacement certificate links the original with reason; STP references (§3.3) keep supplier package lineage Recall completeness Campaign population is 
+versioned; closure requires 100% accounted (recovered / field-corrected / documented exception) per FL-08 field 12 Daily controls Automated: orphan events, missing events, broken 
+parent-child links, invalid status sequences, source/event count mismatches — reported with assigned owners on the Traceability Completeness dashboard (coverage %, orphan counts, 
+delayed offline events, unresolved corrections) 4.4	Required	Outputs	and	Tests • Outputs (extending INV 10.4): backward trace, forward trace, as-built record (incl. 
+rework and removed components), recall population report, certificate dossier (customer/audit package: CoC, FTR, material certs, drawing/as-built references, shipment evidence — 
+one-click per serial), completeness dashboard. Performance: full tree < 10 s (existing NFR); archive queries < 60 s (Book III D §6 retention tiers). • Test pack TC-TRC-001…040 must 
+cover, at minimum: multi-WO forward trace from one heat, backward trace through rework with removed/replaced children, offline scan replay with conflict and no duplicates, 
+wrong-batch correction with explainable history, mock recall end-to-end, archive-and-retrieve at performance target. 
+5.	Executable	Pricing	Condition	Model The pricing waterfall (Book I Part A §4.4) remains the business rule. This section converts it into condition technique 
+structure so the Pricing Service is configurable data, not narrative. 
+
+=== PAGE 213 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 213 of 312 
+5.1	Condition	Types	and	Calculation	Schema Step Condition Type Source (access sequence) Behavior 10 PB00 Base Price 1) Manual override (authority-checked) 2) 
+Customer-specific price 3) Price list rate with qty breaks 4) Item default (fixed/markup) First hit wins; Price Source badge stores which access supplied it; below-floor detection 
+runs after step 40 20 DIS1 Discount % Document line entry within role limit; contract discount matrix (agreements §6.2 Book I I) Applies to PB00; stacked discounts prohibited (one 
+DIS1 per line) 30 SURC Commodity Surcharge Surcharge rule per item/family (Book I I §6.4): index basis, content, pass-through Separate element, printed separately; re-fires only at 
+defined repricing events 40 FRT1 Freight Per Incoterms policy: included (no element) / estimated pass-through (accrual basis) / separately billed line Never buried in PB00; margin 
+calculations exclude pass-through freight 50 TAX External engine per Book I A §11 precedence Committed at invoice; estimates at quote/SO save 5.2	Binding	Calculation	
+Rules • Persisted price elements: every document line stores its condition results as rows (type, source row ID, basis, rate, value, currency) at determination time — documents 
+never re-derive prices from masters afterwards. Repricing replaces the element set explicitly with a diff dialog (existing rule, now at element granularity). • Currency: conversion 
+at document level only, using the daily rate of the pricing date; price masters never auto-convert; the booked rate is stored on the document (existing ACC 3 rule, restated as the 
+condition-model rule). • Rounding: each condition value rounds half-up to currency minor unit at line level; the document total is the sum of rounded lines (matches the tax engine, 
+Book I A §11.2); price unit arithmetic (per 100/1000) resolves before rounding. • UoM: condition rates apply per Sales UoM; conversion to base for margin uses the rational factors 
+(Book II §2.5); a missing conversion path blocks determination (existing V-SAL rule). • Validity and overlap: all condition records are effective-dated, non-overlapping per key 
+(V-SAL-02/03 generalized to every condition table); retroactive master changes never restate documents — corrections go through credit/rebill (the Book I A §11.5 doctrine applies to 
+prices as well as tax). • Explainability: the simulation endpoint (formalizing the Price Simulation button) is /api/v1/pricing/simulate — input customer, item, qty, date; output the 
+full element set with every access tried, the winning source rows and the floor check; same service the documents call, guaranteeing simulation = reality. 
+6.	Production	Versions	and	Planning	Algorithm	Baseline 6.1	Production	Version	(new	master	object) Field Type Req Specification PV # 
+Auto Auto PV-{SEQ:5} per material + plant Material / Plant Lookups Yes Make items only 
+
+=== PAGE 214 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 214 of 312 
+Field Type Req Specification MBOM Revision / Routing Revision Lookups Yes Both must be Released; pairing is the point — no more independent selection Inspection Plan Set Auto view — 
+INP/FIN plans resolving for this pairing (preview per Book I A §6.2) Lot Size Range Numbers No From/to qty this version applies to (e.g. prototype vs series routing) Valid From / 
+To Dates Yes/No Effective dating; exactly one valid PV per (material, plant, lot-size band, date) — V-PV-01 blocks overlaps Status Badge Auto Draft → Released (Engineering Manager) → 
+Superseded/Obsolete; ECO cutover swaps PVs atomically Selection rule: WO creation and MRP explosion select the valid production version — never a bare MBOM or routing. Existing 
+single-pair materials migrate to auto-generated PV-1 records, so Book I Part D behavior is unchanged where only one version exists. Plant-2 activation (Book III Part F §5) rides 
+this object as designed. 6.2	MRP	Algorithm	Baseline	and	Golden	Data • The deterministic order of the run is binding: (1) low-level-code assignment; (2) per 
+material by LLC ascending: gross requirements aggregation by bucket (daily), (3) netting: net(t) = max(0, gross(t) + safety stock − projected available(t)), projected available 
+rolls supply at confirmed dates; (4) lot sizing per policy with rounding; (5) scrap application (component + assembly, Book I C §3.2 / Book II §3.6); (6) lead-time offsetting 
+(routing-based or field-based per Book II §3.6, calendars respected); (7) source assignment per Book II §7.5; (8) exception generation EX-01…EX-09; (9) firmed proposals untouched; 
+planning fences respected (EX-08). • Worked example: the specification repository carries the golden dataset GD-MRP-01: a 3-level BOM (transformer, coil sub-assembly, copper), 
+seeded demand and supply, expected planned orders and exceptions per run — the regression anchor for every engine change. Property test: rerunning MRP on unchanged inputs yields 
+byte-identical proposals (determinism NFR, mirrors Book III Part E §3). • Pegging: full multi-level pegging is stored per run (requirement → supply chain), powering the Backorder 
+Workbench (§2.2), shortage explanations and promise revalidation. De-pegging follows §2.2 approval rules. • Plan snapshots: each published schedule/MRP run stores its input snapshot 
+ID (existing Part E rule) so every confirmed date names the plan that produced it. 
+7.	Module	Completion	Additions The remaining module completion requirements are closed here. Requirements that demand artifacts (diagrams, prototypes, schema files, 
+test evidence) are governed by the §9 gates; requirements already specified in Books I–III are cross referenced in the module index and not repeated. 7.1	Material	
+Duplicate	Merge	(completes	Book	II	§4.4) • Matching: trigram similarity on normalized descriptions + exact MPN/manufacturer matches, threshold 0.9 review / 0.97 
+auto-flag, scoped within material group L1 (existing); the steward review queue shows side-by-side with usage counts. 
+
+=== PAGE 215 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 215 of 312 
+• Merge = supersession specialization: survivor chosen by steward; loser becomes Restricted with supersession record (Book II §4.6); open references rewrite where safe (BOM lines 
+via ECO task, price rows re-keyed with approval, info records merged keeping best basis with history), stock transfers to survivor batch-by-batch with genealogy continuity events; 
+unresolvable references block the merge with a worklist. Merges are irreversible by design — the audit chain is the undo story. 7.2	Warehouse	Task	Model	and	
+Labor	Time	Boundary • Warehouse tasks (receiving, putaway, replenishment, pick, stage, pack, load, transfer) become explicit task records with assignment, device, status 
+(Queued → Assigned → In Progress → Done/Exception) layered on the existing documents (picklists, putaway proposals) — the mobile work queue reads tasks, documents stay the system of 
+record. No behavior change to INV postings. • Labor time boundary: shop-floor labor capture (Book I D §6) is for costing and genealogy only. It is not a payroll system: no pay 
+rules, no attendance. The time-system boundary exports approved labor confirmations (operator, WO/op, hours) to the payroll/time system as IF-22 (reserved, Phase 2); supervisor 
+corrections follow the confirmation-correction rule (mirror postings) with dual sign-off. 7.3	Quality	Deviation	/	Waiver	Control	(new	object,	go-live	per	
+DEC-09) Field / Rule Specification DEV-{YYYY}-{SEQ:4} Scope: material / batch / WO / serial set / customer; deviation description; specification reference (characteristic + 
+released value vs accepted value) Type Use-As-Is (waiver) / Temporary Process Deviation / Customer-Approved Concession Approvals Quality Manager + Engineering Manager; customer 
+approval evidence mandatory when the customer flag or contract requires (attachment + reference); Controller when value impact > threshold Validity Expiry date or quantity cap, 
+whichever first; auto-expiry job blocks further use and alerts (W.2/W.3) Traceability Affected serials/batches link to the deviation (genealogy evidence rows); the as-built record 
+and certificate dossier disclose active deviations (FL-11 §4.4) Interaction A deviation never edits the inspection plan; results still record actuals vs released spec with the 
+deviation reference explaining acceptance — audit-proof by construction 7.4	Installed	Base	and	Warranty	Entitlement	(go-live	per	DEC-06) 
+Element Specification Installed Base record (IB) One per shipped FIN serial: customer, site (from shipment), POD date, commissioning date (optional capture from field evidence), 
+ownership transfers (resale/assignment with document), status (Shipped / Installed / In Service / Returned / Scrapped), service history links (RMA, RWO, deviations, campaigns) 
+Warranty entitlement rules Start = ship date by default; customer contract may elect POD or commissioning date capped at ship + N months (config); duration from item + SO override 
+(existing fields); extensions as dated records with approval; exclusions catalog (site conditions, installation error categories) referenced by adjudication 
+
+=== PAGE 216 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 216 of 312 
+Element Specification Entitlement check service /api/v1/warranty/entitlement (serial, claim date) → covered / not covered / conditional with rule trail; the RMA warranty toggle 
+default (Book I A §3.4) now calls this service instead of the bare serial window — same outcome for the base case, correct outcome for extensions and transfers Migration Shipped 
+serial history converts to IB records with ship-date warranty; unknown sites flagged for CS enrichment (data-quality queue) 7.5	Reporting	and	Analytics	Governance • 
+KPI dictionary: one controlled row per KPI — formula, grain, filters, owner, target, source lineage, freshness class. Seed catalog: OTD %, promise reliability (Part E §5), FPY by 
+gate, scrap value %, PPV/IPV, inventory turns, WIP aging, quote win rate, backlog (BBB), three-view order margin, DSO (ACC), close cycle days, traceability coverage %, data 
+completeness (Book II §16.4), SLO attainment. A number that appears on two dashboards from two formulas is a defect. • Semantic model: facts (orders, deliveries, invoices, stock 
+movements, confirmations, inspections, genealogy events, journal lines) and conformed dimensions (material, customer, vendor, plant/entity, work center, cost/profit center, 
+calendar) defined once in the reporting layer (replica per ADR-05); operational reports that act as subledgers (WIP, GR/IR, AR/AP aging, stock ledger) stay in the transactional 
+system and reconcile to GL per the close checklist — analytics never becomes the system of record. • Freshness classes: real-time (operational queues), 15-minute (dashboards), daily 
+(analytics); late-arriving offline scans backfill with recorded_at lineage so daily numbers are restated visibly, not silently. • Security: the same role/entity/plant scopes apply 
+to dashboards, exports and APIs (single policy engine, Book III Part C §3); exports of customer-identifying traceability data log as disclosures. • Acceptance: every shipped report 
+carries a golden dataset with expected totals and drill paths (TC-RPT range). 7.6	ETO	Cost	Control	Additions	(completes	Book	I	Part	I	
+for	ETO) • Per ETO order cost panel: estimate (CE basis) vs committed (open POs + LLR exposure §3.2 + subcontract commitments) vs actual-to-date (WIP charges) vs 
+estimate-at-completion (actual + remaining standard) vs margin-at-completion against the quoted price; change orders re-baseline with history. • EAC formula is deterministic: EAC = 
+actuals + (remaining operations at standard rates) + (unissued material at current basis) + open commitments not yet consumed; variances against CE feed the quote-calibration 
+review (Part E §5 promise calibration sibling). • This is order-level project cost control; full project/WBS accounting stays out of scope per DEC-06/DEC-10 boundaries until a Phase 
+3 decision. 7.7	Workflow	Engine	Schema	and	Runtime	(completes	Section	W) • Definition schema (stored, versioned): { workflow_id, version, document_type, trigger, 
+conditions[] (field, operator, value — the rule grammar), steps[] (order, type sequential/parallel, approver resolution role/user/derived, sla_hours, escalation_target), 
+terminal_actions[], effective_from/to, owner, approval_ref }. The W.4 catalog rows are instances of this schema; an admin UI edits definitions under change control. 
+
+=== PAGE 217 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 217 of 312 
+• Runtime guarantees: idempotent action handling (double-click and email-link replay safe), duplicate-step suppression, timeout → escalation per step, recall/resubmit preserving 
+history, compensation on terminal-action failure (the document returns to pre-approval state with the failure surfaced), full audit per action. • Notification templates: versioned 
+templates per event with localization slots (English at go-live per Book III Part F §6), sensitive-data rules (no prices in shop-floor notifications; no customer PII in 
+vendor-facing mails), signed action links expiring per policy, per-user digest preferences for non-critical severities. • Job contracts: every W.3 job declares inputs, dependency 
+jobs, calendar, close-criticality, retry policy, idempotency key, output artifact and reconciliation query — rows in the job catalog, monitored per Book III Part D §5. • Workflow 
+analytics: SLA attainment, aging by step, bottleneck approvers, rejection rates, delegation usage, override frequency — monthly review by each workflow owner (feeds the W.4 
+governance loop). 
+8.	Architecture	Decision	Records	(DEC-10	execution) ADR Decision Rationale / Consequence ADR-01 Application shape Modular monolith with enforced bounded contexts: 
+Sales, Engineering, Materials, Planning, Production, Quality, Traceability, Procurement, Inventory, Controlling & Costing, Posting, Workflow, Integration, Identity 
+One deployable at go-live scale (NFR volumes are modest for modern hardware); context boundaries enforced by module visibility rules and the interface catalog so later extraction 
+of a hot context (e.g. Traceability) is a deployment change, not a rewrite 
+ADR-02 Database Single PostgreSQL cluster; schema-per-context ownership; foreign keys within a context, events across contexts Referential integrity where it is cheap, autonomy 
+where it matters; the Book II/III physical rules (effectivity, append-only audit, partitioning for genealogy and scan telemetry) apply per schema ADR-03 Eventing Log-based broker 
+(Kafka-class) + transactional outbox in every context Book III Part B §2.2/2.3 standards implemented once; DLQ/replay via the integration console ADR-04 Search Dedicated search 
+index (OpenSearch-class) for material, document and customer/vendor lookup incl. trigram duplicate checks Sub-500 ms lookups at 50k+ materials without abusing the OLTP database 
+ADR-05 Reporting Read replica + semantic layer for analytics; operational subledger reports stay transactional Freshness classes per §7.5; close-relevant reports never depend on 
+the analytics pipeline ADR-06 Workflow engine In-platform workflow service implementing the §7.7 schema (no external BPM product at go-live) The 27-row catalog is configuration; an 
+external BPM adds integration surface without capability PE needs yet ADR-07 Scheduling engine Finite scheduler as an internal service consuming the constraint model (Book III 
+Part E); heuristic seeded-deterministic at go-live; solver pluggable Phase 3 
+Matches DEC-01 boundary; determinism NFR preserved 
+ADR-08 CAD connector Server-side vault-event connector per Book III Part G (SolidWorks PDM baseline, tool-neutral contract) No designer-workstation agents; outage behavior per 
+IF-17 
+
+=== PAGE 218 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 218 of 312 
+ADR Decision Rationale / Consequence ADR-09 Client Single responsive web application; kiosk mode for terminals (badge login, focus-lock scanning per Book I Part F §2); Android 
+rugged devices run the same app 
+One codebase, one design system (§9 UX standards); offline queue per existing spec 
+ADR-10 Printing/devices Server-rendered ZPL print service with printer registry (existing Book I F §2 design elevated to ADR); scanner input via WebSocket wedge Deterministic 
+labels regardless of client; reprint governance preserved 
+9.	Design	and	Development	Gates	and	Authoring	Standards 9.1	Definition	of	Ready	—	Design	(DG-1,	per	module/flow) Gate Item Pass 
+Condition Scope approved Go-live/later/excluded boundary named per DEC register; business owner assigned Process defined Actors, trigger, happy path, exceptions, reversals and 
+closure agreed (flow template §9.4) Objects identified Master/transaction objects, ownership, relationships known (Books I–III + this Book) Decisions resolved No open DEC/C-register 
+item blocks the flow or data model References valid Controlling REQ IDs and cross-Book precedence confirmed (A-08 validation for INV/ACC references) 9.2	Definition	
+of	Ready	—	Development	(DG-2,	per	story) Gate Item Pass Condition Approved UX Wireframe/prototype with all states (normal, empty, loading, validation, 
+authorization, conflict, offline, degraded, read-only) approved by business owner + UX lead in the design vault Approved state/data design State machine, physical fields, 
+constraints and migration impact approved by the data architect Approved contracts OpenAPI/AsyncAPI files + examples + security scopes + retry/reconciliation published in the 
+contract repository with passing contract tests (Book III Part B §4) Postings and controls Inventory/financial effects, permissions, SoD, audit and reversal specified (matrix rows 
+exist) Acceptance criteria Given/When/Then criteria + test cases + data linked in the ALM tool Operational design Logs, metrics, alerts, jobs, performance and failure recovery 
+defined Dependencies available Upstream interfaces, configuration, environments, test doubles ready 
+9.3	Definition	of	Done	—	Development	(DG-3,	per	story) Code reviewed with static and security analysis clean; unit, property/calculation, contract, 
+integration and UI tests passing; negative, duplicate, concurrency, timeout, cancellation and correction paths tested; schema migration and configuration transport tested; 
+role/scope/SoD/audit tests passing; observability shipped with runbook links; reconciliation controls verified against seeded discrepancies; documentation updated; business 
+demo/UAT evidence attached with defects within 
+
+=== PAGE 219 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 219 of 312 
+gate policy. The go-live gate itself remains Book III Part H §7, now additionally requiring: the FL-09/FL-10/FL-11 packs passing, the conflict register at zero open rows, and the 
+DEC register signed. 9.4	Authoring	Standards	and	Reusable	Templates • Module authoring template: every future module document (and every revision of 
+an existing Part) must follow this twenty section structure — purpose/exclusions, RACI, capabilities with REQ IDs, process flows, objects/master data, state machines, screen 
+inventory, approved UX reference, field dictionary, rules/calculations with worked examples, approvals/automation, integration contracts, inventory/accounting effects, 
+exceptions/recovery, security/controls, reports/KPIs, NFRs, migration/configuration, acceptance/tests, dependencies/decisions. Books I–III substantially conform; their gaps against 
+this template are tracked as DG-1 items per module, not rewritten wholesale. • Requirement format: atomic and testable — REQ-{DOMAIN}-{OBJECT}-{SEQ} with title/objective, 
+actor+authorization, preconditions+trigger, main behavior, alternate/exception behavior, state/data/posting effects, integration effects, Given/When/Then acceptance, test+evidence 
+links. The Book III Part H parse generates these rows; new content is authored in this format directly. • Flow specification template: the FL table format used throughout (Book III 
+Part A + this Book) is the standard — flow ID/objective, scope/variants, trigger/preconditions, actors/owners, objects/state changes, main path, exceptions, inventory/financial 
+effects, interfaces, security/SoD, performance, closure/reconciliation, tests/evidence. • Screen design template: screen ID/route/persona, task objective and success condition, 
+layout+prototype link, fields/columns dictionary, actions with visibility/enabled rules and API calls, the nine mandatory states, navigation/drill-through, accessibility 
+(keyboard, focus, contrast, scanner/audio feedback, touch targets), audit/security, Given/When/Then acceptance. Applies to every screen in the UX pack. • API/event contract 
+template: contract ID/owners, purpose/boundary/source-of-truth, protocol/version/compatibility, machine-readable schema+examples+lineage, authentication/authorization scopes, 
+idempotency/ordering, errors/retry/replay/compensator, transaction behavior, reconciliation, observability/SLO, contract tests. Every IF catalog row publishes against this 
+template in the contract repository. 
+10.	Prioritized	Action	Register The action register below is the program work plan. Items marked Specified are closed inside this document as specification content. Items 
+marked Artifact must be produced in the named repository and accepted at the gates above. ID Pri Action Owner Status / Disposition A-01 P0 Master baseline, precedence and conflict 
+register; scheduling contradiction resolved Product Owner / PMO Specified — §1 of this Book; steering signature pending A-02 P0 Dedicated Sales-to-Delivery, 
+Engineering-to-Purchasing and Traceability designs Process Leads / Architect Specified — §2/§3/§4 (FL-09/10/11); BPMN artifacts per DG-1 A-03 P0 UX design system and approved 
+prototypes for all screens and scanner workflows UX Lead Artifact — design vault; standards §9.4; gate DG-2 
+
+=== PAGE 220 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 220 of 312 
+ID Pri Action Owner Status / Disposition A-04 P0 Bounded contexts, component/deployment diagrams and ADRs Solution Architect Specified — §8 ADR set; diagrams as artifacts per DG-1 
+A-05 P0 Physical ERDs, data dictionary and state models Data Architect Partially specified (Books II/III physical rules, state models throughout); full DDL artifact per DG-2 A-06 
+P0 OpenAPI/AsyncAPI/JSON schema contracts and test doubles Integration Lead Artifact — contract repository against IF catalog + §9.4 template A-07 P0 Pricing, MRP/CTP/scheduling and 
+costing algorithm specs with golden examples Functional/Technical Leads Specified — §5, §6, Book I Part I §4 worked example; golden datasets GD-* as artifacts A-08 P0 Version-lock and 
+cross-reference INV V3 and ACC V2 PMO / Module Owners Register specified §1.1; validation sweep executes at DG-1 A-09 P0 Detailed test cases and RTM per requirement and flow QA 
+Lead Framework specified (Book III Part H + TC ranges herein); cases as ALM artifacts A-10 P0 Source-to-target migration workbooks and reconciliation scripts Migration Lead 
+Approach specified (Book II §16.3, Book III Part H §5); workbooks as artifacts A-11 P1 Module completion additions Module Owners Specified — §7 closes the specification gaps; 
+remaining rows are artifacts/decisions mapped to DG gates A-12 P1 Configuration workbook and seed data Functional Leads Artifact — seed catalogs named throughout (statuses, 
+reasons, workflows W.4, accounts, calendars, labels) consolidate into the config workbook A-13 P1 Security role/SoD/data-classification design and tests Security Lead Specified 
+(Book III Part C); TC-SEC artifacts per DG-3 A-14 P1 Observability, reconciliation controls, job console and runbooks DevOps / Support Specified (Book III Parts B §4 / D §5); 
+runbook artifacts pre-go-live A-15 P2 Advanced target-state items (global ATP/CTP, portals/EDI, optimizer, actual costing, machine/OEE, field service, localization) Program 
+Steering Phased per DEC register; activation packages pre-specified where architectural (Book III Part F, DEC rows) Build Note: Acceptance language. This document is the 
+functional requirements baseline and the controlling design governance. It becomes the complete design and development package only when the named artifacts, the design packs of 
+the three consolidated flows, the detailed test and migration evidence and the formal sign offs complete through the gates in §9. 
+
+=== PAGE 221 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 221 of 312 
+BOOK V DESIGNER'S GUIDE & VISUAL ATLAS SAP S/4HANA Capability Map & Glossary  •  System Structure  •  Master Data Atlas  •  Document Flow Atlas  •  Cross-Module Linkage Map Module 
+Design Briefs with Screen Inventories  •  Barcoding & Device Specification with Label Mockups  •  CAD Linkage Visuals  •  Design System Starter Written for UX designers and builders: 
+plain language, seventeen diagrams, every screen indexed to its field-level specification  
+
+=== PAGE 222 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 222 of 312 
+Book V is written for the people who will design and build the screens: UX designers, Figma authors, and front-end developers. It uses plain language, pictures and short tables. 
+It removes nothing from Books I–IV; every topic here points to the exact section where the full field-level rules live. Read this Book first, design from it, and open the 
+referenced sections only when a rule detail is needed. 
+1.	How	to	Use	This	Book If you are… Read in this order Then design A UX designer starting cold §2 (what the system is, in SAP terms) → §3 (structure) → §5 (flows) → 
+§7 (your module’s brief) → §11 (design system) The module’s “prototype first” list, using the screen inventory and the states checklist A designer doing the shop floor §3 → §5.4 → §7.6 
+(Production) → §8 (barcoding and devices) → §11 Kiosk screens: dispatch, start/complete, material scan, QC gate, hold A developer joining mid-build §2 glossary → §4 (master data) → §5 
+(flows) → §6 (linkages) → Book IV §8 (architecture) Against the field tables of Books I–III and the contracts of Books III–IV A reviewer verifying capability coverage §2 capability map 
+Nothing to design — the map states what exists, where, and in which phase One rule keeps this simple: every screen in this system is specified twice. Once here, briefly, so you can 
+find it and understand its job. Once in Books I–III, completely, with every field, validation and posting. The screen inventory tables in §7 carry both references. 
+2.	The	Enterprise	Capability	Map The system must provide the enterprise capabilities catalogued below. Each row names the industry benchmark term so readers who 
+know SAP S/4HANA can orient instantly, states the capability in plain words, cites where this document specifies it, and carries the delivery phase from the decision register 
+(Book IV §1.2). Capability (benchmark term) What It Does (plain words) Specified In Phase SD — Sales & Distribution Quotes, sales orders, deliveries, billing triggers Book I Part B; 
+schedule lines and delivery rules Book IV §2 Go-live SD — Billing / FI-AR Invoices, credit notes, receivables, cash ACC V2.0 Sections 3–5 (external volume) Go-live aATP — Advanced ATP 
+Promise dates checked against stock and capacity ATP Book I B §4.3; CTP Book III Part E Go-live (single plant) MM — Purchasing Requisitions, RFQs, POs, vendor management Book I Part 
+G; info records and source lists Book II §7 Go-live MM — Inventory Management Stock, movements, counts, valuation INV V3.0 (external volume); gap closures Book I Part A Go-live MM — 
+Material Master One record per material, many views Book II (entire book) Go-live EWM — Extended Warehouse Task-directed warehouse work, waves, labor mgmt Task model Book IV §7.2 
+(light version); full EWM-class not planned Partial / excluded 
+
+=== PAGE 223 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 223 of 312 
+Capability (benchmark term) What It Does (plain words) Specified In Phase PP — MRP Nets demand against supply, proposes orders Book I D §3; algorithm baseline Book IV §6.2 Go-live 
+PP-DS — Finite Scheduling Schedules against real capacity constraints Book III Part E; DEC-01 Go-live (heuristic; optimizer Phase 3) PP-SFC — Shop Floor Control Work orders, 
+confirmations, WIP Book I Part D Go-live QM — Quality Management Inspection plans, results, NCR, CAPA Book I Part E + Part A §6; deviation/waiver Book IV §7.3 Go-live; SPC/audit 
+Phase 2 (DEC-09) PM — Plant Maintenance Maintain machines, tools, downtime Constraint hooks Book III E §2; full PM module Phase 3 (DEC-08 adjacent) PS — Project System Project/WBS 
+cost control ETO order cost control Book IV §7.6 (order-level) Order-level go-live; WBS excluded FI — GL / AP / AR / Assets Books, payables, receivables, close ACC V2.0 (external 
+volume); close orchestration FL-06 Go-live CO — Cost Centers / Profit Centers Where money is spent; which business earns it Book I Part H Go-live CO-PC — Product Costing Standard 
+costs, WIP, variances, settlement Book I Part I; account determination Book II Part B Go-live ML — Material Ledger (actual costing) Periodic actual unit costs DEC-02: data captured 
+now, ledger Phase 3 Phase 3 VC — Variant Configuration 150% BOMs, option rules, configurators DEC-03: structured ETO attributes now; configurator Phase 3 Phase 3 
+PLM / ECM — Engineering Change ECR/ECO, effectivity, BOM revisions Book I Part C §4 Go-live DMS — Document Management Controlled drawings and documents Book I Part C §5; CAD connector 
+Book III Part G Go-live; connector per IF-17 GTS — Global Trade Customs, export control, screening Foundations Book II §2.4/Book III F §6; full GTS Phase 3 TM — Transportation Mgmt 
+Carrier rating, tendering, tracking Manual at go-live; IF-21 Phase 3 (DEC-04) Phase 3 CS — Customer Service / Field Service Service orders, technicians, installed base Installed 
+base + warranty engine Book IV §7.4 now; field execution Phase 3 (DEC-06) Fiori — UX model Role-based apps, worklists, one design language Section §11 design system + workbench/queue 
+patterns throughout Go-live 
+BTP — Extensibility Custom fields, APIs, side-by-side extensions Book III T-06 heritage: custom fields/workflows/APIs Book III B, Book IV §7.7 Go-live core; marketplace n/a 
+
+=== PAGE 224 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 224 of 312 
+Capability (benchmark term) What It Does (plain words) Specified In Phase Group Reporting / Consolidation Multi-entity consolidation, eliminations Feeds specified FL-07/Book III F 
+§4; consolidation itself ACC scope / Phase 2 2.1	Plain-Language	Glossary	(the	36	terms	designers	will	meet) Term Meaning in one sentence Material Master 
+The single record for anything the company buys, makes, stocks or sells; every module reads its own view of it Material Type The category (raw, semi-finished, finished, trading, 
+packaging, spare, consumable, service) that decides how a material behaves everywhere BOM / EBOM / MBOM The parts list of a product; EBOM is how engineering designs it, MBOM is 
+how the factory builds it Routing The ordered list of operations (with times and work centers) to build something Work Center A machine, station or crew where operations happen; 
+carries capacity and hourly rates Production Version The approved pairing of one MBOM and one routing for a plant; orders always pick a version, never loose pieces MRP The nightly 
+engine that compares demand with supply and proposes orders to make or buy ATP / CTP ATP answers “is there stock by that date?”; CTP answers “can we make it by that date?” checking 
+materials AND capacity Planned Order MRP’s proposal to make something; a planner converts it into a real production order Production Order (WO) The document that authorizes 
+building one item, collects its costs and carries its serial Backflush Components consumed automatically when an operation confirms, instead of scanning each issue Kitting / 
+Staging Picking all components for an operation and delivering them to the work center before it starts Confirmation The operator’s report at an operation: good quantity, scrap, 
+time; it posts labor and materials WIP Work in process: the money value sitting inside unfinished orders Settlement Closing an order’s books: comparing actual cost with standard 
+and posting the differences (variances) Standard Cost The frozen planned cost of an item, rebuilt by a costing run; the yardstick everything is measured against Moving Average A 
+cost that re-averages with every purchase receipt; used for bought items Valuation Class The tag on a material deciding which balance-sheet account its stock value sits in PPV 
+Purchase price variance: what you paid minus what the standard said it should cost GR/IR A clearing account between goods received and invoice received; it must always net out 
+Three-Way Match Invoice pays only when PO, goods receipt and invoice agree PGI Post Goods Issue: the moment shipped stock leaves the books and cost of goods sold posts 
+
+=== PAGE 225 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 225 of 312 
+Term Meaning in one sentence Condition Technique Pricing built from stacked elements (base price, discount, surcharge, freight, tax) resolved by precedence rules Info Record The 
+commercial memory of one vendor supplying one material: price, lead time, order rules Source List / AVL Which vendors are allowed (AVL) and which one is fixed for a period (source 
+list) Handling Unit (HU) A numbered physical package (crate, pallet, reel) with contents, weights and its own barcode SSCC The GS1 standard 18-digit license plate for a shipping 
+unit; printed as GS1-128 barcode Batch / Heat A lot of material tracked as one identity; for steel and copper the mill heat number is the key Serial One physical unit tracked 
+individually for life: build, test, customer, returns Genealogy The permanent family tree of a serial: every batch, child serial, operator, test and shipment it touched ECR / ECO 
+Change request (asks and analyzes) and change order (executes) for engineering changes Effectivity When a change takes effect: by date, by serial number, or immediately FEFO 
+First-expired, first-out picking for shelf-life materials Safety Stock A quantity floor MRP protects so demand spikes do not empty the shelf Milestone Billing Invoicing an ETO 
+order in agreed slices (down payment, design approval, tested, shipped, delivered) ASC 606 The revenue accounting standard deciding when invoiced money counts as earned revenue 
+3.	System	Structure One picture of the whole system, then one picture of the company structure it runs on. Every module box below is a design brief in §7. 
+ Figure V-1. Module map. Five domains, eighteen modules. Inventory and Accounting are released external volumes; everything else is specified in Books I–IV. 
+
+
+=== PAGE 226 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 226 of 312 
+ Figure V-2. Organization structure. Four legal entities; the Transformer plant carries warehouses, work centers and cost centers; profit centers segment the P&L by product line. 
+3.1	Application	Navigation	(what	the	sidebar	contains) Top Level Children (each is a screen or queue) Home / Dashboards Executive • Inventory • Finance • 
+Production • Quality • Sales Sales Leads & Opportunities (new, Book VI §4.1) • Customers • Quotations • Sales Orders • Backorders (new, Book IV §2.2) • Deliveries & Shipments • Delivery 
+Cockpit (new) • Packing • RMA / Returns • Spares Finder (new, Book VI §5.1) • Sales Reports Engineering Engineering Items • Engineering BOMs • CAD Documents • Change Requests (ECR) • 
+Change Orders (ECO) • Production Versions (new, Book IV §6.1) • Where-Used • Engineering Reports Materials Material Master • Creation Requests (MCR) • Change Requests (MCH) • 
+Supersessions • Info Records • Source Lists • Account Determination • E&O Reserve • Data Quality Production Production Dashboard • MRP Workbench • Planned Orders • Production Orders • 
+Dispatch List • Shop Floor Terminal • Work Centers • Routings • Rework Orders • WIP Report • Production Reports Quality Quality Dashboard • Inspection Plans • Incoming / In-Process / 
+Final / Pre-Shipment • Stock Hold & Release • NCR • CAPA • SCAR • Deviations & Waivers (new) • Calibration • Recall Campaigns • CoC Inventory Per INV V3.0 navigation, unchanged Purchasing 
+Vendors • Approved Vendor Lists • Purchase Requisitions • RFQs • Purchase Orders • Long-Lead Releases (new, Book IV §3.2) • Expedite Board • Vendor Performance Costing & Pricing Cost 
+Estimates • Costing Runs • Work Center Rates • Price Lists • Customer Price Agreements • Commodity Surcharges • Margin Analysis Controlling Cost Centers • Profit Centers • Hierarchies • 
+Allocation Cycles • Reports 
+
+
+=== PAGE 227 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 227 of 312 
+Top Level Children (each is a screen or queue) Accounting Per ACC V2.0, unchanged Configuration Number Series • Barcode & Label Settings • Scan Point Policies • Workflows • Tax • 
+Periods • RMA Policies • Sales / Production / Engineering / Quality Settings 
+4.	Master	Data	Atlas Master data is the still water under everything that moves. The material is the hub; the pictures below show what hangs off it and how a real product 
+structure looks as a tree. 
+ Figure V-3. The Material Master hub. Each spoke is a view owned by one role; the full field lists are Book II §3. 
+ Figure V-4. A real BOM tree. A padmount transformer explodes into semi-finished assemblies and raw materials; find numbers position parts on drawings; scrap percentages feed MRP 
+and costing. 4.1	Master	Data	Object	Catalog Object What it is Who owns it Where specified Material The hub record with 9 types and per-view ownership Master Data 
+Steward + view owners Book II Customer Commercial + credit + tax + addresses Sales Admin (Finance owns credit) Book I B §2 
+
+
+=== PAGE 228 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 228 of 312 
+Object What it is Who owns it Where specified Vendor + AVL Vendor record; AVL says who may supply what Buyer + Quality Book I G §2 Info Record Vendor-material price and lead-time 
+memory Buyer Book II §7.2 Source List Period rule fixing or blocking sources Purchasing Manager Book II §7.4 EBOM / MBOM Design and manufacturing structures Engineering Book I C 
+Routing Operations, times, QC gates Manufacturing Engineering Book I D §4 Production Version Approved MBOM + routing pairing Engineering Manager Book IV §6.1 Work Center Capacity + 
+rates + cost center link Production + Controlling Book I D §2 Inspection Plan What to test, how, sampling Quality Engineer Book I A §6 Price List / Agreement / Surcharge Rule 
+Selling prices and escalators Pricing Manager Book I I §6 
+Cost / Profit Center Spend responsibility; margin segmentation Controller / CFO Book I H Batch / Serial / Serial Profile Lot and unit identities and rules System-generated per 
+profile Book II §15 Installed Base Where each shipped transformer lives Customer Service Book IV §7.4 Document / Drawing Controlled files with revisions Engineering Book I C §5 
+5.	Document	Flow	Atlas Six flows move everything in this business. Each picture reads left to right; dark boxes are the moments money or ownership changes; amber 
+boxes are quality gates. Under each picture: what a designer should make effortless. Full closure rules per flow live in Book III Part A and Book IV. 5.1	Order	to	
+Cash	(stocked	products) 
+ Figure V-5. Make-to-stock order to cash. FL-01 and FL-09 carry the complete rules. Design focus Why One readiness view per order (supply, credit, quality, documents as four 
+chips) CSRs answer “can this ship?” fifty times a day; the answer must be one glance, not five screens Promise dialog with the constraint named Partial availability decisions 
+(accept date / split / backorder) are the hardest moment at order entry Delivery cockpit as the daily queue Shipping lives in it all day; status columns and readiness flags must 
+sort and filter fast 
+
+
+=== PAGE 229 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 229 of 312 
+5.2	Engineer	to	Order	(custom	transformers)  Figure V-6. ETO quote to cash. The dashed line is milestone money arriving while the build progresses. FL-02 carries 
+the rules. Design focus Why Configuration panel that reads like a datasheet (kVA, voltages, cooling, taps) Engineers and customers check these values repeatedly; they print on the 
+quote Milestone strip on the ETO order (6 slices with evidence status) Everyone from Finance to the PM asks “which milestone are we on?” Drawing approval loop as a visible ping-pong 
+(sent → customer → returned) The single most common ETO delay; make its state impossible to miss 5.3	Procure	to	Pay  Figure V-7. Procure to pay. FL-03 carries the rules; 
+long-lead engineered buys follow FL-10. 5.4	Plan	to	Produce  Figure V-8. Plan to produce. FL-04 carries the rules; the shop floor terminal executes the middle. 5.5	
+Design	to	Source	(engineering	to	purchasing) 
+ Figure V-9. Release levels let purchasing move before design is final, safely. FL-10, Book IV §3. 5.6	Returns	and	Warranty  Figure V-10. RMA flow. FL-05 carries the rules; 
+four return classes share one path. 5.7	How	Cost	Moves	(the	money	picture) 
+ 
+
+
+=== PAGE 230 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 230 of 312 
+Figure V-11. Cost flow. Material value moves left to right; labor and overhead enter from cost centers; settlement empties WIP to exactly zero. 6.	Cross-Module	Linkage	Map 
+ Figure V-12. Who talks to whom. Every arrow is a specified contract, not an aspiration. Linkage The Contract in One Line Full Spec Sales ↔ Inventory Confirmations reserve stock; 
+PGI moves it out and posts COGS; serials carry customer and site Book I B §4–5; Book IV §2 Sales ↔ Accounting PGI and milestones raise invoice requests; Finance posts; revenue follows 
+ASC 606, not the billing plan Book I B §4.4; ACC 3/24 Sales ↔ Shipping ↔ Barcoding Pick, pack, load are scans SP-15…18; the shipment cannot PGI with an open HU or failed inspection 
+Book I A §5, F; Book IV §2 Engineering ↔ Materials Placeholders reserve real numbers; activation unblocks the BOM; supersession retires parts safely Book II §4.3/§4.6/§6 Engineering ↔ 
+Purchasing Release levels + supplier package versions govern what may be bought when Book IV §3 Engineering ↔ Production Only released production versions build; ECO effectivity 
+decides in-flight orders Book I C §4/§6; Book IV §6.1 Purchasing ↔ Inventory ↔ Accounting GRN books stock and GR/IR; match clears it; PPV/IPV explain price differences INV 5.6; ACC 6; 
+Book I A §8 
+
+
+=== PAGE 231 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 231 of 312 
+Linkage The Contract in One Line Full Spec Production ↔ Inventory Issues and backflush drain components; FG receipt fills at standard Book I D §6/§8 Production ↔ Controlling ↔ 
+Accounting Confirmations absorb labor/overhead from cost centers; settlement posts variances by cause Book I D §8, H, I §4 
+Quality ↔ everything Gates block movement (receipt, operation, shipment); results write to the batch/serial forever Book I E; Part A §6 Barcoding ↔ everything Twenty-one scan points 
+are the data entry; genealogy is their permanent record Book I F; Book IV §4 Materials ↔ Accounting Valuation class + event key = accounts; nobody types account numbers Book II Part 
+B 
+7.	Module	Design	Briefs One brief per module: what it is for, who uses it, every screen with its reference, and what to prototype first. Screen types: List (filterable 
+register), Detail (tabbed record), Workbench (act-on-many queue), Wizard (guided steps), Kiosk (touch + scanner), Config (admin). 7.1	Sales	&	Order	Management Turns 
+customer demand into confirmed, promised, shippable orders and carries them to invoiced closure. The heart is the sales order with schedule lines; everything else serves it. Who 
+uses it: Customer service, sales reps, sales admin, shipping office, credit/finance. Screen Type What the user does here Spec Leads & Opportunities (OM-LEAD-001/2) List/Detail 
+Capture demand before a customer exists; prior build lookup; convert to quotation Book VI §4.1 Customer List / Detail (OM-CUST-001/2) List/Detail Maintain customers: addresses, 
+commercial terms, credit view, tax, history Book I B §2 Quotation List / Editor (OM-QT-001/2) List/Detail Build priced, versioned offers; ETO configuration panel; margin check Book 
+I B §3 Sales Order List / Detail (OM-SO-001/2) List/Detail The contract: lines, schedule lines, pricing elements, milestones, pegs, changes Book I B §4; Book IV §2.1 Backorder 
+Workbench (OM-BO-001) Workbench Fix shortages: reallocate, re-promise, split, substitute Book IV §2.2 Delivery Cockpit (OM-DLV-001) Workbench Group schedules into deliveries; watch 
+readiness; release to warehouse Book IV §2.4 Shipment Detail (OM-SHP-002) Detail Carrier, permits, HUs, documents, PGI Book I B §5 Pack Station (OM-PACK-STATION-001) Kiosk Scan 
+items into handling units; weights; labels Book I A §5 POD / Claims (OM-POD) List/Detail Record delivery proof; open and resolve claims Book IV §2.4 Key lifecycles: Quote: Draft → 
+Issued → Won/Lost. Order: Draft → Confirmed → In Fulfillment → Shipped → Invoiced/Closed (credit hold branch). Schedule line: Open → Confirmed → Delivered. Delivery: Planned → …→ PGI → 
+Closed. 
+
+=== PAGE 232 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 232 of 312 
+Prototype first: Sales order detail with schedule lines and the readiness chips, then the delivery cockpit, then the promise dialog. 7.2	Engineering	&	BOM Owns 
+the technical truth: items, BOMs, drawings, changes. An engineer takes an ETO order from configuration to released drawings and BOMs without leaving the module, and nothing 
+unreleased can be bought or built. Who uses it: Design engineers (electrical, mechanical), engineering manager, CCB members. Screen Type What the user does here Spec Engineering 
+Workspace (ENG-HOME-001) Workbench My design queue, approvals, exceptions Book I C §1 Engineering Request (ENG-REQ-001) Detail The ETO design job: checklist of deliverables, due 
+dates, customer approval Book I C §2 EBOM Editor (ENG-BOM-002) Detail (3-pane) Build the structure tree; add components or placeholders; validate; release Book I C §3 ECR / ECO 
+(ENG-ECR/ECO) Detail Propose change → impact analysis → CCB → execute with effectivity Book I C §4 MBOM Transform Wizard Turn a released EBOM into the plant MBOM: phantoms, operation 
+mapping, mfg adds Book I C §6 
+Production Versions (PV) List/Detail Pair MBOM + routing with validity; the buildable unit Book IV §6.1 Where-Used Report Everything using a component, multi-level Book I C §7 Key 
+lifecycles: EBOM: Draft → In Review → Released → Superseded. ECO: task checklist → atomic release at effectivity. Release levels for purchasing: Concept → Preliminary → Long-Lead → 
+Approved for Purchase → Released for Production. Prototype first: The EBOM editor three-pane layout — it is the most-used engineering screen and the hardest to get right. 7.3	
+CAD	&	Document	Control The controlled library of drawings and technical documents, and the bridge to native CAD. The floor and customers only ever see released 
+PDF renditions; the vault keeps the native files. Who uses it: Design engineers, document control, shop floor (read-only), customers (transmittals). Screen Type What the user does 
+here Spec Document Register / Detail (ENG-DOC-001/2) List/Detail Controlled files: revisions, check-in/out, title block data, security class Book I C §5 
+Transmittals Wizard Send drawing packages to customers; capture Approved / Revise & Resubmit Book I C §5.2 CAD Sync Monitor + Conflict Queue Workbench Watch vault events; resolve 
+field conflicts side-by-side Book III G §3 EBOM Import (CAD) Wizard Assembly extract → mapped proposal → transactional commit Book I C §3.3; Book III G §3 Key lifecycles: Document: WIP 
+→ In Review → Released → Superseded/Obsolete. Sequencing rule: the floor keys off ERP effectivity, never PDM state. 
+
+=== PAGE 233 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 233 of 312 
+Prototype first: The conflict queue and the import wizard — they define whether engineers trust the integration. 
+ Figure V-13. CAD/PDM linkage. The connector is server-side; ERP owns numbers and released renditions; the vault owns native files. 7.4	Material	Management One record per 
+material, born through a governed multi-department workflow, changed under control, valued by rules, retired without breaking history. The hub every other module reads. Who uses 
+it: Master data steward, planners, buyers, quality, cost accounting, warehouse. Screen Type What the user does here Spec Material List (MM-MAT-001) List Find anything; 
+completeness bars; lifecycle badges; bulk actions Book II §3.1 Material Detail (INV 2.3 + views) Detail (10 tabs) Every view per §3.4–3.13: general, UoM, planning, purchasing, 
+production, warehouse, quality, accounting, sales, references Book II §3 
+Creation Request (MM-MCR-001/2) Workbench Department task checklist to activation; SLA tracking Book II §4.2 Change Request (MM-MCH-001) Wizard Governed single and mass changes 
+with simulation Book II §4.4/§16.1 Supersession (MM-SUP-001) Detail Replace a material with run-out control Book II §4.6 Info Records (MM-IR-001/2) List/Detail Vendor-material 
+prices, scales, lead times Book II §7.2 Source List (MM-SL-001) Detail grid Fix or block sources per period Book II §7.4 Account Determination (MM-VAL-001) Config Event-key matrix 
+with simulation; Controller-governed Book II §5.3 Data Quality Dashboard Dashboard Completeness, MCR cycle time, duplicates, stale sourcing Book II §16.4 Key lifecycles: Material: 
+Draft → Data Completion → Active → Restricted → Blocked → Obsolete, plus function-specific blocks (purchasing, sales, production, shipping, posting). Prototype first: The material 
+detail tab bar and the MCR task board — creation is the workflow everyone touches first. 
+
+
+=== PAGE 234 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 234 of 312 
+7.5	MRP	&	Finite	Planning Answers two questions forever: what should we make or buy (MRP), and when can we honestly promise (finite schedule + CTP). Planners live 
+in the workbench; the engine runs at night. Who uses it: Production planners, master scheduler, buyers (exceptions), sales (promises). Screen Type What the user does here Spec MRP 
+Workbench (PP-MRP-001) Workbench Exceptions EX-01…09 with one-click actions; proposal conversion Book I D §3 Planned Orders List Review, firm, convert to WO or PR Book I D §3.3 
+Schedule Board Workbench Finite schedule per work center; freeze horizon; what-if sandbox Book III E §3 CTP / Promise Dialog Dialog Feasible date with the binding constraint named; 
+soft reservation Book III E §4 At-Risk Promises Workbench Recovery options when projected completion slips Book III E §5 Key lifecycles: Proposals: created → firmed → converted. 
+Promises: quoted → reserved (decaying) → confirmed → at-risk workflow on slip. Prototype first: The exception workbench — MRP is invisible; its exceptions are the product. 7.6	
+Production	&	Shop	Floor Executes the build: orders, dispatch, scans, confirmations, WIP, receipt, settlement. The kiosk terminal is the factory’s single screen; 
+everything on it is reachable by touch and scanner only. Who uses it: Production scheduler, supervisors, operators (kiosk), cost accounting (settlement). Screen Type What the user 
+does here Spec Production Order List / Detail (PP-WO-001/2) List/Detail Release gates, pegs, revisions, cost tab, serial Book I D §5 Dispatch List Workbench Per work center queue 
+in priority order; material-ready flags Book I D §6 Shop Floor Terminal (PP-SFT-001) Kiosk Badge in, start op, scan materials, capture data, QC gate, complete with quantities, 
+hold/andon Book I D §6 
+WIP Board / Valuation (PP-WIP-001) Board/Report Where every order stands; value reconciles to GL Book I D §7 Rework Orders (RWO) Detail Free-form repair with its own cost 
+collection Book I D §9 Settlement Run (PP-SETTLE-001) Wizard Month-end variance posting with preview Book I D §8 Key lifecycles: Order: Created → Released → In Progress → Testing → 
+Completed → Closed (TECO), with On Hold branch. Operation: queued → started → completed (good/scrap/rework must sum). Prototype first: The kiosk terminal, full-screen at 1280×800, 
+gloves-on touch targets, scanner-first — test it standing up. 7.7	Quality	Management 
+
+=== PAGE 235 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 235 of 312 
+Five gates (incoming, in-process, final test, pre-shipment, return), all executing from inspection plans, all writing permanent results to batches and serials, all able to 
+escalate to NCR, CAPA, SCAR or a recall. Who uses it: Quality inspectors, quality engineers, quality manager, calibration owner. Screen Type What the user does here Spec Quality 
+Dashboard (QM-DASH-001) Dashboard Open inspections, FPY, NCR funnel, vendor quality, cost of quality Book I E §2 Inspection Plans (QM-PLAN-001/2) List/Detail Characteristics, 
+sampling, versions, approval Book I A §6 Inspection Execution Detail Results against plan rows; instruments checked against calibration INV 6.1 pattern Final Test & FTR 
+(QM-FIN-001) Detail Transformer test catalog; runs history; certified report Book I E §3–4 NCR / CAPA / SCAR List/Detail Failure records; corrective action lifecycle; supplier 8D 
+Book I E §5–6 Deviations & Waivers (DEV) Detail Temporary acceptance with expiry and customer evidence Book IV §7.3 Calibration Register (QM-CAL-001) List Instruments, due dates, 
+interlock Book I E §7 Recall Campaigns (RCL) Workbench Population, holds, notifications, recovery, effectiveness Book III A FL-08 Key lifecycles: Plan: Draft → In Review → Active → 
+Superseded. CAPA: Open → Analysis → Actions → Implemented → Effectiveness → Closed. Prototype first: Inspection execution with pass/fail color logic and the calibration interlock error 
+state. 7.8	Purchasing Turns demand into on-time, on-spec supply: sources, RFQs, POs, confirmations, expediting. The buyer’s day starts on the workbench and ends when the 
+expedite board is quiet. Who uses it: Buyers, purchasing manager, vendor quality, receiving (read). Screen Type What the user does here Spec Buyer Workbench Workbench PR queue, 
+exceptions, unconfirmed POs Book I G §1 Vendor / AVL (PUR-VEND-001/2) List/Detail Vendors, qualification, compliance, AVL rows Book I G §2 Purchase Requisitions (PUR-PR-001) List 
+Demand awaiting sourcing Book I G §3 RFQ (RFQ-) Detail Sealed bids, comparison grid, technical/commercial split, award Book I G §4; Book IV §3.4 Purchase Orders (PUR-PO-001/2) 
+List/Detail The commitment: schedules, quality clauses, STP version, revisions Book I G §5 Long-Lead Releases (LLR) Detail Early buying under caps with exposure tracking Book IV 
+§3.2 Expedite Board (PUR-EXP-001) Workbench Late and at-risk supply with pegged-order priority Book I G §7 
+
+=== PAGE 236 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 236 of 312 
+Key lifecycles: PO: Draft → Approved → Sent → Confirmed → Received → Matched/Closed with Change Pending overlay. LLR: capped → released → closed. Prototype first: The buyer workbench and 
+the RFQ comparison grid. 7.9	RMA	&	Warranty No customer material enters without an RMA. Four return classes share one path: authorize, receive into quarantine, 
+inspect, adjudicate warranty, disposition, settle, close when every linked document is done. Who uses it: Customer service, receiving, quality, finance. Screen Type What the user 
+does here Spec RMA List (RMA-LIST-001) List Work queue with SLA aging Book I A §3.3 RMA Create / Detail (RMA-CREATE-001) Detail Reference pull, classes, freight, lines; tabs incl. 
+financials and linked docs Book I A §3.4/3.7 Return Receipt Kiosk/Detail Scan RMA barcode; condition + photos; quarantine Book I A §3.5 Inspection & Disposition Detail Teardown 
+checklist; warranty adjudication (entitlement service); outcomes Book I A §3.6; Book IV §7.4 Installed Base (IB) List/Detail Every shipped serial: site, warranty, history Book IV 
+§7.4 Spares Finder (SVC-SPF-001) Workbench Serial to as-built parts list with stock, price, supersessions; one-step spares quote Book VI §5.1 Key lifecycles: RMA: Draft → Authorized → 
+Received → In Inspection → Disposition → Settling → Closed. Prototype first: The disposition screen — five outcomes with automatic document creation must feel safe, not scary. 7.10	
+Costing	&	Pricing Costing computes what things cost (standards, rates, estimates); pricing computes what they sell for (lists, agreements, surcharges) with margin floors 
+between them. Who uses it: Cost accountant, controller, pricing manager, estimator, sales (read). Screen Type What the user does here Spec Cost Estimates (CST-CE-001) Detail Cost 
+trees; parametric ETO estimating by driver weights Book I I §3.1 Costing Runs (CST-RUN-001) Wizard Mass rollup: errors, review, mark, release Book I I §3.2 Work Center Rates 
+(CST-RATE-001) Config grid Annual rate computation and release Book I I §2 Price Lists / Agreements (PRC-PL-001) List/Detail Rates, breaks, validity, approvals Book I I §6 Surcharge 
+Rules + Index Values Config Copper/CRGO escalators with immutable history Book I I §6.4 Margin Analysis Report Quote register, three-view order margin, floor breaches Book I I §7 
+
+=== PAGE 237 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 237 of 312 
+Screen Type What the user does here Spec Price Simulation Dialog The waterfall exactly as documents resolve it Book IV §5 Key lifecycles: Estimates: Draft → Released → Superseded. 
+Costing run: scoped → rolled → marked → released. Prototype first: The price simulation waterfall — it is the explainability surface for every pricing argument. 7.11	
+Controlling	&	Accounting	Links Controlling gives every dollar two homes: the cost center that spent it and the profit center that earns from it. Accounting 
+(external volume) posts everything through the shared Posting Service; nobody types account numbers anywhere. Who uses it: Controller, controlling analyst, cost center managers, 
+CFO. Screen Type What the user does here Spec Cost / Profit Center Masters (CO-CC/PC) List/Detail Hierarchies, owners, validity Book I H §2 Allocation Cycles (CO-ALC-001/2) 
+Config/Wizard Period-end shared-cost distribution with preview Book I H §5 Cost Center Report / PC P&L (CO-R1/R2) Report Actuals vs budget; product-line P&L reconciling to entity 
+Book I H §6 GL Determination Preview Panel Simulate any posting’s accounts and dimensions Book II §3.11/§5.3 Key lifecycles: Every posting carries CC and PC by derivation rules 1–7; 
+exceptions land on CO-R4 at target zero. Prototype first: The GL preview panel — it turns accounting from mystery into a visible simulation. 7.12	Workflow,	Jobs	
+&	Admin One engine for every approval, alert and scheduled job. Twenty-seven governed workflows are configuration rows, not code. Who uses it: Admins, process owners, 
+everyone (approvals inbox). Screen Type What the user does here Spec Approvals Inbox Workbench Everything awaiting me, with SLA colors; act from list Section W; Book IV §7.7 
+Workflow Definitions Config Rules, chains, SLAs, versions (W.4 catalog) Book IV §7.7 Alert Rules Config Events, scopes, channels, dedupe Section W.2 Job Console Workbench Runs, 
+SLAs, dependencies, failures Section W.3; Book III D §5 Integration Console Workbench Message monitor, DLQ, replay, correlation search Book III B §4 Key lifecycles: Approval 
+instances: pending → approved/rejected/recalled with delegation and escalation. Prototype first: The approvals inbox — the one screen literally every manager uses daily. 
+
+=== PAGE 238 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 238 of 312 
+8.	Barcoding	and	Devices	—	the	Physical	Layer Barcoding is how the factory talks to the system. This section gives designers and IT what Book I 
+Part F assumed: the stations, the exact device classes and reference models, the labels as pictures, and the interaction rules a scan-first screen must obey. The 21 scan points 
+(SP-01…SP-21), symbologies and validation rules remain exactly as specified in Book I Part F. 8.1	Station	Map 
+ Figure V-14. Where scanning happens. Each station names its scan points and its device kit from the table below. 8.2	Hardware	Specification	(device	classes	with	
+reference	models) Reference models name the class precisely; equivalents from Honeywell or Datalogic meeting the same column specs are acceptable at procurement. All 
+scanners must read Code128 and GS1-128 and 2D (QR/DataMatrix) per Book I F §1. Device Class Reference Model Key Specs Used At Qty (Phase 1) Rugged handheld 2D imager, corded Zebra 
+DS3608-SR SR optics 5–95 cm, IP67, 2.4 m drop, USB-HID via wedge service Receiving, QC benches, returns 8 
+Rugged handheld 2D, long range Zebra DS3608-ER ER optics 0.2–17 m (reads rack labels and flatbed HUs), IP67 Ship dock, bulk storage, yard 4 
+Hands-free presentation scanner Zebra DS9308 Countertop, auto-sense Pack bench, nameplate station, test lab kiosks 6 
+Wearable ring scanner + wrist terminal Zebra RS5100 + WT6300 Bluetooth ring, glove-friendly Pickers, kit builders 6 Rugged mobile computer Zebra TC77 (Android) 4.7 in, IP67, 
+hot-swap battery, runs the responsive web app Warehouse moves, counting, putaway 10 
+Fixed kiosk terminal 15.6 in PCAP touch, fanless mini-PC, sealed IP54 front Kiosk browser, badge scan login, wedge service client Every work center (12) + pack + test 15 
+Industrial label printer 4-in Zebra ZT411 (300 dpi) Thermal transfer, ZPL, cutter option Receiving, quarantine, pack, warehouse office 5 
+Desktop label printer Zebra ZD621 (300 dpi) Thermal transfer, compact QC bench, engineering office 3 Metal plate marking Existing nameplate engraver + PE-supplied barcode plates 
+Serial plate barcode per Book I F §1 Nameplate station existing 
+Bench scale w/ interface 150 kg class, RS232/USB Feeds gross weight at HU close (SP-17 sanity ±2%) Pack bench 2 
+
+
+=== PAGE 239 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 239 of 312 
+Device Class Reference Model Key Specs Used At Qty (Phase 1) Floor scale 3,000 kg class Pallet/crate weights Pack / ship dock 1 Wedge service PE software component WebSocket scan 
+events, focus-lock, per-station registry (ADR-10) All stations — 
+8.3	Label	Stock	and	Print	Specification Label Size / Material / Ribbon Printer Content Spec Item shelf label 2×1 in polypropylene, resin ribbon ZD621 Book I F §1 
+(Code128 material code) Batch label 4×2 in polypropylene, resin ZT411 Book I F §1; mockup Figure V-16 Serial label (components) 4×2 in polyester, resin (durable) ZT411 Book I F §1 
+Location/rack label 4×1 in reflective for long-range reads ZT411 Book I F §1 HU / shipping label 4×6 in coated paper, wax-resin ZT411 (pack) Book I A §5.4; mockup Figure V-15 Traveler 
+sheets Letter laser Office laser Book I D §5.4 Calibration asset label 1×0.5 in polyester ZD621 Book I E §7 
+
+=== PAGE 240 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 240 of 312 
+ Figure V-15. Handling-unit label, 4×6 in, as printed at HU close: HU barcode, SSCC-18, weights, HU count, handling marks, transformer addenda. 
+ Figure V-16. Batch label, 4×2 in, as printed at receiving: batch barcode, heat number, vendor, origin, quantity, QI status at print. 8.4	Scan	Interaction	Rules	
+(design	law	for	every	scan	screen) • Focus lock: the scan field owns input; a scan is an event, never keystrokes into whatever field has focus (wedge service, ADR-10). 
+Designers never place a scan target inside a form field. 
+
+
+=== PAGE 241 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 241 of 312 
+• Feedback in under 400 ms: success = single beep + green flash of the scanned row; failure = double low beep + red banner stating what was scanned, what was expected, the E-code, 
+and the next action (Book I F §4). No silent failures, no toast that disappears before a gloved operator looks up. • One action per scan where possible: scanning a traveler op 
+barcode starts the operation; scanning it again opens completion. Menus are for exceptions. • Big targets: minimum 48 px touch targets, 16 px base font on kiosks, high-contrast 
+state colors from §11; test with gloves at arm’s length. • Offline visibly: when the terminal queues offline (up to 4 h, Book I F §2), a persistent amber banner shows queue depth; 
+replay conflicts land in the supervisor exception queue, never silently dropped. • Reprint is governed: every reprint asks a reason; serial/nameplate reprints need Quality 
+approval; duplicates watermark DUPLICATE (Book I F §4). 
+9.	Traceability	at	a	Glance  Figure V-17. The genealogy chain T01–T13. Every link is an append-only event; corrections add reversal + replacement events, never 
+edits (Book IV §4). For designers, traceability is two screens: the trace explorer (enter a serial or a heat number, see the tree in both directions with drill-down into every 
+node’s evidence) and the completeness dashboard (coverage, orphans, unresolved corrections). Both are specified in Book IV §4.4; the tree must render in under 10 seconds and read 
+like a family tree, not a log file. 
+10.	Design	System	Starter 10.1	Tokens Token Group Values Brand PE Blue #1F3864 (headers, primary), PE Accent #2E5FA3 (links, section heads), Light #EDF1F8 (fills), Mid 
+#D9E2F3 (table heads) Status colors (used consistently across every lifecycle in Books I–IV) Draft/neutral gray #6B7280 • In progress/review amber #B58221 • Blocked/error red #A33B3B 
+• Active/passed green #3E7D4E • Info/released blue #2E5FA3 • Terminal dark green #1F5F3F Typography UI: Inter or system sans; data grids 13–14 px; kiosk base 16 px; documents print in 
+Calibri per the letterhead standard Spacing & radius 8 px grid; 6 px radius on cards and badges; tables dense (32 px rows) with a comfortable mode (40 px) Elevation Flat lists; 
+single shadow level for dialogs and the scan feedback flash 10.2	Component	Inventory	(build	these	once,	reuse	everywhere) Component Where it appears 
+Behavior source Data grid (sortable, saved filters, column config, bulk bar, export) Every List screen INV/ACC Section 2 global pattern 
+
+
+=== PAGE 242 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 242 of 312 
+Component Where it appears Behavior source Status badge + lifecycle strip Every Detail header Lifecycle tables throughout; colors §10.1 Entity context bar Every screen ACC Section 
+2 Audit trail panel (immutable) Every Detail ACC Section 2 Attachment panel with checksum note Every Detail ACC Section 2; documents Book I C §5 Readiness chips (supply / credit / 
+quality / docs) SO, delivery, WO release Book IV §2; Book I D §5.2 Approval strip (chain, current step, SLA clock, act buttons) Everything in W.4 Section W; Book IV §7.7 Price 
+waterfall panel Quote/SO lines, simulation Book I A §4.4; Book IV §5 Scan input + feedback flash All kiosk/mobile screens §8.4 Tree explorer (BOM, where-used, genealogy) EBOM, 
+traceability, where-used §9; Book I C §3 Milestone strip ETO orders Book I B §4.4 Diff viewer (revisions, change orders, MCH simulation) EBOM compare, PO revisions, mass change Book 
+I C §3.3; Book II §16.1 GL preview panel All posting screens Book I H §3 Dev Note; Book II §3.11 Exception worklist card (count, aging, owner, one-click action) All workbenches MRP 
+EX-, expedite, data quality, CO-R4 10.3	The	Nine	Mandatory	Screen	States Every screen ships with all nine states designed: normal, empty (first-use with a helpful 
+action), loading (skeletons, no spinners over 300 ms), validation error (inline + summary), authorization error (explains the missing role, never a blank page), conflict (someone 
+saved first; show diff), offline (kiosk banner + queue depth), degraded (dependency down; what still works), read-only (terminal statuses and view-only roles). The screen template 
+in Book IV §9.4 makes these a deliverable, not an afterthought. 10.4	Figma	Organization • One library file: tokens, components (§10.2), icons, status colors — published; no 
+local styles in feature files. • One file per module brief (§7.1–7.12), pages inside per screen, frames per state; frame names carry the screen ID (OM-SO-002 / detail / conflict) so 
+RTM linkage is mechanical. • Flows as Figma prototypes follow the atlas diagrams (§5) — one prototype per flow, wired from the same frames, used directly in UAT scenario reviews. • 
+Handoff: every frame links its spec section in the description; a frame without a spec link fails design review (gate DG-2). 
+11.	Reader	Orientation	Map 
+
+=== PAGE 243 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 243 of 312 
+A Reader Looking For Must Open A fast, plain language route into the system This Book: the briefs (§7), the pictures (§3–§5), the reading paths (§1), the design system (§10) The 
+enterprise capability catalogue and vocabulary §2 capability map (26 capabilities with phase decisions) + the 36 term glossary How the modules connect §6 map + table; the binding 
+contracts are Book II Part C, Book III Parts A–B and Book IV Barcoding hardware, labels and interaction rules §8: station map, device classes with reference models and quantities, 
+label stock specification, printed label samples, interaction law The CAD linkage §7.3 brief + Figure V-13; the full contract Book III Part G; connector requirements IF-17 The 
+diagrams Figures V-1 through V-17 across structure, master data, flows, cost, CAD, stations and traceability, plus the atlas of Book VIII The reading order to build from scratch §1 
+reading paths: this Book to understand, Books I–III to build exactly, Book IV to govern, Books VI–IX to execute 
+BOOK VI SCREEN BY SCREEN IMPLEMENTATION PLAN Every screen in this specification with its route, layout, actions, arrivals, outputs, postings, scans, build wave and field authority 
+Linkages stated inside every entry  •  Build sequence in seven waves  •  Costing and Pricing module consolidated with its engine diagram  
+

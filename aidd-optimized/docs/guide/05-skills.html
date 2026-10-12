@@ -1,0 +1,374 @@
+<h1 class="part" id="s-part5"><span class="num">Part 5</span>The skills</h1>
+<div class="part-intro">
+  Thirty-four skills carry the craft. Each is a folder with a <code>SKILL.md</code> entry point and,
+  where depth warrants, <code>references/</code> files loaded on demand. This part gives each skill's
+  purpose, the mechanisms worth knowing, and its output.
+</div>
+
+<h2 id="s-5-0">5.1 Skill anatomy</h2>
+<p>Every skill file follows the same shape, which is also the shape to follow when writing a new one:</p>
+<table class="tight">
+  <tr><th style="width:26%">Section</th><th>Contains</th></tr>
+  <tr><td>Frontmatter</td><td><code>name</code> and a <code>description</code> that states what it does AND when to use it (this is what triggers it)</td></tr>
+  <tr><td>Purpose</td><td>Why this exists and what failure it prevents</td></tr>
+  <tr><td>Inputs</td><td>Which artifacts it reads, and what it does when they are missing</td></tr>
+  <tr><td>Method</td><td>The craft: decision tables, protocols, taxonomies, numbers</td></tr>
+  <tr><td>Procedure</td><td>The ordered steps</td></tr>
+  <tr><td>Deciding factors</td><td>Judgment calls and how to make them</td></tr>
+  <tr><td>Probing prompts</td><td>Questions to ask the client, and to ask yourself</td></tr>
+  <tr><td>Quality bar / Exit criteria</td><td>The self-check before handing off</td></tr>
+  <tr><td>Guardrails</td><td>What this skill may never do</td></tr>
+  <tr><td>Output</td><td>Exact file paths produced</td></tr>
+  <tr><td>Failure modes</td><td>What going wrong looks like, so it is recognisable early</td></tr>
+</table>
+<p class="small">
+  Keep <code>SKILL.md</code> under about 300 lines. Depth beyond that belongs in
+  <code>references/</code>, because a skill file too long to read is a skill file that gets skimmed.
+</p>
+
+<h2 id="s-5-1">5.2 Intake and discovery <span class="tag p0">PHASE 0</span> <span class="tag p1">PHASE 1</span></h2>
+
+<div class="skill-card">
+  <h3>spec-intake</h3>
+  <p>Classifies whatever arrived (six classes), audits it against fourteen dimensions, fills the spec
+  slot, opens the assumption register, and runs the substitute path when there is no spec. The one
+  step never skipped.</p>
+  <p><strong>References:</strong> <code>spec-audit-checklist.md</code> (dimension by dimension, with
+  what each absence converts into and how to read the resulting scorecard);
+  <code>reconstruction-interview.md</code> (the six passes, with the questions, in order, and the
+  anti-patterns).</p>
+  <p><strong>Output:</strong> <code>00-inputs/PRD.md</code>, <code>spec-intake.md</code>,
+  <code>assumptions.md</code>, <code>audit/</code>, and <code>10-discovery/derived-brief.md</code> for
+  classes C through F.</p>
+</div>
+
+<div class="skill-card">
+  <h3>anchor-analysis</h3>
+  <p>Forensic reading of the anchor document: three passes (intended reader, extractor, skeptic), a
+  claim typology routing each extraction to its destination, the commitment scan with authority class
+  and blast radius, the eight-class silence taxonomy, author-intent analysis, and the internal
+  contradictions list.</p>
+  <p><strong>Why it cannot be skipped:</strong> questions written without it are generic, and a generic
+  question set is visible to the domain authority within five minutes.</p>
+  <p><strong>Output:</strong> <code>10-discovery/anchor-analysis.md</code>, including the verification
+  agenda ordered by blast radius, which is what question-generation prioritizes from.</p>
+</div>
+
+<div class="skill-card">
+  <h3>glossary-builder</h3>
+  <p>Builds the project's ubiquitous language: definitions with includes and excludes, descriptive
+  versus rule-bearing classification, DA verification with recorded probes, client-versus-industry
+  pairs, and collision policing across every artifact for the project's whole life.</p>
+  <p><strong>The three collision patterns:</strong> two names for one thing (pick one with the DA,
+  record the alias); one name for two things (split into qualified terms); and a faction split (a
+  contradiction with an owner, not a glossary entry).</p>
+  <p><strong>Output:</strong> <code>10-discovery/glossary.md</code>. It is also the binding label
+  source for navigation and every field in the product.</p>
+</div>
+
+<div class="skill-card">
+  <h3>question-generation</h3>
+  <p>Engineers the call's question set: four groups (process, rules, exceptions, consequences) plus a
+  JTBD-style history group where a switch or a past attempt is in play, per-question probing ladders,
+  answerer routing, yield-based prioritization, and a leading-question lint pass.</p>
+  <p><strong>References:</strong> <code>question-bank.md</code>: per-silence-class stems, the ladder
+  rungs, the switch/forces questions, workaround excavation (the highest-yield set in mature
+  operations), consequence probes, and the banned forms with their rewrites.</p>
+  <p><strong>Output:</strong> <code>10-discovery/questions.md</code>, with a ladder-free share version
+  on top sent to attendees ahead of the call.</p>
+</div>
+
+<div class="skill-card">
+  <h3>interview-facilitation</h3>
+  <p>Runs the call, user interviews and contextual observation: consent, three-column capture, probe
+  technique, live solution separation, requirement-unfolding logging, disagreement handling, and the
+  closing summary.</p>
+  <p><strong>References:</strong> <code>facilitation-technique.md</code>: probe mechanics (silence,
+  echo, concretize, show-me, column walk, quantify, ladder up and down, reverse, third party), bias
+  counters for the facilitator's own biases, the seven interviewee response patterns and the move for
+  each, the master-apprentice observation protocol with its five giveaways, and a difficult-moment
+  playbook.</p>
+  <p><strong>Output:</strong> <code>10-discovery/transcripts/{date}.md</code> plus the side lists that
+  feed four other skills.</p>
+</div>
+
+<div class="skill-card">
+  <h3>contradiction-mining</h3>
+  <p>Two-stage detection (model sweep with banned verbs, then the human co-satisfiability filter and a
+  deliberate under-detection pass), a seven-type taxonomy, ranking by dependency weight, ownership
+  assignment, and the written-confirmation loop that closes Phase 1.</p>
+  <p><strong>Output:</strong> <code>10-discovery/problem-statements.md</code> and the STATE
+  contradictions table.</p>
+</div>
+
+<h2 id="s-5-2">5.3 Research, knowledge and prototyping <span class="tag p2a">PHASE 2A</span></h2>
+
+<div class="skill-card">
+  <h3>as-is-mapping</h3>
+  <p>Blueprint-grade current-state capture: trigger, steps with actor and system, the visibility layer
+  with its crossings, data movement, waits, error handling, evidence, and provenance per row. Plus
+  variant mapping, wait-versus-touch accounting, and the pain index.</p>
+  <p><strong>The discipline:</strong> documentary, not aspirational. Do not tidy. A neat as-is is
+  usually a wrong one, and every personal spreadsheet found is an entity the current system failed to
+  model.</p>
+</div>
+
+<div class="skill-card">
+  <h3>incumbent-research</h3>
+  <p>Four extraction targets (data structures, terminology, mental models, failure patterns), the
+  teardown protocol with task walks and severity-rated heuristic findings, state harvesting, implied
+  ERD extraction, source-quality grading A to D, and stop conditions per question.</p>
+  <p><strong>The discipline:</strong> extraction, not admiration. Record complaints as carefully as
+  capabilities; differentiation lives in the complaints. Research never sets a client rule.</p>
+</div>
+
+<div class="skill-card">
+  <h3>knowledge-base</h3>
+  <p>Three-group separation with ranking, same-action indexing, the upgrade scan on authority
+  ingestion, load-bearing marks, conflict marks, citation-mandatory query answering, and the gate-time
+  health audit.</p>
+  <p><strong>The rule that matters:</strong> "the KB cannot answer that" is a correct and complete
+  answer, and it routes the question rather than burying it. Never bridge with general knowledge.</p>
+</div>
+
+<div class="skill-card">
+  <h3>style-guide-authoring</h3>
+  <p>Authors the human-readable style guide and the machine-readable <code>skills-md/</code> set that
+  prompts reference instead of adjectives. Seeded from shared-specs where current, with every
+  divergence recorded.</p>
+  <p><strong>The test every rule must pass:</strong> could a reviewer point at a build and say
+  "violates rule X"? If not, rewrite until they could. Files stay under about 150 lines each, one
+  concern per file, with precedence stated in the header, because generators obey short files and skim
+  long ones.</p>
+</div>
+
+<div class="skill-card">
+  <h3>prompt-authoring</h3>
+  <p>The six-part prompt plus the carry checklist, iterated on paper before anyone generates, versioned
+  with a delta log. Also drafts the provisional PRD, structured against the same fourteen audit
+  dimensions so it can be scored like a client spec.</p>
+  <p><strong>Constraint versus assumption:</strong> would violating it make the DA say "that is wrong"
+  (a constraint) or "that is not how I pictured it" (an assumption)? Assumptions are cheap to show and
+  cheap to correct; constraints must hold.</p>
+</div>
+
+<div class="skill-card">
+  <h3>throwaway-prototype</h3>
+  <p>Generates from a complete prompt, enforces the timebox, spends fidelity asymmetrically, frames the
+  build at Gate 1 as an interview instrument, and archives it with its prompt afterwards.</p>
+  <p><strong>Named failure modes:</strong> attachment (the timebox stretches and the throwaway quietly
+  becomes the design) and the approval demo (the gate produces nods instead of corrections, and the
+  phase's cheapest learning window closes unused).</p>
+</div>
+
+<div class="skill-card">
+  <h3>dummy-content</h3>
+  <p>Client-format identifiers with fictitious values, domain-plausible magnitudes, boundary dates,
+  longest-plausible names, at least one negative and one zero per numeric surface, realistic volume,
+  plus adversarial stress content.</p>
+  <p><strong>Why it is a spec item, not decoration:</strong> placeholder text hides column widths,
+  number formatting, truncation, and whether a screen still behaves when a value is negative or zero.
+  Lorem ipsum in a rule-dense screen is the review that did not happen. Never real client data, even
+  "just for the demo".</p>
+</div>
+
+<div class="skill-card">
+  <h3>tentative-structure</h3>
+  <p>The deliberately rough first-pass set: sitemap, to-be sketches, userflow sketches, ERD sketch. All
+  headed TENTATIVE, timeboxed, sources-lined, uncertainty-marked, with an open-questions box per
+  sketch. Includes the group ideation clause, so the model is not the only source of divergence.</p>
+  <p><strong>Named failure mode:</strong> polish creep. The set gets approved instead of corrected.</p>
+</div>
+
+<h2 id="s-5-3">5.4 Convergence <span class="tag p2b">PHASE 2B</span></h2>
+
+<div class="skill-card">
+  <h3>requirements-reconciliation</h3>
+  <p>The central artifact. Per-entry reconciliation with mandatory rationale where sources disagreed,
+  the five quality rules, dependency links, supersession, versioning with a change log, the
+  conflict-of-entries scan, and Type B processing from any source at any time.</p>
+  <p><strong>Named failure modes:</strong> restatement (reads like a tidy PRD, shows no disagreement,
+  loses the reason it exists) and rationale rot (corrections applied without why).</p>
+</div>
+
+<div class="skill-card">
+  <h3>erd-modeling</h3>
+  <p>Full entity cards: identity, attributes with sources, cardinality by counterexample, closed status
+  lists via the exhaustion protocol with the terminal check, permissions per action including
+  four-eyes rules, the lifecycle pass, the temporal pass, and the interface-consequences note.</p>
+  <p><strong>Named failure modes:</strong> status leakage (values discovered in Phase 3, each one a
+  missing screen and a Type B), interface-blind lifecycle (the delete button that legally cannot
+  exist), temporal corruption (a price change silently rewriting a year of invoices), and central-noun
+  collapse.</p>
+</div>
+
+<div class="skill-card">
+  <h3>to-be-design</h3>
+  <p>The target process argued against its as-is pair: replacement accounting per pain-marked row, the
+  improvement ladder with the second-job check, automation honesty with four failure-mode answers per
+  automatic step, human decision points with their information needs and service expectations, unhappy
+  paths per step, two-way requirement tracing, and the projected pain-index delta.</p>
+</div>
+
+<div class="skill-card">
+  <h3>process-breakdown</h3>
+  <p>The rule layer developers build against: actor, system, input, output, rule with REQ-ID, exception
+  with handler and resulting state, and downstream effects per step. Plus the three cross-checks
+  (state machine in both directions, coupling pass, permission check) and the two-developer test.</p>
+  <p><strong>Its quality metric is external:</strong> the count of build-time questions the breakdown
+  already answered should approach the count of build-time questions.</p>
+</div>
+
+<div class="skill-card">
+  <h3>ux-flow-optimization</h3>
+  <p>Step accounting (decisions, K/R/N inputs, waits, navigations, recalls with as-is baselines), the
+  six friction classes, the five-rung elimination ladder, the defaults doctrine, progressive disclosure
+  rules, the error-prevention hierarchy, the recovery hierarchy (undo &gt; confirm &gt; warn &gt;
+  nothing), the friction budget sized to consequence, and wait design.</p>
+  <p><strong>Named failure mode:</strong> speeding what should have been deleted. Rung 5 applied where
+  rung 1 was available.</p>
+</div>
+
+<div class="skill-card">
+  <h3>information-architecture</h3>
+  <p>Structural inventory, navigation model selection with rejected alternatives, depth-versus-breadth
+  rules, glossary-bound labelling, wayfinding, cross-cutting placement (settings, admin, reporting,
+  notifications, search, audit, help, bulk), tree-test and card-sort validation, and the route scheme.</p>
+  <p><strong>The rule that does most work:</strong> statuses are not places. Two candidate areas holding
+  the same entity in different states are one area with a filter.</p>
+</div>
+
+<div class="skill-card">
+  <h3>userflows-sitemap</h3>
+  <p>Role-based flows (one per role per primary task), permission-aware branching where a denied role's
+  experience is designed per case, exception joins received explicitly, and the entity-derived sitemap
+  with the feature list used only as a final coverage check.</p>
+</div>
+
+<div class="skill-card">
+  <h3>prioritization</h3>
+  <p>Method selection across seven frameworks with the situations each fits, estimate provenance, the
+  facilitated PO-plus-DA trade session, the mandatory-partition audit against authority classes, the
+  completeness pass, role-coverage and flow-dependency sanity checks, and the signed list.</p>
+  <p><strong>Named failure mode:</strong> must-inflation. MoSCoW without the authority audit, every
+  stakeholder's favourite marked Must, and the method reporting a consensus that does not exist.</p>
+</div>
+
+<h2 id="s-5-4">5.5 Production intent <span class="tag p3">PHASE 3</span></h2>
+
+<div class="skill-card">
+  <h3>hifi-spec</h3>
+  <p>The nine blocks per feature, the state enumeration table built before any screen, the ERD
+  consequences note consumed before designing, REQ-ID citation throughout, and self-reconciliation of
+  status mapping against the ERD before the gate.</p>
+</div>
+
+<div class="skill-card">
+  <h3>visual-design</h3>
+  <p>The hierarchy method (name three levels, spend position then size then weight then colour, squint
+  and five-second tests), the systematic floor, density selection as a domain decision, status
+  encoding, data display rules, and elevation as a z-order language.</p>
+  <p><strong>References:</strong> <code>type-scale.md</code> (worked modular scales with line heights,
+  measure, weight, numerals, truncation strategies, accessibility interactions);
+  <code>color-system.md</code> (role architecture, ramp construction, the contrast formula with
+  thresholds, status encoding, chart colour, dark mode, forced colours, and a verification procedure);
+  <code>layout-and-space.md</code> (the 4px scale, optical adjustment, grids and containers, alignment,
+  composition patterns, page anatomy, concrete density tables, and a review checklist).</p>
+</div>
+
+<div class="skill-card">
+  <h3>component-architecture</h3>
+  <p>Control selection from the shape of the decision, the complete state matrix per component
+  (universal, container, and one per ERD status), composition and slotting rules, the rule of three,
+  naming and API conventions, and the per-component accessibility contract.</p>
+  <p><strong>References:</strong> <code>component-states.md</code> (matrices for button, input, select,
+  table, list item, modal, form, status badge, nav item, and the page-level empty/error/permission
+  surfaces); <code>control-selection.md</code> (four questions that pick the control, then tables per
+  decision shape).</p>
+</div>
+
+<div class="skill-card">
+  <h3>interaction-design</h3>
+  <p>Feedback timing thresholds, optimistic versus pending versus confirmed with the three eligibility
+  conditions, validation timing, autosave and dirty state, the keyboard contract with focus rules,
+  motion, selection and inline editing and drag, and concurrency handling.</p>
+  <p><strong>References:</strong> <code>motion-tokens.md</code> (durations, easings, what may animate,
+  choreography, loading motion, reduced-motion mapping, hard limits);
+  <code>interaction-patterns.md</code> (per-pattern decisions a developer will otherwise make alone:
+  buttons, forms, pickers, tables, overlays, notifications, search, dates, files, permissions,
+  session).</p>
+</div>
+
+<div class="skill-card">
+  <h3>responsive-design</h3>
+  <p>The role-by-context table established first (device, environment, input, session length),
+  content-derived breakpoints, the order of collapse, five dense-data strategies with selection
+  criteria, touch and pointer rules, zoom and reflow compliance, density preference, and print/export.</p>
+  <p><strong>The question it answers first</strong> is not "what are the breakpoints" but "who uses
+  this, on what, where, and with what on their hands". Gloves, sunlight, shared terminals and
+  1366-wide laptops all change the design and none appears in a spec unless asked for.</p>
+</div>
+
+<div class="skill-card">
+  <h3>content-design</h3>
+  <p>Terminology binding to the glossary, voice set concretely, label rules, the four error kinds, the
+  four distinct empty states, confirmation copy sized to consequence, helper text that carries a rule
+  with its REQ-ID, and number/date/unit formatting.</p>
+  <p><strong>References:</strong> <code>microcopy-patterns.md</code> (worked examples per surface:
+  errors by kind, the four empties, confirmations by consequence tier, buttons, status transitions,
+  loading, and translation-safe writing).</p>
+</div>
+
+<div class="skill-card">
+  <h3>accessibility</h3>
+  <p>The WCAG 2.2 AA floor as a design-time constraint: seven design-time constraints, per-artifact
+  obligations, and a six-rung testing ladder from keyboard-only through screen reader to testing with
+  disabled users.</p>
+  <p><strong>References:</strong> <code>wcag-checklist.md</code>: every level A and AA criterion
+  expressed as what a <em>design artifact</em> must contain, plus the AAA criteria worth adopting
+  selectively and when.</p>
+  <p><strong>Named failure mode:</strong> audit-at-the-end, when the tokens, components and flows are
+  all settled and half the findings are unaffordable.</p>
+</div>
+
+<h2 id="s-5-5">5.6 Quality, gates and close</h2>
+
+<div class="skill-card">
+  <h3>design-critique</h3>
+  <p>The seven lenses in order (hierarchy, consistency, state completeness, accessibility, content,
+  flow friction, domain fidelity), the fast perceptual tests, four severity levels mapping to Type A
+  and B, the session protocol for running it with people, and the filed report.</p>
+  <p><strong>Lens 7, domain fidelity</strong>, is the one the rest of the design world does not have,
+  and the reason this process exists: does anything on screen contradict a confirmed requirement, offer
+  what the lifecycle forbids, or fail at month-end?</p>
+</div>
+
+<div class="skill-card">
+  <h3>gate-review</h3>
+  <p>Readiness pre-checks, the universal protocol, per-gate specifics, quiet-review handling,
+  classification discipline, client-validation processing, and post-gate verification.</p>
+</div>
+
+<div class="skill-card">
+  <h3>process-evaluation</h3>
+  <p>The standing conformance engine: the traceability matrix, the four sweeps, the conformance
+  snapshot with its headline and metrics strip, and the cadence.</p>
+  <p><strong>Named failure modes:</strong> matrix theatre (a beautiful spreadsheet maintained by
+  hand-invention over uncited artifacts), cadence decay, severity inflation, and evaluator capture
+  (the evaluation run by the same agent whose artifacts it checks).</p>
+</div>
+
+<div class="skill-card">
+  <h3>handoff-package</h3>
+  <p>The full-artifact manifest with gaps listed as gaps, the what-if sweep, the live walkthrough in
+  manifest order, the routing rule, and the question split.</p>
+</div>
+
+<div class="skill-card">
+  <h3>md-spec-loop</h3>
+  <p>The cross-project improvement loop: evidence gathering, divergence adjudication with three
+  outcomes, the build-time question interrogation, dating and versioning, and the three loop metrics.</p>
+  <p><strong>Why it is worth protecting:</strong> it is the only step that pays out on the next project
+  rather than this one, which makes it the easiest to skip. A stale shared file is worse than none,
+  because it produces confidently non-conforming output that looks reviewable and is not.</p>
+</div>

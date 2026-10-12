@@ -1,0 +1,532 @@
+=== PAGE 47 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 47 of 312 
+PART B ORDER MANAGEMENT (SALES) Order Management carries a transformer sale from first inquiry to shipped, invoiced and recognized revenue, and carries component/spares sales 
+through a fast make-to-stock path. It owns the Customer Master commercial view, Quotations, Sales Orders, Deliveries & Shipments, and the handoffs: to Engineering for ETO design, 
+to Production for order-pegged manufacturing, to Inventory for reservation/pick/pack/ship, to Accounting for invoicing (ACC 3) and revenue recognition (ACC 24), and to RMA for 
+returns (Part A §3). 
+
+=== PAGE 48 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 48 of 312 
+1. Order Types Order Type Path Characteristics MTS — Make/Sell from Stock SO → reservation → pick → pack → ship → invoice Components, spares, standard distribution transformers held in 
+FG. ATP-checked, fastest cycle ETO — Engineer to Order Quote (with engineering estimate) → SO → design release (Part C) → production order pegged to SO line → final test → ship → 
+milestone invoicing Power and custom pad-mount transformers; every unit serialized; drawings approved by customer before winding starts (approval milestone on the order) MTO — Make 
+to Order (standard design) SO → production order pegged, no new engineering Catalog designs manufactured on demand Service SO with service lines (no inventory) → work performed → 
+invoice Field service, testing services, billable repair invoicing from RMA RC4 Replacement (no charge) Zero-price SO created by RMA disposition Replace Carries mandatory RMA 
+reference; blocks manual creation without RMA link (rule R-OM-04)  
+
+=== PAGE 49 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 49 of 312 
+2. Customer Master — Commercial View Screen ID OM-CUST-001 (listing), OM-CUST-002 (detail) URL Pattern /sales/customers Purpose Single customer record consumed by Sales, Accounting 
+(AR), Tax and RMA. Accounting fields (payment terms, AR balances) render from ACC data; this screen owns the commercial attributes  2.1 Detail Tabs and Fields Tab Fields (Field / 
+Type / Req / Specification) General Customer # (auto CUST-{SEQ:5}); Legal Name (text, req); DBA; Customer Class (dropdown, req: Investor-Owned Utility, Municipal Utility, Co-op, 
+EPC Contractor, Distributor, OEM, Industrial, Government); Market Segment; Parent Customer (lookup — corporate families roll up exposure); Status (Prospect / Active / On Hold / 
+Blocked / Inactive); Owner (sales rep) Addresses Unlimited addresses typed Bill-To / Ship-To / Both; one default each. Ship-To rows carry: site name, address, delivery 
+instructions, dock constraints (crane on site Y/N, max vehicle), tax jurisdiction preview. Validations: at least one Bill-To and one Ship-To before status Active (V-OM-01) 
+Contacts Name, title, role tags (Purchasing, Engineering, AP, Receiving), email, phone; primary flag per role Commercial Price List (lookup, req for Active); Currency; Payment 
+Terms (from ACC 14 terms master); Incoterms default (EXW/FOB/DAP/DDP + named place); Freight Terms default; Invoice Delivery (email PDF / portal / EDI-phase 3); Invoice 
+consolidation rule (per shipment / per order / monthly) Credit Credit Limit (currency, Controller-owned field); Credit Exposure (calc = open AR + open orders not yet invoiced + 
+in-transit shipments); Available Credit; Risk Class (A–D); Credit Hold flag (manual) + auto-hold rule result; D&B / rating reference fields; Last Review date + reviewer. All edits 
+here restricted to Finance roles; Sales sees read-only Tax Tax profile per Part A §11.3 (registration numbers, exemption certificates embed, tax address role) Sales History 
+Read-only: orders, revenue by year, margin by year, open quotes, RMAs, on-time delivery % to this customer Documents / Activity Contracts, frame agreements, W-9 requests; 
+immutable audit trail  2.2 Credit Management Rules ▸ Auto credit check runs at: quotation → order conversion, SO submit, any SO change increasing value, and shipment release (final 
+gate). ▸ Check: Exposure + new order value ≤ Credit Limit, and no invoices > 30 days past due (config). Fail → order enters Credit Hold status; Finance queue (ACC 22 approval queue, 
+type Credit Release) can Release, Reject, or Raise Limit (Controller). ▸ Shipment-release gate cannot be bypassed by Sales roles; Controller release is logged on the order Activity 
+tab. ▸ Government/municipal class customers can be flagged Exempt from Auto Hold (Controller only). 
+
+=== PAGE 50 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 50 of 312 
+3. Quotations Screen ID OM-QT-001 (listing), OM-QT-002 (create/detail) URL Pattern /sales/quotations Purpose Priced, versioned offers; for ETO, the container for the engineering 
+estimate and technical configuration that later drive design and costing  3.1 Header Fields Field Type Req Specification Quotation # Auto Auto QT-{YYYY}-{SEQ:5}; version suffix 
+-V2, -V3 on revisions Customer / Prospect Lookup Yes Prospect status customers allowed on quotes (not on orders) Customer RFQ Reference Text No Customer bid/RFQ number; printed on 
+quote Quote Type Dropdown Yes Budgetary (±25%, watermarked BUDGETARY, no ATP), Firm (binding, full costing) Valid Until Date Yes Default +30 days (config per quote type); expiry 
+auto-status Requested Delivery Date No Drives feasibility check against production capacity (Part D §11) for ETO Incoterms / Freight Dropdowns Yes Default from customer; 
+quote-level override Sales Rep / Estimator Users Yes/Cond. Estimator mandatory on ETO quotes Win Probability % Number No Pipeline reporting Loss Reason Dropdown Cond. Mandatory 
+when status → Lost: Price, Lead Time, Technical, Relationship, No-Bid, Other + notes  3.2 Line Fields Field Type Specification Line Type Dropdown Catalog Item / ETO Configured / 
+Service / Text-only Item Lookup Catalog & service lines. ETO lines may reference a template item (e.g. TX-PAD-TEMPLATE) before a real item exists ETO Configuration Panel 
+Structured attributes Visible for ETO lines: kVA/MVA rating, primary voltage, secondary voltage, phases, frequency, impedance %, cooling class (ONAN/ONAF…), tap range, BIL, 
+altitude, temperature rise, K-factor, efficiency standard (DOE 2016/CSL), bushing config, accessories checklist. Attributes save as structured JSON, print on the quote technical 
+data sheet, and copy forward to the SO and the engineering request (Part C §2) Qty / UoM Number — Unit Price Currency From Pricing Service (Part A §4.4); ETO lines from Cost Estimate 
++ margin (below) Cost Estimate Link Link ETO/Firm: mandatory link to a Cost Estimate CE-# (Part I §3). Quote margin panel shows estimate cost, price, margin %, floor check 
+Commodity Surcharge Calc lines Copper/CRGO escalator lines per Part I §6.4 with index basis and date shown 
+
+=== PAGE 51 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 51 of 312 
+Field Type Specification Lead Time (Wks) Number Quoted production + delivery lead time per line Discount % Number Role-limited; below-floor → approval  3.3 Statuses, Versioning, 
+Outputs Element Specification Lifecycle Draft (gray) → Internal Review (yellow: estimator + pricing approval when margin below target) → Issued (blue, PDF sent, content locked) → 
+statuses Won (green) / Lost (red) / Expired (gray) / Superseded (when revised) Revisions Revise button on Issued quote → full copy as -V(n+1) in Draft; predecessor → Superseded, 
+chain visible; diffs viewable side-by-side Quote PDF Entity letterhead; commercial page (lines, prices, surcharges, totals, terms, validity); technical data sheet per ETO line 
+from the configuration attributes; standard terms & conditions appendix (versioned document, Part C §5); signature block Convert to Order Won → Create Sales Order: copies lines, 
+frozen prices (Price Source = Quotation), configuration, estimate links; quote locks with SO cross-reference  
+
+=== PAGE 52 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 52 of 312 
+4. Sales Orders Screen ID OM-SO-001 (listing), OM-SO-002 (create/detail) URL Pattern /sales/orders Purpose The commercial contract of record. Every downstream document — 
+reservation, production order, delivery, invoice, revenue contract — hangs off an SO line  4.1 Header Fields Field Type Req Specification SO # Auto Auto SO-{YYYY}-{SEQ:5} Customer 
+Lookup Yes Active customers only (E-OM-02 otherwise) Customer PO # Text Yes Mandatory (utility buyers always issue POs); uniqueness warning per customer Quote Reference Link Cond. 
+Mandatory when converted from quote; manual orders above $250k without a quote require Sales Director approval (rule R-OM-02) Order Type Dropdown Yes MTS / MTO / ETO / Service / 
+Replacement (§1) Bill-To / Ship-To Lookups Yes From customer addresses; ship-to editable per line for multi-site orders Requested Ship Date Date Yes Header default; per-line 
+override Incoterms / Freight Terms / Carrier Dropdowns Yes Defaults from customer Payment Terms Dropdown Auto From customer; edit requires Finance role Billing Plan Dropdown Yes 
+On Shipment (default MTS) / Milestone (default ETO — §4.4) / On Delivery Confirmation Currency / Rate Auto Auto Customer currency; booked rate at order date displayed Status Badge 
+Auto §4.6  4.2 Line Fields Field Type Specification Line # Auto 10, 20, 30… (renumber-safe references) Item / Customer Part # Lookup Either enters; cross-reference resolves (Part A 
+§4.1). Sellable=OFF blocks (E-SAL-02) Description Override Text Prints instead of item description when set ETO Configuration Panel Copied from quote; editable until Design Release 
+milestone, then locked — changes only via Sales Change Order (§4.5) Qty / UoM Number Min-order-qty check (Part A §4.1) Unit Price / Surcharges / Discount Currency Per Pricing 
+Service; frozen from quote when referenced Requested / Promised Ship Date Dates Promised set by ATP (MTS) or scheduling (MTO/ETO); customer-visible commitment 
+
+=== PAGE 53 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 53 of 312 
+Field Type Specification Warehouse Dropdown Fulfilling plant/warehouse Warranty Months Override Number Item default → upward override with CS Manager approval Serial Assignment 
+Panel ETO/MTO: production serial(s) attach automatically at WO release; MTS serialized: picked serials attach at PGI Revenue Contract Link Link Auto-created ACC 24 contract for 
+Milestone billing plans; line maps to performance obligations Line Status Badge Open / In Engineering / In Production / Ready to Ship / Partially Shipped / Shipped / Invoiced / 
+Closed / Cancelled  4.3 Availability & Supply Pegging Order Type Behavior at Submit MTS ATP check per line: Available + scheduled receipts before requested date − prior 
+commitments. Full → auto Material Reservation (INV 5.5, source = SO). Partial → dialog: accept later promised date / split line (ship available now, balance later) / backorder. 
+Promised Ship Date written back MTO / ETO No ATP; line spawns demand: ETO → Engineering Request (Part C §2) then production order at design release; MTO → planned order → WO (Part D). 
+WO carries SO line peg; peg shown both sides; FG receipt from a pegged WO auto-reserves to the SO line Service No supply; optionally links a service work record  4.4 Milestone 
+Billing Plan (ETO) Milestone plans generate invoice requests into ACC 3 and map one-to-one onto the revenue contract (ACC 24) performance obligations. Default template (editable 
+per order, must total 100%): Milestone Default % Trigger Evidence Attachment Order Acceptance / Down Payment 20% SO status Confirmed Signed order confirmation Design Approval 10% 
+Customer drawing approval milestone complete (Part C §4) Approved drawing transmittal Major Materials Procured 20% All long-lead POs (core steel, copper, bushings, tap changer) 
+confirmed PO confirmations report Production Complete / Tested 30% Final Test passed (FTR issued) Certified test report Shipment 15% PGI posted BOL Delivery / Commissioning 
+Support 5% POD or site acceptance POD  Dev Note: Milestone completion creates an Invoice Request in a Finance queue rather than auto-posting the invoice — Finance reviews evidence 
+and posts (ACC 3 flow). Revenue recognition follows the ASC 606 contract (ACC 24), not the billing plan; deferred/unbilled mechanics per ACC 24.2 apply automatically. 4.5 Order 
+Change Management Change Rule Before Confirmed Free edit in Draft 
+
+=== PAGE 54 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 54 of 312 
+Change Rule After Confirmed, commercial fields (qty, dates, prices) Sales Change Order dialog: captures old/new, reason, initiator; reprices if needed; re-runs credit check when 
+value increases; re-promises dates; both versions retained; customer-facing Change Confirmation PDF After Confirmed, ETO technical configuration Locked once Design Release 
+milestone passes. Change requires ECR (Part C §4) with cost/schedule impact quote to customer; accepted impact flows back as a Sales Change Order referencing the ECO After any 
+shipment Shipped lines immutable; only new lines or cancellation-of-remainder (with restocking/cancellation fee logic per contract terms) Cancellation Full/line cancellation 
+captures cancellation fee % (contract-based); fee invoices through a service line; pegged WOs get Cancel signal — WO in progress requires Production Manager disposition (finish to 
+stock / stop and scrap / stop and hold) before SO line closes  4.6 Status Lifecycle Status Color Meaning / Exits Draft Gray Editing; → Submitted Submitted Yellow Validations + 
+credit check; → Confirmed / Credit Hold / Rejected Credit Hold Red Awaiting Finance release; → Confirmed / Cancelled Confirmed Blue Contract in force; supply pegged; milestones 
+live; → In Fulfillment In Fulfillment Purple Any line in engineering/production/picking; → Partially Shipped / Shipped Partially Shipped Teal At least one PGI; remainder open 
+Shipped Green All lines PGI’d; → Invoiced when billing complete Invoiced / Closed Dark Green All billing posted, revenue contract settled; terminal (Reopen: Controller) Cancelled 
+Red Terminal; cancellation fee logic applied  
+
+=== PAGE 55 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 55 of 312 
+5. Deliveries & Shipments Screen ID OM-SHP-001 (listing), OM-SHP-002 (detail) URL Pattern /sales/shipments Purpose Groups SO lines into physical outbound events; owns pick/pack 
+orchestration, pre-shipment QC gate, post goods issue and shipping documents  5.1 Flow and Fields 1. Create shipment from one or more SO lines (same ship-to, same date window). 
+Header: SHP-#, SO refs, ship-to, planned ship date, carrier, Incoterms, vehicle/equipment type (flatbed, step-deck, container), permits required flag (over-dimensional loads: 
+state permits checklist for large transformers). 2. Release to warehouse → generates Picklist(s) (INV 5.7) → Packing (Part A §5) → HUs assigned to the shipment. 3. Pre-Shipment 
+Inspection gate (INV 15.3) for FG transformers: shipment cannot post while PSI is open or failed (E-OM-07). Passing PSI auto-generates the CoC (INV 15.5). 4. Credit gate re-check 
+(final), then Post Goods Issue: stock leaves FG, serials → Shipped with customer + site written, HUs → Shipped, SO lines update, invoice request fires per billing plan. 5. Documents 
+produced: Bill of Lading (VICS format), Packing List (Part A §5.4), CoC, test reports bundle (FTR), country-specific export docs when applicable. POD capture field (date, name, 
+upload) closes the delivery leg and can trigger the final milestone. Accounting Entry — Post Goods Issue (shipment of finished goods) Debit Credit Amount Basis Notes 5120 COGS — 
+Finished Goods 1330 Finished Goods Inventory Shipped Qty × standard cost (or valuation rate for non-standard items) Cost center: none (COGS is PC-level); Profit center: product 
+line of item. Serial-level cost detail retained for margin reporting  Accounting Entry — Freight accrual at PGI (PE-paid freight) Debit Credit Amount Basis Notes 6410 Freight Out 
+2100 AP (accrual, vendor = carrier) Quoted freight cost Reversed/replaced by carrier invoice at 3-way match  
+
+=== PAGE 56 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 56 of 312 
+6. Sales Reports & Role Access Report Content Open Order Book All open SO lines: value, promised date, status, pegged supply status, late flags; grouped by customer / product line 
+/ month Bookings / Billings / Backlog Monthly BBB with product line and entity dimensions; the management headline report On-Time Delivery Promised vs actual PGI; OTD % by month, 
+customer, product line Margin by Order Price vs standard cost at PGI vs actual cost at WO settlement (three-margin view: quoted, standard, actual) Quote Funnel Quotes by 
+status/age, win rate by segment, loss reasons pareto Late & At-Risk Lines Promised date within 7 days without Ready-to-Ship, or pegged WO behind schedule (from Part D dispatch 
+data)  Role Rights Sales Rep Customers (commercial read/write), quotes, orders create/edit own; no credit fields; no cost visibility toggle (config per company: reps see margin 
+Y/N) Sales Admin / CS All orders, change orders, RMA creation, shipment creation Sales Director Approvals (no-quote orders, discounts beyond rep limit), all reports Finance 
+(Controller/AR) Credit fields, credit release, price-floor overrides, billing plan edits Production Planner Read orders, edit promised dates via scheduling only Read-Only View 
+all, export none   
+
+=== PAGE 57 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 57 of 312 
+PART C ENGINEERING — BOM, CAD AND CHANGE CONTROL Engineering owns the technical definition of every product: the engineering item, the Engineering BOM (EBOM), the controlled 
+drawing set, and all change control. Production consumes a released Manufacturing BOM (MBOM) and routing; Costing rolls the MBOM; the Material Master BOM tab (INV 2.3.9) is a 
+read-only window into what this Part produces. The design goal: an engineer can take an ETO order from Sales configuration to released drawings, EBOM and MBOM without leaving the 
+module, and nothing unreleased can ever be bought, built or shipped. 
+
+=== PAGE 58 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 58 of 312 
+1. Engineering Workspace Screen ID ENG-HOME-001 URL Pattern /engineering Purpose Engineer’s landing page: work queue and design pipeline  Panel Content My Design Queue Engineering 
+Requests assigned to me: SO line, configuration summary, due date (from order promise back-scheduled), status, customer-approval flag Open ECRs / ECOs Change pipeline with aging 
+and status Awaiting My Approval BOMs, drawings, ECOs where I am an approver Recently Released Last 20 released BOMs/drawings with links Exceptions Items used in released BOMs that 
+lost their vendor (AVL empty), drawings referenced but not Released, placeholder parts older than 14 days  
+
+=== PAGE 59 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 59 of 312 
+2. Engineering Request (ETO Intake) Screen ID ENG-REQ-001 URL Pattern /engineering/requests Purpose The handoff object from a confirmed ETO sales order line to design  Field Type 
+Req Specification Request # Auto Auto ER-{YYYY}-{SEQ:4} SO Line Reference Link Yes Auto-created at SO Confirm for ETO lines; carries the full configuration attribute set (Part B 
+§3.2) read-only Design Type Dropdown Yes New Design / Variant of Existing (select base design — copies its EBOM and drawing set as the starting point) / Repeat (released design, no 
+engineering: request auto-completes and MBOM releases immediately) Assigned Engineer(s) Users Yes Electrical + mechanical designer roles Design Due Date Date Auto Back-scheduled: 
+promised ship date − production lead time − procurement long-lead time; editable by Engineering Manager with schedule-impact warning to the SO Customer Approval Required Toggle Yes 
+ON for utility customers (default from customer class): inserts the Drawing Approval milestone (transmittal → customer review → approved/returned-with-comments loop) Deliverables 
+Checklist Checklist Auto Generated from design type: GA drawing, nameplate drawing, electrical schematic, core & coil design sheet, winding diagrams, tank/fabrication drawings, 
+accessories list, test plan, EBOM, MBOM, cost estimate. Each row links to its object and shows status; request completes only when all rows done Status Badge Auto Open → In Design → 
+Customer Review (optional loop) → Released → Closed; Blocked (with reason) available from any state  
+
+=== PAGE 60 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 60 of 312 
+3. EBOM Editor — How the Engineer Fills the BOM Screen ID ENG-BOM-001 (list), ENG-BOM-002 (editor) URL Pattern /engineering/boms/{ebomId} Purpose Multi-level BOM authoring: 
+structure, quantities, references to drawings, alternates, effectivity. This is the screen the gap instructions call “how the engineer will fill up the BOM”  3.1 Editor Layout Zone 
+Specification Left — structure tree Multi-level tree (assembly → sub-assembly → component), drag-to-move with level revalidation, expand/collapse, level badges (1, 1.1, 1.1.1), 
+per-node status dot (component item status) Center — line grid Children of the selected node as an editable grid (fields §3.2); inline add row; keyboard-first (Enter = next row, Tab 
+= next cell) Right — context panel For the selected line: item card (stock, cost, AVL, lead time), linked drawing preview thumbnail, where-used, alternates editor Header bar EBOM # 
+(EBOM-{SEQ:5}), Parent Item, Revision, Status, Base Design reference, buttons: Validate, Compare Revisions, Import, Copy From, Release Package  3.2 BOM Line Fields Field Type Req 
+Specification Find # Number Auto Sequential position number; printed on drawings and pick documents; stable across edits Component Lookup + create Yes Search the Material Master; 
+or Create Placeholder Part inline: engineer enters description, category, UoM, est. cost, target vendor → a Draft item is created (status Draft, flagged Engineering Placeholder) 
+and an Item Creation Request task goes to Inventory Admin/Purchasing to complete sourcing data. Release of the EBOM is blocked while any placeholder remains Draft (V-ENG-03) Qty 
+Per / UoM Number Yes Quantity per one parent unit; UoM from item; dual display when purchase UoM differs Scrap % Number No Expected process loss; consumed by MRP and costing (e.g. 
+copper winding scrap 3%) Reference Designators Text No Position references (e.g. bushing H1/H2/H3, tap positions) Phantom Toggle No Phantom assemblies explode into parent demand 
+(e.g. “hardware kit” groupings); phantoms cannot be stocked Consume At Operation Dropdown Cond. Routing operation where the component is issued (populated after routing exists; 
+mandatory before MBOM release — V-ENG-05). Drives staged material issue on the floor Drawing Reference Lookup Cond. Link to controlled document (per §5); mandatory for 
+fabricated/made parts (V-ENG-04) Alternates Sub-table No Approved alternate components with preference rank and conditions (e.g. alternate CRGO grade with loss delta note); MRP 
+may not auto-substitute — alternates are planner-selected Effectivity From / To Dates or Serial No Line-level effectivity for running changes (see ECO §4.5) 
+
+=== PAGE 61 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 61 of 312 
+Field Type Req Specification Make/Buy Auto Auto From item; shown as badge (Make items must themselves carry a released EBOM before parent release — V-ENG-06) Notes Text No Line 
+note; prints on MBOM and traveler when flagged Print  3.3 Authoring Aids Function Specification Copy From Copy an entire released EBOM (or subtree) of a similar design, then edit 
+deltas; provenance stored (Base Design field) for design-reuse reporting CAD BOM Import CSV/XLSX import from CAD parts list: wizard maps columns (find #, part #, description, qty, 
+refdes); matches items by material code / manufacturer part #; unmatched rows become placeholder-part proposals reviewed line-by-line before commit; import is transactional 
+(all-or-nothing) with downloadable error log Validate Runs all V-ENG rules + circular-reference check + UoM conversion check + duplicate-component warning + qty=0 error; results 
+panel with click-to-line Compare Revisions Side-by-side rev diff: added (green), removed (red), changed qty/fields (amber); exportable — this is the change-evidence document for 
+ECO review Where-Used For any component: all EBOMs/MBOMs using it, with revision and status — mandatory pre-check surface for ECR impact analysis Mass Update Replace component A 
+with B across selected BOMs (creates ECO automatically — cannot be done silently; §4)  3.4 EBOM Status Lifecycle Status Color Rules Draft Gray Free edit by assigned engineers In 
+Review Yellow Locked; reviewers comment (threaded per line); Approve → Released, Reject → Draft with comments Released Green Immutable. Feeds MBOM generation (§6). Any change 
+requires ECO. Approvers: Engineering Manager + (for designs with customer approval) evidence of customer drawing approval attached Superseded Blue Replaced by later released 
+revision; historical WOs keep their revision reference Obsolete Red Design retired; blocked from new MBOMs/orders  
+
+=== PAGE 62 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 62 of 312 
+4. Engineering Change Control (ECR / ECO) 4.1 ECR — Engineering Change Request Screen ID ENG-ECR-001 URL Pattern /engineering/change-requests Purpose Anyone proposes a change; 
+engineering evaluates impact; CCB decides  Field Type Req Specification ECR # Auto Auto ECR-{YYYY}-{SEQ:4} Requested By / Source User + dropdown Yes Source: Engineering, 
+Production, Quality (NCR link), Purchasing (obsolescence/AVL), Sales (customer change), RMA/Field Failure Affected Objects Multi-lookup Yes Items, EBOMs/MBOMs, drawings, routings; 
+validated against Where-Used Change Description / Reason Textareas Yes What and why; classification dropdown: Safety/Regulatory, Cost Reduction, Quality/CAPA, Supply Continuity, 
+Customer Request, Documentation Only Impact Analysis Panel Auto + manual Auto System computes and displays: open WOs using affected revisions (count + list), on-hand stock of 
+affected components (qty + value), open POs (qty + value), open SO lines, cost delta (current rollup vs simulated rollup with proposed change — one-click simulation via costing 
+engine Part I §3), affected customers (designs shipped). Engineer adds narrative + risk assessment Priority Dropdown Yes Emergency (safety — 24h CCB SLA), Urgent, Standard CCB 
+Decision Panel Auto Change Control Board = Engineering Manager + Quality Manager + Production Manager + (cost delta > $10k) Controller. Votes recorded; outcome Approve → spawns 
+ECO; Reject / Defer with reason  4.2 ECO — Engineering Change Order Field / Panel Specification ECO #, ECR link ECO-{YYYY}-{SEQ:4}; one ECO may implement several ECRs Task 
+Checklist Generated from affected objects: revise EBOM X to Rev n+1, revise drawing DOC-…, update routing, update inspection plan, run costing simulation, update MBOM, notify 
+purchasing, customer re-approval (when the design was customer-approved — mandatory task auto-added). Each task has owner + due date + status; ECO cannot close with open tasks 
+Effectivity Decision §4.5 — date, serial, or immediate Old-Stock Disposition Mandatory decision per affected component with on-hand > 0: Use-Up (consume remaining then switch — 
+system watches stock and flips revision automatically at zero), Rework (creates RWO), Scrap (posts 5320 with approval per INV thresholds), Return to Vendor (RTV) Open-WO 
+Disposition Per open WO on old revision: Complete As-Is / Incorporate Change (WO gets change task + updated pick list deltas) / Stop & Rework Release Action Atomic cutover: all 
+new revisions (EBOM, MBOM, drawings, routing, plans) release together at effectivity; partial release impossible 
+
+=== PAGE 63 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 63 of 312 
+ 4.5 Effectivity Rules Mode Specification Date effectivity New revision governs all documents created on/after the date; in-flight documents keep old revision unless WO 
+disposition says otherwise Serial effectivity ETO/MTO: “effective from serial PE-TX-2026-0142 onward”; the WO for that serial and later pull the new revision; traceability reports 
+show revision per serial Immediate (Emergency) All open WOs blocked instantly pending disposition; used for safety/regulatory changes; requires Quality Manager + Engineering 
+Manager joint release  
+
+=== PAGE 64 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 64 of 312 
+5. CAD & Controlled Document Management Screen ID ENG-DOC-001 (register), ENG-DOC-002 (detail) URL Pattern /engineering/documents Purpose Controlled storage, revisioning and 
+linking of drawings and technical documents. This is the system of record the shop floor and customers see; local copies are uncontrolled by definition  5.1 Document Master Fields 
+Field Type Req Specification Document # Auto/manual Yes DOC-{TYPE}-{SEQ:5}; types: GA (general arrangement), NP (nameplate), SCH (schematic), WND (winding diagram), COR (core), 
+TNK (tank/fab), TP (test plan), WI (work instruction), TC (T&C / templates), CERT (certificate templates) Title Text Yes — Revision Auto Auto Rev A, B…; every revision keeps its own 
+files and approval record Native File(s) Upload Yes DWG/DXF/SLDDRW/SLDPRT/STEP/PDF/DOCX; max 500 MB; checksum stored; virus-scanned Viewable File Upload/auto Yes PDF rendition 
+mandatory for release (auto-generated from native where converter available; else engineer uploads). The floor and customers only ever receive the PDF rendition Title Block 
+Metadata Group Yes Drawn By, Checked By, Approved By, Scale, Sheet x of y, Drawing Size (A–E), Project/SO reference; entered at check-in (metadata extraction from title block is 
+Phase 3) Linked Objects Multi-link No Items, EBOM lines, routings, inspection plans, customer orders (ETO variant drawings link to the specific SO line) Security Class Dropdown 
+Yes Internal / Customer-Shareable / Restricted (export-controlled: visible only to users with EAR flag)  5.2 Check-In / Check-Out and Lifecycle Rule Specification Check-out Locks 
+the document to the borrower; others see who holds it and since when; Engineering Manager may force-release a lock (logged) Check-in Uploads new working files against the same 
+in-work revision; nothing changes for consumers until release Lifecycle WIP (gray) → In Review (yellow: redline comments layer on the PDF, reviewer approvals) → Released (green: 
+files frozen, rendition stamped “RELEASED Rev X + date” watermark) → Superseded (blue) → Obsolete (red: stamped OBSOLETE, excluded from all pick-up points) Where drawings surface WO 
+traveler prints the drawing list with revisions; shop floor terminal shows current released PDFs for the operation (never a superseded one — resolved at print/view time); 
+purchasing attaches fabrication drawings to POs automatically from the BOM line link; transmittals (below) send to customers Transmittals Customer drawing packages: pick documents 
+→ generate transmittal record TR-{SEQ} (recipient, date, revs sent, purpose For Approval / For Construction / As-Built) → email/portal; customer response captured (Approved / 
+Approved as Noted / Revise & Resubmit) which drives the Design Approval milestone (Part B §4.4) 
+
+=== PAGE 65 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 65 of 312 
+ 
+
+=== PAGE 66 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 66 of 312 
+6. EBOM → MBOM Transformation The MBOM is what Production and Costing consume (the BOM-TX-… objects already referenced by INV 2.3.9). Transformation is a guided screen, not a 
+copy-paste: 1. Source: a Released EBOM revision. Target: MBOM for a specific plant (multi-plant ready; single plant today). 2. Phantom resolution preview: phantoms flatten into 
+parent per policy; engineer confirms. 3. Operation mapping: every line’s Consume At Operation validated against the chosen routing (Part D §4); unmapped lines listed and must be 
+resolved. 4. Packaging & consumables append: MBOM adds manufacturing-only items (crating per packing spec, oil top-up allowance, welding consumables) that the EBOM deliberately 
+excludes; these lines are flagged MFG-Add and never sync back to the EBOM. 5. Scrap % review: costing-relevant; defaults from EBOM, production may adjust with Engineering 
+approval. 6. Release: MBOM status Active; prior Active revision → Superseded; cost rollup invalidation flag set for the parent (Part I §3 picks it up in the next costing run); 
+Material Master BOM tab now renders this revision. Dev Note: Sync guard: if the source EBOM gets a newer released revision, all MBOMs derived from older revisions show an “EBOM 
+ahead” banner and appear in the Engineering exceptions panel until an ECO task regenerates them. MBOMs are never edited structurally outside this transformation — structural change 
+always starts at the EBOM (single source of truth). 
+
+=== PAGE 67 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 67 of 312 
+7. Engineering Reports & Roles Report Content Design Reuse New designs vs variants vs repeats per quarter; average design hours by type Change Cycle Time ECR→ECO→released duration 
+percentiles; emergency change count Placeholder Aging Draft placeholder parts by age and owning engineer Drawing Approval Status Transmittals awaiting customer response with age; 
+approval loop counts per order Where-Used Explosion Full multi-level where-used for any item (audit and obsolescence tool)  Role Rights Design Engineer Requests, EBOMs, drawings 
+(draft/check-out), ECR create, costing simulation read Engineering Manager Release approvals, force unlock, ECO release, effectivity decisions CCB members ECR decisions per §4.1 
+Production / Purchasing / Quality Read released objects; ECR create; task execution on ECOs Customer-portal (Phase 3) Transmittal receive/respond only   
+
+=== PAGE 68 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 68 of 312 
+PART D PRODUCTION MANAGEMENT Production Management plans, releases, executes, confirms and settles all manufacturing. It consumes released MBOMs and routings (Part C), reserves 
+and draws materials from Inventory, employs Quality gates at defined operations, generates the serialized genealogy that traceability depends on, and settles every order’s cost to 
+the GL with variances split by cause (Part A §8). This Part also specifies the physical flow of a transformer through the plant and the exact screen the operator touches at each 
+workstation. 
+
+=== PAGE 69 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 69 of 312 
+1. Plant Model — Work Centers and Floor Flow 1.1 Standard Work Center Set (Transformer Plant) Work centers are the scheduling and costing resources. Initial set for the PE plant — 
+each row becomes a Work Center master record (§2); the development partner must treat this as seed data, not hard-coding: WC Code Work Center Function Cost Center WC-050 Tank 
+Fabrication & Welding Steel cutting, forming, welding, pressure test of tanks, radiators fit-up CC-1150 WC-100 Core Cutting CRGO slitting, cropping, mitred cutting (step-lap) 
+CC-1100 WC-110 Core Stacking Lamination stacking, core clamping, core loss pre-check CC-1100 WC-200 LV Winding Foil/strip LV coils CC-1200 WC-210 HV Winding Wire/CTC HV coils, 
+layer/disc winding CC-1200 WC-220 Coil Assembly & Sizing Phase assembly, sizing press, brazing CC-1200 WC-230 Vapor Phase Drying / Oven Insulation drying cycles (batch resource) 
+CC-1250 WC-300 Core & Coil Assembly Core-coil marriage, cleating, lead dressing, tap lead connection CC-1300 WC-310 Tanking Active part into tank, gasketing, cover fit CC-1300 
+WC-320 Vacuum & Oil Filling Vacuum cycle, degassed oil fill, standing time CC-1300 WC-400 Final Assembly & Fittings Bushings, tap changer, radiators, conservator, cabinet, wiring, 
+accessories CC-1400 WC-500 Test Lab Routine tests per IEEE C57.12.90; type tests when ordered CC-1500 (Quality) WC-600 Paint & Finishing Blast, prime, topcoat, nameplate mounting 
+CC-1600 WC-700 Packing & Shipping Prep Drain/gas-fill for transport, accessory crating, loading CC-1700  1.2 Product Flow Through the Floor Reference flow for a padmount/power 
+transformer; the routing (§4) encodes this per design. Parallel branches: the tank (WC-050) and the active part (WC-100→WC-300) progress concurrently and merge at Tanking. Every 
+operation start/complete is a barcode scan event (Part F, SP-10/SP-11); every material issue is a scan (SP-08/SP-09); every QC gate is an inspection record. 1. Core: WC-100 → 
+WC-110: CRGO batches issued by heat number (scan captures batch → serial genealogy); stacked core weighed and core loss pre-checked (in-process inspection IP-INP “Core Assembly”). 2. 
+Windings: WC-200 / WC-210 draw copper (batch-scanned, conductivity certs on file); winding data sheet (turns, tap positions) from drawing set on-screen; QC gate “Winding” (turn 
+count, resistance, dimensions). 3. Coil assembly & drying: WC-220 assembles phases; WC-230 dries per cycle recipe — batch resource: multiple orders share an oven run (the terminal 
+supports multi-order batch confirmation with cycle chart attachment). 4. Tank line: WC-050 fabricates/receives tank; pressure/leak test recorded as inspection; blast & prime may 
+run at WC-600 before assembly per routing variant. 
+
+=== PAGE 70 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 70 of 312 
+5. Assembly merge: WC-300 core & coil into tank at WC-310; WC-320 vacuum + oil fill (oil batch scanned — traceability to oil supplier batch); QC gate “Pre-Test” checklist. 6. Final 
+assembly WC-400: serialized components installed and scan-linked as child serials (bushings, tap changer, relays — SP-12 parent-child link scan). Accessory checklist from SO 
+configuration. 7. Test WC-500: Final Test per plan IP-FIN (Part E §4); FTR generated; failures route to Rework (§9). 8. Finish WC-600 → WC-700: paint, nameplate (nameplate data 
+printed from system — SP-13 verification scan of nameplate serial barcode), pack per Part A §5, FG receipt (§8) or direct staging to shipment. 
+
+=== PAGE 71 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 71 of 312 
+2. Work Center Master Screen ID PP-WC-001 (list), PP-WC-002 (detail) URL Pattern /production/work-centers Purpose Capacity, cost rates and scheduling parameters per resource  
+Field Type Req Specification WC Code / Name Text Yes Per §1.1 Plant / Warehouse Link Dropdown Yes Issuing warehouse default for materials consumed here Cost Center Lookup Yes Every 
+WC maps to exactly one cost center (Part H); labor/overhead postings derive from this link Capacity Model Group Yes Shifts per day, hours per shift, working days calendar (plant 
+calendar link), number of parallel stations/machines, efficiency % (default 85), utilization target % Batch Resource Toggle No ON for oven/vacuum: capacity consumed per cycle, not 
+per unit; cycle size (units), cycle hours Labor Rate — Standard Currency/hr Yes From Part I §2 rate calculation (read-only here, link to rate screen) Machine Rate — Standard 
+Currency/hr No Optional separate machine costing Overhead Rate / Basis Currency/hr or % Yes Overhead applied per labor hour (default) or % of labor cost; from Part I §2 Queue / 
+Move Time (h) Numbers No Scheduling buffers before/after operations at this WC Default Crew Size Number No Labor hours = run hours × crew size when ON Alternate WC Lookup No 
+Overflow routing target with efficiency factor Status Badge Yes Active / Maintenance (blocks new dispatch, warns scheduler) / Inactive  
+
+=== PAGE 72 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 72 of 312 
+3. MRP Workbench & Planned Orders Screen ID PP-MRP-001 URL Pattern /production/mrp Purpose Net-requirements planning across all demand and supply; the planner’s daily control desk. 
+Extends the read-only INV 15.9 view into the acting workbench  3.1 MRP Run Element Specification Scope & schedule Nightly full run + on-demand run (item / item group / plant); 
+regenerative (full re-plan) with net-change option Demand inputs Confirmed SO lines (MTS ship dates), WO component requirements, forecast (INV 15.8, consumed by actuals per 
+period), safety stock floors (Part A §10), quarantine exclusions Supply inputs On-hand available by warehouse, open POs (confirmed dates), open WOs (scheduled completion), planned 
+orders, open transfers, subcontract POs Logic Low-level-code explosion through MBOMs with scrap %; lot sizing per item (Lot-for-Lot default; Fixed Qty; Min/Multiple rounding); 
+lead-time offsetting (purchased: vendor lead time + GR processing days; made: routing-based lead time); make/buy split by item flag Outputs Planned orders (PLO- for make, PR 
+proposals for buy), reschedule-in/out messages for existing supply, exception messages  3.2 Exception Messages Code Message Suggested Action Button EX-01 Shortage — no supply 
+covers requirement on date Create PR / Create WO EX-02 Reschedule In — supply later than need Expedite (writes to PO Expedite Board, Part G §7) EX-03 Reschedule Out — supply earlier 
+than need Push out (PO change proposal / WO reschedule) EX-04 Excess — supply exceeds demand horizon Cancel proposal EX-05 SS-BREACH — plan dips below safety stock Raise supply 
+proposal per Part A §10.2 EX-06 Past-due supply Expedite / re-date EX-07 BOM/routing missing or unreleased for make item Open Engineering exception  3.3 Planned Order Conversion 
+Planner selects planned orders → Convert: make → Production Order draft (WO) with pegs preserved; buy → PR (Part G §3) grouped by vendor per lot-sizing. Mass-convert with preview; 
+conversions log the MRP run ID for audit. Firmed planned orders (planner locks date/qty) survive the next regenerative run. 
+
+=== PAGE 73 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 73 of 312 
+4. Routings Screen ID PP-RTG-001/002 URL Pattern /production/routings Purpose Operation sequences with times and QC gates; the source of scheduling and of labor/overhead standards 
+ Field (Operation Row) Type Specification Op # Number 10, 20, 30…; parallel branches via branch labels (A10, A20 tank line) merging at a defined op Work Center Lookup From §2 
+Description Text Operation text; prints on traveler Setup Hours / Run Hours / Basis Numbers Run basis: per unit or per lot; batch WCs use per-cycle Crew Size Number Overrides WC 
+default QC Checkpoint Toggle + plan link ON inserts an in-process inspection gate: operation cannot complete until linked IP-INP inspection passes (or Quality Manager 
+conditional-pass with restriction note) Work Instructions Doc links Controlled WI documents (Part C §5); terminal renders current released PDF Components At This Op Auto view MBOM 
+lines mapped here (Consume At Operation); read-only from BOM Milestone Confirmation Toggle ON = operation confirmation reports progress % for the order (used by ETO milestone 
+“Production Complete” logic and WIP valuation)  Routing lifecycle mirrors EBOM: Draft → In Review → Released → Superseded, changes via ECO. Standard hours from released routings feed 
+the cost rollup (Part I §3) and LEV calculation (Part A §8). 
+
+=== PAGE 74 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 74 of 312 
+5. Production Orders Screen ID PP-WO-001 (list), PP-WO-002 (detail) URL Pattern /production/orders Purpose The execution and cost-collection object for making one item (one serial 
+for ETO transformers; lot quantity for components)  5.1 Header Fields Field Type Req Specification WO # Auto Auto WO-{YYYY}-{SEQ:5} Item / MBOM Rev / Routing Rev Lookups Yes 
+Revisions frozen at release; displayed prominently (rev governs pick list, ops, drawings) Order Qty / UoM Number Yes ETO: 1 per serialized unit (multi-unit orders auto-split one 
+WO per serial at release) SO Line Peg Link Cond. Mandatory for MTO/ETO; drives priority and reserves output Serial # Auto Auto (serialized) Generated at release per item-type 
+format PE-{TYPE}-{YYYY}-{SEQ:4}; nameplate serial for transformers; parent for genealogy Start / Due Dates Dates Yes Scheduled by backward scheduling from due date (forward from 
+start on demand); Gantt view per WC Priority Number/badge No Dispatch ordering; late pegged orders auto-escalate Production Cost Center Auto Auto Derived per operation from WC; 
+header shows primary Profit Center Auto Auto From item product line Status Badge Auto §5.3  5.2 Release Checks (hard gates, run at Release action) 1. MBOM and Routing revisions 
+Released (E-PP-01). 2. Material availability: full-kit check against reservations; shortages listed with supply dates; release with shortages requires Planner override flag 
+Release Short (order carries Shortage badge; short items appear on the Expedite Board). 3. All drawings on the deliverables list Released (ETO) and customer approval milestone 
+complete when required (E-PP-03). 4. Inspection plans Active for every QC checkpoint op (E-PP-04, per Part A §6.5 policy). 5. Standard cost exists for the item (else warning + CVA 
+exception list entry). 6. On release: material reservations firm to the WO (source type = Production Order), serial generated, traveler printable, dispatch entries created per 
+operation. 5.3 Status Lifecycle Status Color Meaning Created Gray Draft; editable; scheduling sandbox Released Blue Frozen revisions; on floor; costs collect 
+
+=== PAGE 75 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 75 of 312 
+Status Color Meaning In Progress Purple First operation started Testing Amber At Final Test operation Completed Green FG received; no further confirmations; awaiting settlement 
+Closed (TECO) Dark Green Technically complete — settlement run performed, variances posted; order locked On Hold Red Blocked (quality hold, ECO immediate effectivity, SO 
+cancellation pending disposition); reason mandatory Cancelled Red Terminal; collected costs settle to scrap/variance per Controller decision  5.4 Traveler / Shop Packet Content 
+Specification Cover WO barcode (Code128 + QR), item, serial, SO/customer (ETO), qty, dates, revision block Operation sheets Per op: op barcode, WC, description, std hours, WI 
+document list with revisions, QC gate marker, sign-off box (belt-and-suspenders paper trail alongside digital confirmations) Pick list Components by operation with quantities, 
+locations, batch/serial requirement flags Drawing list All linked drawings with released revisions  
+
+=== PAGE 76 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 76 of 312 
+6. Shop Floor Terminal Screen ID PP-SFT-001 URL Pattern /production/terminal (kiosk mode, badge login) Purpose The operator’s single screen at every workstation: dispatch, 
+start/stop, material scan, labor, quantity and quality capture. Touch + scanner first; zero typing for the standard path  Element Specification Login Badge scan (operator barcode 
+SP-07); WC selected per kiosk config; multi-operator crew clock-in supported Dispatch list Operations queued at this WC in priority order: WO, item/serial, op, qty, std hours, 
+material-ready flag (green when all op components staged), drawing/WI buttons Start Operation Scan traveler op barcode (SP-10) → status In Progress, labor clock opens for the crew 
+Material Consumption Per op component list; scan item/batch/serial label (SP-08); qty confirm (defaults to standard × order qty); wrong-material scan hard-blocks with E-PP-07 (item 
+not on this op’s list) — supervisor override creates an NCR automatically Data Capture Op-specific structured fields when configured (e.g. winding: turns count, measured resistance; 
+oven: cycle #, chart upload) — defined per routing op as capture templates; stored on the confirmation record QC Gate When op is a checkpoint: Request Inspection button → creates 
+IP-INP inspection; op Complete disabled until result posted Complete Operation Scan op barcode again (SP-11) + enter Good / Scrap / Rework quantities (must sum to started qty); 
+scrap requires reason code (drives 5320 posting and scrap pareto); labor clock closes; next-op material staging signal to warehouse Hold / Andon Hold button with reason (material, 
+machine down, quality, drawing question) — pauses labor, flags dispatch, notifies supervisor; machine-down auto-notifies maintenance list Rework path Rework qty spawns/extends a 
+Rework Order (§9) linked to this WO and op  6.1 Confirmation Posting Logic Event System Postings Material issue (manual issue policy items) Check-Out to Production (INV 5.2): DR 
+1320 WIP (order) / CR 1310 RM at valuation rate; batch/serial genealogy written Op completion (backflush policy items) Backflush components mapped to the op at standard qty × 
+confirmed good qty: same GL as above; negative-stock guard per INV policy Labor confirmation Actual hours (crew × elapsed or manual within ±20% guardrail): DR 1320 WIP / CR 
+7500-series absorption credit on the WC cost center at standard labor rate; simultaneous overhead application at WC overhead rate: DR 1320 / CR 7500 absorption Scrap at operation 
+Component value scrapped: DR 5320 Scrap & Waste (cost center of WC) / CR 1320 WIP  
+
+=== PAGE 77 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 77 of 312 
+7. WIP Visibility Screen Content WIP Board (PP-WIP-001) Kanban by work center: cards = WO operations currently at each WC with age, priority, hold flags; drag disabled (status 
+changes only via confirmations — the board is a mirror, not a control) WIP Valuation Report Per open WO: materials issued to date, labor applied, overhead applied, scrap, total WIP 
+value; reconciles to GL 1320 balance (subledger check in ACC 26.2 step 6 extends to WIP) Order Progress Per WO: op-by-op timeline actual vs scheduled; milestone % complete; 
+projected completion vs promise (feeds Sales at-risk report)  
+
+=== PAGE 78 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 78 of 312 
+8. Production Receipt & Order Settlement 8.1 FG Receipt Final operation completion (after Final Test pass and paint/pack ops per routing) enables Receive to Stock: a Check-In of 
+type Production Receipt (INV 5.1) auto-filled with WO, item, serial, qty good. Location: FG warehouse or STAGE-OUT for direct-ship pegged orders (auto-reservation to the SO line 
+either way). Accounting Entry — Production Receipt (FG at standard) Debit Credit Amount Basis Notes 1330 Finished Goods 1320 WIP Good Qty × released standard cost of the FG item 
+Profit center: product line. Matches INV Sec 12 #6  8.2 Settlement (at Close/TECO) Close is allowed when: all ops confirmed or cancelled, all inspections closed, FG received or 
+scrap-disposed. The settlement run (per order, or batch month-end run screen PP-SETTLE-001 with preview) clears residual WIP to variance accounts split by cause: Accounting Entry — 
+Order Settlement — variance split Debit Credit Amount Basis Notes 5220 Material Usage Variance 1320 WIP Actual material − standard material for good output Unfavorable shown; 
+favorable posts as credit. CC: production cost center of primary WC; PC: product line 5230 Labor Rate Variance 1320 WIP (Actual rate − std rate) × actual hours Same dimensions 5240 
+Labor Efficiency Variance 1320 WIP (Actual hours − std hours) × std rate Same 5250 Overhead Absorption Variance 1320 WIP Applied − actual overhead share Same  Dev Note: After 
+settlement the order’s WIP balance is exactly zero by construction; the settlement document stores the variance math per Part A §8 formulas and links each amount to its JE. 
+Reopening a settled order requires Controller and reverses the settlement JE first. 
+
+=== PAGE 79 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 79 of 312 
+9. Rework Orders Element Specification Creation From op completion (rework qty), from Final Test failure disposition, from NCR disposition Rework, or from RMA disposition Repair 
+(Part A §3.6). RWO-{YYYY}-{SEQ:4}, linked to source object Structure Free-form routing (ops added as needed from any WC) + ad-hoc material list; no standard cost — actuals only, 
+collected in 1325 WIP-Rework Settlement receivers By origin: production rework → parent WO (costs merge before its settlement); RMA warranty → 2610 Warranty Reserve (overflow 6300); 
+RMA billable → 5130 COGS-Service; NCR vendor-caused → 1355 vendor claim receivable when a recovery agreement exists, else 5320 Statuses Open → In Progress → Completed → Settled; 
+quality re-inspection mandatory before Complete when origin is test failure or RMA  
+
+=== PAGE 80 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 80 of 312 
+10. Subcontract Operations For operations sent outside (e.g. specialty machining, galvanizing): routing op flagged Subcontract with vendor + PO link. Material issued to vendor 
+posts DR 1315 Subcontract at Vendor / CR 1310; receipt back posts CR 1315 / DR 1320 plus vendor service cost DR 1320 / CR 2110 GR/IR at PO price (variance to 5260). Vendor-side 
+quantity visible on the item Stock Overview as “At Subcontractor”. Full spec of the PO side in Part G §6. 
+
+=== PAGE 81 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 81 of 312 
+11. Scheduling & Capacity (Phase Scope) Capability Phase Specification Backward/forward scheduling per order 1 Ops placed on WC calendars with queue/move buffers; infinite 
+capacity with overload flags WC Load View 1 Weekly load vs capacity bar chart per WC; drill to orders; overload highlighted Interactive re-scheduling 2 Drag operations within WC 
+with dependency validation; what-if mode Finite scheduling / optimizer 3 Out of current scope; data model (op durations, calendars, alternates) already supports it  
+
+=== PAGE 82 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 82 of 312 
+12. Production Reports Report Content Order Status / Late Orders All open WOs vs schedule; late and at-risk with pegged SO exposure Scrap Pareto Scrap value by reason code / WC / 
+item; month trend Efficiency Std hours earned vs actual hours by WC and crew; utilization vs capacity Throughput Units and standard value produced per period per line WIP Aging 
+Open order value by age bucket; stalled orders (no confirmation in N days) Genealogy (per serial) Complete build record: batches consumed by op, child serials, operators, 
+inspections, test results — the production slice of the Material Traceability Report (INV 10.4)   
+
+=== PAGE 83 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 83 of 312 
+PART E QUALITY MANAGEMENT Quality Management is promoted to a top-level module unifying the screens already specified in INV (Incoming Inspection 6.1, Stock Hold/Release 6.2, 
+In-Process 15.2, Outgoing/Pre-Shipment 15.3, NCR 15.4, CoC 15.5) with the pieces this volume adds: Inspection Plans (Part A §6), Final Test, CAPA as a standalone register, Supplier 
+Corrective Action (SCAR), Calibration, and the Quality dashboard. The through-line: every inspection everywhere executes from an Inspection Plan, every failure can escalate to NCR 
+→ CAPA/SCAR, and every quality event is permanently attached to the batch/serial it concerns. 
+
+=== PAGE 84 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 84 of 312 
+1. Quality Process Map (Gate by Gate) Gate Trigger Plan Type Executed In Pass Effect Fail Effect Incoming (IQC) GRN line, QI-required item INC INV 6.1 QI Hold → Unrestricted 
+Blocked → NCR/RTV/Scrap disposition; vendor rating hit In-Process (IPQC) Routing op flagged QC Checkpoint INP INV 15.2 Operation may complete Op blocked; rework/NCR; Emergency ECR 
+path for design causes Final Test (FQC) Test operation (WC-500) FIN §4 below FTR issued; order proceeds to finish Disposition: rework loop and full retest; NCR mandatory 
+Pre-Shipment (OQC) Shipment for FG PSI INV 15.3 CoC generated; PGI enabled Shipment blocked; NCR Return (RQC) RMA receipt RMA Part A §3.6 Disposition path Disposition path  
+
+=== PAGE 85 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 85 of 312 
+2. Quality Dashboard Screen ID QM-DASH-001 URL Pattern /quality/dashboard Purpose Quality team landing page  Widget Content Open Inspections Counts by gate with age coloring; SLA 
+breaches on top; click-through queues First Pass Yield FPY by gate and by work center, monthly trend NCR Funnel Open NCRs by status/severity; overdue CAPA count Vendor Quality 
+Acceptance rate by vendor (rolling 90d); vendors below threshold flagged; SCAR count Cost of Quality Scrap (5320) + rework (1325 settlements) + warranty (6300/2610 usage) by month 
+— pulled from GL by account + cost center Hold Inventory Value in QI Hold / Blocked / Quarantine by warehouse with age  
+
+=== PAGE 86 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 86 of 312 
+3. Test Data Capture — Transformer Routine Tests The Final Test plan (IP-FIN) for transformers standardizes these characteristics; capture templates render instrument-friendly 
+entry forms with automatic pass/fail against design values pulled from the ETO configuration (Part B §3.2) and the design sheet: Test Method Ref Captured Values Pass Criteria 
+Source Winding Resistance IEEE C57.12.90 §5 R per phase per tap (mΩ), winding temp Design sheet ±tolerances Turns Ratio & Polarity §6 Ratio per tap per phase, deviation % ±0.5% of 
+nameplate ratio Insulation Resistance — MΩ HV-LV, HV-G, LV-G, PI Plan minimums No-Load Loss & Excitation Current §8 W at 100%/110% V, %I Design guarantee ± IEEE tolerance (loss ≤ 
+guarantee +10% single unit) Load Loss & Impedance §9 W at rated current, %Z at 85°C ref Guarantee tolerance; %Z ± 7.5% (two-winding) Applied Voltage (Hipot) §10 kV, duration, result 
+Withstand — attributive Induced Voltage §10.7 kV, frequency, duration, PD where required (pC) Withstand / PD limits Oil Tests ASTM D877/D1533 BDV (kV), moisture (ppm) Plan minimums 
+Temperature Rise (type test, when ordered) §11 Top-oil and winding rise (K) Rating (65K std)  Instrument integration: Phase 1 = manual entry with instrument ID 
+(calibration-checked); Phase 2 = CSV import from test-set software with template mapping; Phase 3 = direct interface. Every captured set stores: instrument IDs, ambient 
+conditions, tester badge, timestamps — all print on the FTR. 
+
+=== PAGE 87 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 87 of 312 
+4. Final Test Screen & FTR Screen ID QM-FIN-001 URL Pattern /quality/final-test Purpose Execute IP-FIN for a WO serial; produce the certified Final Test Report  Element 
+Specification Queue WOs at Testing status; sequence by promised date Execution Characteristics from IP-FIN plan; capture templates per §3; partial save and multi-session (tests 
+span days); retest handling: failed characteristic → rework loop → affected characteristics re-run, prior results retained as Run 1, Run 2… (full history, no overwrite) Result & FTR 
+All pass → Final Result Pass; FTR-{YYYY}-{SEQ:4} PDF generated: PE letterhead, nameplate data block, all test sections with measured vs guaranteed vs tolerance, run history, 
+instrument list with cal dates, tester + Quality Manager signatures (digital), customer name/SO. FTR attaches to the serial record, the WO, and the shipment document set; 
+milestone “Production Complete/Tested” fires (Part B §4.4) Failure path Fail → mandatory NCR; disposition Rework (RWO with retest), Engineering Review (ECR link), or Scrap (rare; 
+Controller + Eng Manager). WO status stays Testing until Pass or scrap disposition  
+
+=== PAGE 88 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 88 of 312 
+5. CAPA Register (standalone) Screen ID QM-CAPA-001 URL Pattern /quality/capa Purpose Corrective/preventive actions as first-class records — sourced from NCRs (INV 15.4 Section C 
+graduates here), audits, RMA failure analyses, and management review; one CAPA can span many NCRs  Field Type Req Specification CAPA # Auto Auto CAPA-{YYYY}-{SEQ:4} Sources 
+Multi-link Yes NCRs, RMAs, audit findings, SCARs Problem Statement Textarea Yes Consolidated statement Root Cause / Method Textarea + dropdown Yes 5-Why, Fishbone, 8D, FMEA; 
+analysis attachments Actions Table Rows Yes Type (Containment / Corrective / Preventive), description, owner, due date, status, evidence attachment per action Effectiveness Check 
+Group Yes Method, check date (≥ 30 days after implementation, config), result Pass/Fail; Fail reopens actions Status Badge Auto Open → Analysis → Actions In Progress → Implemented → 
+Effectiveness Check → Closed / Reopened; Quality Manager owns transitions to Closed  
+
+=== PAGE 89 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 89 of 312 
+6. SCAR — Supplier Corrective Action Element Specification Creation From vendor-attributed NCR or RMA failure (Failure Attributable To = Component Supplier); SCAR-{YYYY}-{SEQ:4} 
+Content 8D-format sections completed jointly: PE fills D1–D3 (team, problem, containment expected), vendor responds D4–D8 via emailed form (portal Phase 3); response due date with 
+escalation Enforcement Vendor with ≥ 2 open overdue SCARs → AVL status Restricted (new POs require Purchasing Manager override, Part G §2); resolution restores Recovery Cost recovery 
+agreement fields (amount, credit note ref) tie to RWO settlement receiver logic (Part D §9)  
+
+=== PAGE 90 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 90 of 312 
+7. Calibration Register Screen ID QM-CAL-001 URL Pattern /quality/calibration Purpose Instruments and gauges with calibration schedules; hard interlock with test execution  Field 
+Specification Instrument ID / barcode CAL-{SEQ:4} label; scanned at test entry (SP-14) Type / Range / Location / Owner Master data; linked work center Calibration Interval / Last 
+/ Next Due Interval in days; due-soon alerts at 30/14/3 days (INV 15.11 rules) Certificates Upload per calibration event with external lab reference Status In Cal (green) / Due 
+Soon (amber) / Overdue (red) / Out of Service Interlock Any inspection or test referencing an Overdue/OOS instrument blocks with E-QM-05; results already captured with an 
+instrument later found out-of-cal are flagged for review (report QM-CAL-R2: “measurements at risk” listing every result since last good calibration)  
+
+=== PAGE 91 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 91 of 312 
+8. Roles Role Rights Quality Inspector Execute inspections/tests, create NCRs, view plans Quality Engineer Author plans, capture templates, CAPA analysis, SCAR authoring Quality 
+Manager Plan approval, dispositions, conditional releases, CAPA closure, FTR countersign, calibration overrides (logged) Production roles Request inspections, view results, 
+execute rework Read-Only / Auditor View everything incl. full history exports   
+

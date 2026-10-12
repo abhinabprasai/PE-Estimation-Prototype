@@ -1,0 +1,596 @@
+=== PAGE 278 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 278 of 312 
+Book VII closes the final readiness findings. It proves, bullet by bullet, that the nine items in the Post Inventory Design Review gap register are specified in this document and 
+shows exactly where. It adds the supplemental screen entries those items were missing in the implementation plan. It specifies multi plant planning with the setup screens the 
+single plant model lacked. It records the build package manifest decision and the manifest itself. It describes the delivered migration workbook with its cleansing rules, 
+transformation logic, opening balance rules and reconciliation scripts. It completes the barcode sample book with every label in the system and a usage matrix stating where and 
+when each is printed and scanned. It ends with the go live readiness statement and the execution directive. Nothing earlier in the document is removed or altered. 
+1.	Findings	and	Dispositions Finding Raised Disposition MRP, finite planning and CTP specified for a single plant only, with no place to set up more Closed in §4. 
+The plant master, transfer lanes, stock transport orders and network planning screens are specified design ready now. The network engine activates per DEC-07 with its test packs, 
+and the setup path exists from day one Not design ready for every screen Book VI carries 78 entries. The six screens it covered only inside bundles now have their own entries in 
+§3, so every navigation item resolves to a named entry. Wireframes themselves are Figma artifacts accepted at gate DG-2, which no text document can substitute Not standalone, 
+external Inventory and Accounting volumes Closed in §5 by the controlled build package manifest, option two of the finding. The rationale for not merging the released volumes is 
+recorded there Missing source to target workbooks, cleansing rules, transformation logic, opening balance rules and reconciliation scripts Closed in §6. The migration workbook is 
+delivered as a separate controlled file with fourteen sheets, and §6 governs it 
+Not SAP equivalent in every module The capability map in Book V §2 and the DEC register in Book IV §1.2 record exactly which capabilities ship at go live and which are phased. The 
+finding itself lists those rows correctly. Equivalence claims follow the recommended submission language and nothing else All barcoding samples missing, where and when used, what 
+should be there Closed in §7. Nine label samples now render in this document, Figures V-15 and V-16 in Book V and V-19 through V-25 here, with the usage matrix stating where each 
+is printed, when, what it carries and which scan points read it The nine gap register items still not covered Answered in §2. Every bullet of the designers gap document maps to a 
+Book I Part A section that specifies it in full. The crosswalk makes the coverage checkable line by line 
+2.	Gap	Register	Closure	Crosswalk The designers gap document of June 2026 lists nine features and, for each, the specific missing details. Book I Part A was 
+written as the closure of that register and the coverage matrix in Book I §1.1 records it. The crosswalk below goes one level deeper and answers every identified gap bullet with 
+its exact section. A reviewer can open each reference and find the demanded content, not a summary of it. 
+
+=== PAGE 279 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 279 of 312 
+Item The Gaps the Designers Named Where Each Is Specified 1. Return from Customer End to end flow. Screen and field definitions with roles. Errors and exceptions including 
+partial, non stock and no reference returns Book I A §3.2 flow. §3.3 to §3.7 screens and fields. §3.8 lifecycle. §3.9 exception register covering partial, non stock and no reference 
+paths. §3.10 roles. Flow closure FL-05 2. Sales Tab Field descriptions, actions and pricing rules. Inheritance and override logic with validations. Downstream document interaction 
+Book I A §4.1 fields. §4.2 and §4.3 price list and customer price grids with validations V-SAL-02 and 03. §4.4 the price determination contract with override display and repricing 
+rules. Book IV §5 the condition model 3. Packing Process flows, states, statuses. Label and packing list requirements. Field definitions and integration points Book I A §5.1 HU 
+model with statuses. §5.2 and §5.3 screens and fields. §5.4 labels and packing list content plus the shipment, inventory, invoicing and carrier integrations. Sample Figure V-15 4. 
+Inspection Plan Configuration models with types, statuses, versioning. Business rules, approvals, sampling. No plan exception handling Book I A §6.1 types and triggers. §6.2 header 
+with sampling incl. ANSI Z1.4 switching. §6.3 characteristics. §6.4 lifecycle and approval. §6.5 the no plan policy options 5. Count Documents Lifecycle and statuses. Role based 
+access and reconciliation logic. Tolerances, approvals, posting rules Book I A §7.2 lifecycle. §7.3 roles with server side blind enforcement. §7.4 reconciliation incl. interim 
+movements and third count rule. §7.5 tolerance bands. §7.6 posting rules with the journal entries 6. Cost Variance Analysis Formulas and drill downs. Report layouts and postings by 
+type. Edge cases such as missing cost and back dated rows Book I A §8.1 all eight formulas with sign convention. §8.2 workbench with three click drill. §8.3 four report layouts. §8.4 
+edge cases covering exactly the named scenarios 7. Fiscal Period Control Open and close sequences. Module behaviors and back posting. Roles and error messages Book I A §9.2 the 
+module behavior matrix. §9.3 the open close sequence. §9.4 back posting policy. §9.5 permissions and the E-PER message catalog 8. Safety Stock Interaction with planning runs. 
+Exceptions, alerts, lead times. Overrides per warehouse or customer Book I A §10.2 planning arithmetic incl. MRP floor behavior and lead time interplay. §10.3 warehouse, customer 
+buffer and seasonal overrides. §10.4 alerts and exception reports 9. Tax Configuration Determination logic and region handling. Rate maintenance and customer or vendor profiles. 
+Retroactive change behavior Book I A §11.1 the determination precedence. §11.2 configuration fields. §11.3 the profiles. §11.4 nexus and regions. §11.5 rate maintenance and the 
+retroactivity doctrine Build Note: This crosswalk must travel with the design kickoff package so the gap register reads as closed evidence rather than open work. 3.	
+Supplemental	Screen	Entries Book VI covered these six inside larger bundles. Each now has its own entry so every sidebar item resolves to a named implementation entry. 
+INV-RETURN		•		Return	from	Customer	(transaction	stub,	superseded) 
+
+=== PAGE 280 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 280 of 312 
+Aspect Implementation Route, type, users /inventory/transactions/return  •  Redirect  •  All Build the layout No standalone screen ships. The navigation item opens the RMA register 
+filtered to Awaiting Receipt. A banner explains that customer material enters only through an authorized RMA Primary actions Open RMA register. Start an RMA Arrives from Legacy 
+navigation habit, inventory sidebar Creates or updates Nothing. The controlled path creates everything Postings and scans The old direct journal is superseded by template #17 
+inside the RMA receipt Build wave and field spec Wave 5  •  Fields and rules in Book I A §3, decision recorded in §3.5 
+INV-ITEM-SALES		•		Material	Master	Sales	Tab Aspect Implementation Route, type, users /inventory/items/{id} Sales view  •  Detail view  •  Sales Admin 
+edits, Pricing Manager approves Build the layout Three blocks. Sales data fields, price list assignment grid with margin columns, customer specific price grid. Price waterfall 
+simulation button Primary actions Add assignments and customer prices as dated rows. Mass update creating new rows. Simulate Arrives from Material detail tab bar, price list 
+detail Creates or updates The rates the pricing service resolves at steps of the condition model Postings and scans None. Below floor rows route approval per W.4 Build wave and 
+field spec Wave 2  •  Fields and rules in Book I A §4, Book II §3.12 
+INV-COUNT-DOC		•		Count	Documents Aspect Implementation Route, type, users /inventory/counting/count-documents  •  List + detail + mobile entry  •  Counters 
+restricted, supervisor reconciles, Finance approves bands Build the layout Register with lifecycle badges. Detail with line grid, interim movements column, recount flags. Mobile 
+entry shows no expected quantities on blind plans, enforced server side Primary actions Assign counters. Enter counts SP-20. Force recount. Reconcile. Approve per tolerance bands. 
+Post Arrives from Generate Count Sheets on a count plan Creates or updates Stock adjustments posted per approved variances, plan completion Postings and scans Surplus and shortage 
+entries per Book I A §7.6. Scan SP-20 
+
+=== PAGE 281 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 281 of 312 
+Aspect Implementation Build wave and field spec Wave 2  •  Fields and rules in Book I A §7 
+INV-PLAN-SAFETY		•		Safety	Stock	Maintenance Aspect Implementation Route, type, users /inventory/planning/safety-stock  •  Config grid  •  Planners edit, 
+Planning Manager approves large deltas Build the layout Grid per material and warehouse with inherited defaults grayed, customer buffer rows, seasonal multiplier columns, reserved 
+suggested columns for the statistical phase Primary actions Edit inline with reason codes. Deltas above a quarter route approval Arrives from Material planning view, planning 
+sidebar Creates or updates The floor MRP protects and the projection line reports draw Postings and scans None. Breach alerts per W.2 Build wave and field spec Wave 2  •  Fields 
+and rules in Book I A §10 
+INV-CONFIG-PERIOD		•		Fiscal	Period	Control Aspect Implementation Route, type, users /inventory/configuration/fiscal-periods  •  Config  •  Controller, 
+dual control with CFO on reopen Build the layout Period grid per entity with the three status presentation, pre close validation list with document links and owners, module 
+behavior matrix reference panel Primary actions Soft close. Run inventory close. Hard close after checklist. Reopen dual control with tagged postings Arrives from Close calendar, 
+configuration sidebar Creates or updates The posting date gate every transaction validates against Postings and scans Closing journal at inventory close. E-PER messages govern 
+rejections Build wave and field spec Wave 1  •  Fields and rules in Book I A §9 
+INV-CONFIG-TAX		•		Tax	Configuration Aspect Implementation Route, type, users /inventory/configuration/tax  •  Config  •  Finance, Controller approves 
+manual rates Build the layout Engine mode selector, default code panel, trigger point checkboxes, nexus register grid with the economic threshold monitor, manual rate table grayed 
+in engine mode Primary actions Maintain nexus rows. Review reconciliation monthly. Manual mode edits as dated rows with approval Arrives from Configuration sidebar, tax questions 
+from any document 
+
+=== PAGE 282 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 282 of 312 
+Aspect Implementation Creates or updates The determination inputs every taxable line resolves through Postings and scans None here. Documents commit tax per the precedence of Book 
+I A §11.1 Build wave and field spec Wave 1  •  Fields and rules in Book I A §11 
+4.	Multi	Plant	Planning,	Setup	and	Operation The single plant model was a delivery decision, never a design ceiling. This section specifies the objects and 
+screens that make the network real, so the second plant is configuration plus testing, not development. The screens below build in wave 4 alongside their single plant siblings. 
+The network engine behaviors activate when DEC-07 fires, and until then the screens run with one plant and one implicit lane, which keeps the go live path unchanged. 4.1	
+Setup	Path	(the	ordered	checklist) Step Action Where 1 Create the plant with entity, calendar and address MP-PLANT-001 below 2 Create its warehouses, zones and bins INV 
+warehouse model 3 Create work centers, cost center nodes and rates for the plant Book I D §2, H, I §2 4 Extend materials to the plant with plant level data completion MM Extend 
+action, Book II §3.3 5 Pair production versions per material and plant Book IV §6.1 6 Define transfer lanes in both directions with transit times MP-LANE-001 below 7 Set sourcing 
+rules per material and plant Planning view special procurement plus §4.4 sourcing table 8 Configure intercompany pairing where the plants sit in different entities Book III F §3, 
+FL-07 9 Run the multi plant test packs and the cross plant recall drill FL-04, FL-07, FL-08 in network configuration MP-PLANT-001		•		Plant	Master 
+Aspect Implementation Route, type, users /configuration/plants  •  List + detail  •  IT admin drafts, Controller approves Build the layout Plant code, owning entity, address, 
+working calendar link, default receiving and shipping warehouses, shipping points, planning parameters block, status Primary actions Create. Activate after the setup checklist 
+steps 2 to 5 verify. Deactivate blocks new documents only Arrives from Configuration sidebar, DEC-07 activation project Creates or updates The plant key every plant level table 
+already carries 
+
+=== PAGE 283 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 283 of 312 
+Aspect Implementation Postings and scans None Build wave and field spec Wave 4 build, activation per DEC-07  •  Fields and rules in Book III F §2, Book II §3.3 
+MP-LANE-001		•		Transfer	Lanes Aspect Implementation Route, type, users /configuration/transfer-lanes  •  Config grid  •  Planning Manager Build the 
+layout Rows per from plant and to plant with transit days, transport mode, lane calendar, cost estimate per unit weight, active flag, direction explicit Primary actions Maintain 
+lanes. Deactivate stops new transfer proposals only Arrives from Configuration sidebar Creates or updates The lead time offsets network MRP and global ATP use between plants 
+Postings and scans None Build wave and field spec Wave 4 build  •  Fields and rules in Book III F §5, this section 
+STO-001		•		Stock	Transport	Orders Aspect Implementation Route, type, users /inventory/transfers/sto  •  List + detail  •  Planners create, warehouses 
+execute Build the layout Header with lane, dates and priority. Lines with material, quantity, batch or serial selection at issue. Status path Created, Released, Issued, In 
+Transit, Received, Closed Primary actions Release. Issue at source with scans. Receive at destination. Short close with reason Arrives from Network MRP proposals, manual planner 
+action Creates or updates In transit stock in bucket 1350 between issue and receipt. Cross entity cases pair through FL-07 instead Postings and scans Issue DR 1350 CR 13xx at 
+source. Receipt DR 13xx CR 1350 at destination. Scans SP-06 both ends. Genealogy continues with plant stamped per event Build wave and field spec Wave 4 build, live use at 
+activation  •  Fields and rules in Book III F §5, INV 5.3 pattern 
+4.4	Network	Planning	Behavior	(binding	once	active) • Sourcing per material and plant. Each plant level planning view states how that plant obtains the 
+material. Own production, transfer from a named plant over a lane, or purchase. The sourcing table allows a ranked sequence, and MRP consumes it in order. • Network netting. MRP 
+still runs by low level code, and a transfer source turns demand at the receiving plant into lane offset demand at the supplying plant. Proposals carry both plants and the lane. 
+Exception EX-10 names unworkable network demand, such as an inactive lane or a supplying plant without a valid production version. 
+
+=== PAGE 284 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 284 of 312 
+• Global ATP and CTP. The availability check walks the sourcing sequence. Local stock first, then supplying plant stock plus lane transit, then production CTP at the plant owning 
+the production version. The promise names the sourcing plant and lane so the commitment is auditable, and the plan snapshot rule of Book III Part E applies unchanged. • Cross plant 
+genealogy needs no new design. Events already stamp plant, and STO issue and receipt write movement events on the same chain, so forward and backward traces cross plants natively. 
+The recall population derivation of FL-08 is network correct by construction. • Finite scheduling stays per plant. Each plant schedules its own work centers. The network connects 
+them through dated transfer demand, not through one global schedule, which keeps the engine deterministic and the freeze horizons local. 
+5.	Controlled	Build	Package	Manifest The finding offered two remedies. Merge the released Inventory and Accounting volumes into this document, or issue a controlled 
+manifest. The manifest is the correct remedy and is recorded here. The two volumes are released specifications already under change control with a build in progress against them. 
+Absorbing them would reset their approval state, break the section references the build teams use daily, and double the size of this document. The manifest gives the single 
+controlled baseline the finding actually needs. Any change to any manifest row issues a new manifest revision through change control. # Controlled Item Version Owner Repository 
+SHA-256 (first 16) 1 Enterprise ERP Unified Build Specification (this document) V1.0, Jul 2026 Product Owner Controlled documents vault, /erp/specifications Recorded at release 
+signing, a file cannot carry its own final hash 2 Inventory & Warehouse Module Spec V3.0, Mar 2026 Inventory Module Owner Controlled documents vault, /erp/specifications Recorded 
+at manifest signing from the released binary 3 Accounting Module Implementation Spec V2.0, Mar 2026 Finance Module Owner Controlled documents vault, /erp/specifications Recorded 
+at manifest signing from the released binary 4 Data Migration Workbook V1.0, Jul 2026 Data Migration Lead Vault, /erp/migration Recorded at manifest signing 5 Contract repository 
+(OpenAPI, AsyncAPI, schemas per IF catalog) Tagged releases Integration Lead Source control, /erp/contracts Git tags carry commit hashes 6 Figma design library and module files 
+Published versions UX Lead Figma workspace per Book V §10.4 Figma version history 7 Configuration workbook and seed data V per release Functional Leads Source control, /erp/config 
+Git tags 
+6.	Data	Migration	Package The migration workbook ships beside this document as a controlled file, manifest row 7. It contains fourteen sheets. A ReadMe with the 
+column dictionary and fill in legend. Ten object mapping sheets 
+
+=== PAGE 285 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 285 of 312 
+covering materials, customers, vendors, BOMs, routings, info records with AVL, stock with batches and serials, open sales orders, open purchase orders and open production orders, 
+each row carrying legacy field, example value, target table and field, verification screen, transformation logic, cleansing rule reference, validation and owner. A cleansing rule 
+catalog of twenty four numbered rules the mapping rows reference. An opening balance sheet with twelve OB rules covering trial balance, stock value, cost basis, receivables and 
+payables, GR and IR, WIP, warranty reserve, revenue contracts, consignment, customer property, the migration clearing account and open long lead exposures. A reconciliation sheet 
+with twelve scripts, R-01 through R-12, in reference SQL, run after every mock load and at cutover. • The workbook implements the migration approach already specified in Book II 
+§16.3 and Book III Part H §5. Those sections remain the governing text. The workbook is the executable form the finding asked for. • Two full mock conversions remain mandatory. Mock 
+two must complete without manual data fixes, with every R script tying, before the go live gate opens. • The workbook is version controlled with the manifest. Mapping changes after 
+extract freeze follow the same change control as specification changes, because a silent mapping edit is a silent requirement change. 
+7.	Barcode	Sample	Book,	Complete Every label class in the system now has a rendered sample in this document. The handling unit and batch labels appear in Book V, Figures 
+V-15 and V-16. The remaining seven follow, with the usage matrix stating where each is printed, when, what it must carry and which scan points read it. Symbologies, print 
+governance and hardware remain as specified in Book I Part F and Book V §8. 7.1	Label	Usage	Matrix Label Printed Where and When Must Carry Read At Sample Item shelf label 
+Receiving or warehouse office, on new bin assignment Material code barcode, description, UoM, home bin SP-04 putaway, SP-06 transfers, SP-15 picks Figure V-19 Batch label 
+Receiving at GRN, one per batch container Batch barcode, item, vendor batch or heat, origin, dates, quantity, QI state at print SP-05, SP-06, SP-08, SP-15, SP-20 Figure V-16 
+Serial component label Receiving for serialized buys, durable stock Serial barcode, item, vendor serial, receipt references SP-12 install, SP-15, SP-19 returns Figure V-20 
+Location label Warehouse setup and changes, reflective stock Location barcode, zone description, long range readable Every movement scan naming a bin Figure V-21 Traveler 
+operation strip Order release, laser printed in the shop packet Order and operation composite barcode, WC, standard hours, QC gate marker, QR for human assist 
+SP-10 start, SP-11 complete Figure V-22 
+Handling unit label Pack station at HU close HU barcode, SSCC-18 where the customer demands GS1, ship to, weights, HU count, handling marks, transformer addenda 
+SP-18 loading Figure V-15 
+
+=== PAGE 286 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 286 of 312 
+Label Printed Where and When Must Carry Read At Sample RMA return label Emailed to the customer inside the return instructions RMA barcode, ship to dock, class specific handling 
+instructions SP-19 return receipt Figure V-23 Operator badge HR issuance, reprint under governance Operator barcode, name, work center, qualification note SP-07 terminal login, 
+supervisor overrides Figure V-24 Calibration label Calibration close, applied to the instrument Instrument barcode, due date, calibrating lab SP-14 at every test Figure V-25 
+Nameplate serial plate Nameplate station, engraved plate with barcode Nameplate serial per the design data SP-13 verification against the order serial Physical plate, format per 
+Book I F §1 
+ Figure V-19. Item shelf label, 2 by 1 inch polypropylene. 
+ Figure V-20. Serialized component label, 4 by 2 inch polyester. 
+ Figure V-21. Location label, 4 by 1 inch reflective for long range reads. 
+
+
+=== PAGE 287 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 287 of 312 
+ Figure V-22. Traveler operation strip as printed in the shop packet. 
+ Figure V-23. RMA return label the customer affixes to every crate. 
+ Figure V-24. Operator badge. 
+ Figure V-25. Calibration label. 8.	Go	Live	Readiness	Statement	and	Execution	Directive 
+
+
+=== PAGE 288 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 288 of 312 
+• Go live ready means the gate of Book III Part H §7 passes with the Book IV additions. Every requirement traced to passing evidence, the eight closure flows plus FL-09 to FL-11 
+demonstrated, mock two clean, security and resilience drills filed, training complete and the sign off executed. The specification set is now sufficient for that path. What 
+remains is execution and evidence, which documents cannot substitute. • Capabilities the phase decisions defer are recorded in Book IV §1.2 and mapped in Book V §2. The list in the 
+finding matches those records. That boundary is the honest reading of SAP scale at first go live, and every deferred row carries its activation path. • The directive stands. This 
+document stops growing by narrative revision. This edition is the content baseline. Subsequent changes ride change control against the manifest, and effort moves to the DG gates, 
+the Figma library, the contract repository, the configuration workbook and the migration mocks. 
+BOOK	VIII DESIGN	EXECUTION	HANDBOOK The Eight Screen Archetypes  •  The Business on One Page  •  BPMN and Sequence Diagrams for the Five Governing Flows Inventory, 
+Warehousing and Accounting Consolidated  •  Target State Capability Specifications  •  Reconciliation Control Register  •  The Implementation Package  
+
+=== PAGE 289 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 289 of 312 
+Book VIII is the operating manual for turning this specification into designed screens and a delivered system. It must be the first Book a designer opens. It supplies the eight 
+screen archetypes every screen in Book VI maps to, the one page business flow from lead to delivery, the process diagrams the earlier reviews demanded, the consolidated 
+warehousing and accounting detail, the requirement specifications for the ten target state capabilities, the reconciliation control register and the implementation package. 
+Nothing elsewhere in the document is removed or altered by this Book. 
+1.	The	Design	Method Every screen in this system must be designed as one of eight archetypes. An archetype fixes the skeleton. The Book VI entry for the screen fills in 
+the organs. The referenced field section supplies the cells. A designer therefore needs exactly three inputs per screen and no research. The archetype wireframe below, the seven 
+row implementation entry, and the field table the entry cites. A Figma frame must exist per screen per state, named with the screen ID, and every frame must link its specification 
+section. A frame without that link must fail design review at gate DG-2. Step The Rule 1. Pick the archetype The Type cell of the Book VI entry names it. List, Detail, Workbench, 
+Wizard, Kiosk, Dashboard, Config or Dialog 2. Copy the archetype frame The wireframes in §2 are the skeletons. Zones must not be invented per screen. A screen needing a zone the 
+archetype lacks is a change request against this Book, not a local improvisation 3. Fill zones from the entry The Build the layout cell names what goes in each zone. The Primary 
+actions cell names the buttons and their consequences. The Arrives from and Creates cells define the navigation in and out 4. Pull fields from the cited section Field names, 
+types, requiredness, validations and error codes come from the cited section verbatim. Labels must not be paraphrased 5. Design all nine states Normal, empty, loading, validation 
+error, authorization error, conflict, offline, degraded, read only. The states are deliverables, not variants 6. Wire the flow prototype Each of the five BPMN flows in §4 must 
+exist as one Figma prototype wired from the same frames, used directly in UAT scenario reviews 
+2.	The	Eight	Screen	Archetypes These wireframes are binding skeletons. The counts beside each name state how many Book VI screens map to it, so the reuse mathematics 
+is visible. Build each archetype once as a Figma component set, then produce screens by instantiation. 
+
+=== PAGE 290 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 290 of 312 
+ Archetype 1, the list. Every register screen. Roughly eighteen screens instantiate it. 
+ Archetype 2, the detail with views. Every master and document record. Roughly twenty screens instantiate it. 
+
+
+=== PAGE 291 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 291 of 312 
+ Archetype 3, the workbench. Every exception queue. Roughly twelve screens instantiate it. The rule that matters most, the user must act from the row without opening a detail. 
+ Archetype 4, the wizard with simulation. Mass change, costing runs, settlement, delivery creation, migration steps. Simulation before apply is not optional. 
+
+
+=== PAGE 292 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 292 of 312 
+ Archetype 5, the shop floor kiosk. Terminal, pack station, return receipt. Gloves, glare and distance govern every measurement. 
+ Archetype 6, the dashboard. Six landing pages. Every number must reach its source document in three clicks or fewer. 
+
+
+=== PAGE 293 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 293 of 312 
+ Archetype 7, governed configuration. Account determination, workflows, tax, periods, lanes. History is immutable and release is a ceremony. 
+ Archetype 8, the decision dialog. Promise dates, credit releases, dispositions, reversals. The evidence must appear with the question. 
+
+
+=== PAGE 294 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 294 of 312 
+3.	The	Business	on	One	Page The sheet below is the whole business from first contact to cash and service. It must hang beside every designer and every 
+developer. Each chevron resolves to its flow book and its screens. The milestone band shows when ETO money arrives. The identity band shows the thread that never breaks, the 
+serial and its genealogy. The same sheet ships as a standalone one page file beside this document. 
+ The end to end business flow. Lead to quote to order to design to source to build to test to ship to deliver to cash to service. Stage Governing Flow Primary Screens (Book VI) 
+Lead and quote FL-01 / FL-02 openings Customer master, quotations, promise dialog, price simulation Order FL-01 / FL-02 Sales order with schedule lines, backorder workbench Design 
+FL-02 / FL-10 Engineering request, EBOM editor, documents, transmittals Source FL-03 / FL-10 MCR, info records, RFQ, PO, LLR, expedite board Build FL-04 MRP workbench, schedule 
+board, production orders, kiosk terminal Test FL-04 quality gates Final test and FTR, calibration, deviations Ship and deliver FL-09 Delivery cockpit, pack station, POD and claims 
+Cash FL-01 §7 / FL-06 Invoice requests to the accounting volume, close checklist Service FL-05 / FL-08 Installed base, RMA, recall campaigns, trace explorer 
+4.	Process	Diagrams,	BPMN	and	Sequence The five governing flows follow as swimlane diagrams. Lanes are the accountable roles. Sand boxes are quality or decision 
+gates. Each diagram must be read beside its closure table, which carries the postings, exceptions, reversals and reconciliations the picture cannot hold. Two sequence diagrams 
+follow for the interactions where transaction boundaries matter most. 
+
+
+=== PAGE 295 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 295 of 312 
+ BPMN A. Sales order to delivery. Closure table FL-01 and FL-09. 
+ BPMN B. Engineering to procurement. Closure table FL-10. 
+ BPMN C. Plan to produce. Closure table FL-04. 
+
+
+=== PAGE 296 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 296 of 312 
+ BPMN D. Procure to pay. Closure table FL-03. 
+ BPMN E. End to end traceability. Contract in Book IV §4, events T01 to T13. 
+ Sequence 1. Post goods issue must commit as one transaction. Stock, genealogy, journal and outbox together or not at all. 
+
+
+=== PAGE 297 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 297 of 312 
+ Sequence 2. Capable to promise must name its binding constraint and must reserve soft capacity so parallel quotes cannot double promise one bottleneck slot. 5.	
+Inventory,	Warehousing	and	Accounting,	Consolidated The external Inventory and Accounting volumes remain the field level authorities under the build package 
+manifest. This section consolidates their operating core into this document so a reader needs no other file to understand how stock and money behave. Where a number or rule below 
+differs from the external volume, the external volume controls and the difference must be raised as a conflict register entry. 5.1	The	Warehouse	Physical	
+Model Object It Must Carry Rules Warehouse Type (RM, WIP staging, FG, Quarantine, Packaging), owning plant, cost center link, capabilities (climate control, flammable, oil 
+containment, outdoor) Quarantine warehouses must be the only landing zone for returns and QI failures. Capabilities must validate against material storage conditions at putaway 
+Zone Zone code, purpose (bulk, pick face, staging, dock), temperature class Putaway strategies target zones before bins Bin Bin code with barcode label, capacity class, fixed 
+material where assigned One barcode per bin. Long range reflective labels on rack ends Dock and staging Dock doors, STAGE-OUT locations, appointment slots on the plant calendar A 
+shipment must not post while its HUs sit outside STAGE-OUT 5.2	The	Movement	Catalog,	Every	Way	Stock	Moves Every stock change must be one of these 
+movements, each with its scan point and its posting behavior. There must be no movement type outside this catalog. 
+
+
+=== PAGE 298 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 298 of 312 
+Movement Trigger and Scan Value Effect Goods receipt against PO GRN at receiving, SP-01 to 03 DR stock account by valuation class, CR GR/IR. PPV recognized for standard cost 
+materials Goods receipt from production FG receipt at order completion DR finished goods at standard, CR WIP Return receipt from customer RMA scan SP-19 DR RMA quarantine account, 
+CR COGS reversal. Customer property receives at zero value Putaway and bin transfer SP-04, SP-06 None. Location only Issue to production SP-08 or backflush at confirmation DR WIP 
+by order, CR stock Issue to subcontractor Provision document DR subcontract stock at vendor, CR stock Kit staging SP-09 None. Staged status only Pick, pack, load SP-15, 16, 17, 18 
+None until PGI. Packaging backflush at HU close Post goods issue Shipment posting DR COGS, CR finished goods. Freight accrual where owed Stock transport between plants STO issue 
+and receipt Through in-transit. Cross entity cases pair through the intercompany flow Adjustment from count Approved count posting, SP-20 DR or CR inventory adjustment against 
+stock Scrap SP-21 with approved disposition DR scrap expense, CR stock or WIP Status change Hold, release, QI decisions None. Availability changes only Revaluation Costing run 
+release only DR or CR revaluation against stock. Never manual 5.3	Warehouse	Task	Execution • Receiving must run dock to stock inside the GR processing time on the 
+material. The sequence is fixed. Identify against the PO, capture batch and heat and certificates, print labels, quality route, putaway proposal, bin confirm by scan. • Putaway and 
+picking must follow the material strategies. FEFO is mandatory for shelf life stock, serial directed picking for serialized stock. Every override must log. • Replenishment must 
+keep fixed pick bins between their min and max from bulk, generated as tasks, confirmed by scan. • Counting must follow the count document lifecycle with blind enforcement server 
+side, recount rules, tolerance bands and approval chains, and the location freeze or the interim movement replay. • Every task must be a record with a queue, an owner, a device and 
+a status, so supervisors balance load and the mobile app is a work queue, not a menu. 5.4	Valuation,	In	One	Table Question Binding Answer What carries value 
+Every stock account resolves from the valuation class through the account determination matrix. No screen and no developer may name a GL account 
+
+=== PAGE 299 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 299 of 312 
+Question Binding Answer Bought materials Moving average by default. Receipts re-average, issues post at current average, invoice differences correct stock while coverage exists 
+Made materials Standard cost, released only by costing runs. Receipts at standard, variances split by cause at settlement, revaluation only at release Special ownership 
+Consignment carries no value until withdrawal. Customer property never carries value. Subcontract stock and in-transit stock stay on the books in their own accounts Reserves 
+Excess and obsolete reserve by aging policy, quarterly, value adjustment only, never a quantity change 5.5	Accounting	Essentials,	the	Money	Map Area What Must 
+Hold True Document spine Sales invoices, credit notes, vendor invoices, payments, journals. Every operational posting arrives through the shared posting service with its journal 
+template, its dimensions and its source link. Nothing posts to the ledger directly Receivables Invoice requests from PGI, milestones and RMA credits become invoices under finance 
+review. Cash application clears open items. Credit exposure recomputes continuously and gates orders and shipments Payables Three way match is the only road to payment. GR/IR must 
+clear item by item. Vendor bank detail changes demand dual approval Revenue Recognition follows the contract standard, never the billing plan. Milestone cash and earned revenue 
+diverge by design and reconcile through deferred and unbilled schedules Tax Determination follows the precedence chain, commits at invoice, survives engine outages through the 
+failover queue, and never restates posted documents from configuration changes Close Soft close warns, hard close blocks. Subledgers must tie to control accounts before the gate. 
+The checklist runs the operational steps by machine, allocations, warranty accrual, inventory close, WIP tie, settlement aging, reconciliation set Dimensions Every P&L posting 
+must carry one cost center and one profit center by the derivation rules. Fallback postings are defects with a report that must read zero 
+6.	Target	State	Capability	Specifications Ten capabilities are phased beyond first go live by the decision register. Deferral is a date, not a blank. Each 
+specification below is binding for its activation project. Each must be built on hooks that already exist in this document, and each names its activation evidence. A capability 
+activates only when its evidence passes, under change control, without redesign of the go live core. Capability Binding Specification Activation Evidence Periodic actual costing 
+and material ledger The ledger must compute periodic actual unit costs per material and plant from the already captured actuals, order charges, receipt prices, invoice 
+corrections. It must support multi level actual rollup, revaluation of inventory and COGS at period end as a parallel valuation view beside standard, and a reconciliation report 
+tying actual to standard plus variances to the cent. Standard remains the operational yardstick. The ledger must never post mid period 
+A parallel quarter computed on production data reconciling to the existing GL within rounding 
+
+=== PAGE 300 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 300 of 312 
+Capability Binding Specification Activation Evidence Advanced scheduling optimizer A solver must replace the seeded heuristic behind the same constraint model, setup families, 
+alternate resources, batch cycles, skills, tools, lanes. It must return reproducible solutions under a fixed seed, respect freeze horizons absolutely, improve makespan or lateness 
+against the heuristic on the benchmark set by a measured margin, and expose every override to the planner with reasons 
+Benchmark pack results and a month of shadow running beside the heuristic with decision logs 
+Global multi plant ATP and CTP The availability walk must extend across the sourcing sequence of every plant with lane transit, per Book VII §4. Promises must name plant and lane. 
+Capacity checks must run at the owning plant. Substitution across plants must demand the same approvals as local substitution 
+FL-04 and FL-07 network test packs green in the two plant configuration Supplier and customer portals The supplier portal must expose POs with STP versions for acknowledgement, 
+deviation requests, ASN creation and invoice status against the same APIs and the same authorization engine as internal screens, external identity tenant only. The customer portal 
+must expose order status, drawing transmittals with approve and comment, shipment tracking and document dossiers. No portal action may bypass a single validation that internal 
+screens enforce 
+Pilot with two suppliers and one customer executing their full loops without email fallback 
+Full EDI automation Transactions 850, 855, 856 and 810 must map to the existing PO, confirmation, ASN and invoice objects with the interface catalog contracts, idempotent 
+processing, duplicate rejection, and a reprocessing console entry per failed envelope. Partner onboarding must be configuration, mapping profile and identifiers, never code 
+Three month parallel run with the top volume vendor reconciling to paper flow with zero unexplained differences Machine integration, OEE and downtime Machine signals must post 
+through the device gateway as confirmation events bound to work center and order, with manual fallback always available. Downtime must capture reason coded, planned separated from 
+unplanned. OEE must compute from availability, performance and quality per work center per shift, from posted data only, no side spreadsheets 
+One pilot work center reporting OEE from signals for one month, reconciled against operator confirmations Full field service management Service orders must dispatch technicians 
+against the installed base, consume van stock and spares through the same movement catalog, capture labor and expenses, respect warranty entitlement at pricing, and settle to 
+service COGS and revenue. Scheduling must respect skills and travel. The RMA loop stays authoritative for depot repair 
+Ten field orders executed end to end with correct entitlement pricing and genealogy continuity Plant maintenance and EAM Equipment records must extend work centers and tools with 
+hierarchies, counters and plans. Preventive plans must generate maintenance orders that reserve capacity in the finite schedule. Breakdowns must flow from the terminal hold reason 
+to a maintenance order and into downtime capture. Spares must be materials with the SPARE type, planned by reorder point 
+A quarter of preventive execution with schedule integration and spare consumption through standard movements International tax and localization Each new country must enter through 
+the compliance matrix, registrations, calendars, statutory books. VAT and GST must run through the same determination precedence with the engine, e-invoicing mandates as adapters 
+on the tax interface. Document templates must localize through the language layer already keyed in the text tables. No parallel tax logic may exist per country 
+First country closes a statutory period with reconciled VAT returns generated from the system 
+
+=== PAGE 301 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 301 of 312 
+Capability Binding Specification Activation Evidence Advanced warehousing at EWM level Wave planning, task interleaving, labor standards and slotting must build on the task model 
+of §5.3 without changing a single posting. Waves must group picks by route and cutoff. Interleaving must feed putaway to pickers returning empty. Slotting must propose bin moves 
+from velocity. RF screens stay on the kiosk and mobile archetypes 
+Pick productivity baseline and a measured improvement over two months in the pilot zone 
+7.	The	Reconciliation	Control	Register Every reconciliation in the package, in one table. Each control must run on its stated cadence, must alert its owner through the 
+standard rules, and must block what its gate column names when it fails. An unlisted reconciliation must not exist, and a listed one must not be optional. Control Ties Together 
+Cadence Gate on Failure Owner Stock value by valuation class Stock quantities times basis against the inventory control accounts Daily and at close Hard close blocks Controller 
+WIP tie Open order WIP report against WIP accounts Close step Hard close blocks Cost accountant GR/IR aging Received not invoiced items against the clearing account Weekly Items 
+over thirty days escalate AP lead AR and AP subledger tie Open items against control accounts Close step Hard close blocks Controller Revenue schedule Contract deferred and 
+unbilled against invoiced and recognized Close step Hard close blocks Controller Intercompany pair match Seller IC receivable against buyer IC payable per pair Monthly before hard 
+close Close blocks on unexplained pairs Finance IT 
+Transaction to event parity Trace relevant postings against genealogy events, both directions Daily job Go live gate and recall readiness Quality IT 
+Serial and batch integrity Single active location per serial, batch quantity balance Daily job Traceability dashboard reds block recall closure Quality IT 
+Scan to confirmation counts Terminal scan telemetry against posted confirmations Daily Investigate before settlement Production IT Interface counts Producer counts against 
+consumer counts per interface per the catalog Per interface schedule DLQ escalation, incident on breach Integration owner Migration set R-01 to R-12 Loaded data against legacy 
+subledgers and counts Every mock and at cutover Go live gate blocks Migration lead Budget to absorption Cost center actuals against absorbed labor and overhead Monthly Rate review 
+inputs Controller 
+8.	The	Implementation	Package 8.1	What	the	Package	Must	Contain 
+
+=== PAGE 302 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 302 of 312 
+# Deliverable Form Acceptance 1 This specification, eight Books Controlled document, manifest row 1 Signed baseline 2 Inventory and Accounting specifications Manifest rows 2 and 
+3, version locked Cross reference validation at DG-1 3 Data migration workbook Controlled workbook, fourteen sheets Mock two clean, R scripts tie 4 Figma library and module files 
+Archetype components plus frames per screen per state, IDs in frame names DG-2 per screen 5 Contract repository OpenAPI, AsyncAPI and schema files per interface catalog entry 
+Contract tests green in CI 6 Configuration workbook Statuses, reasons, workflows, tolerances, accounts, calendars, labels as versioned seed data Environment transport proven 7 
+Test repository and RTM Requirement rows linked to cases, data and evidence Zero unlinked go live requirements 8 Runbooks and operations pack Degraded modes, incidents, jobs, DR 
+drills Production readiness review 9 Training pack Role curricula, kiosk drills, super user certification Completion thresholds at gate 10 Cutover runbook Sequenced tasks, 
+checkpoints, rollback boundary, fallback kit Rehearsed in mock two 
+8.2	How	the	Work	Must	Run • Seven build waves per Book VI §2, each wave exiting through DG-3 for its stories and demonstrable end to end. A wave must not start 
+feature work while its predecessor holds open S1 or S2 defects. • Five standing workstreams. Application build, integration and platform, data and migration, design and UX, quality 
+and evidence. Each workstream owns its manifest rows and its reconciliation controls. • Weekly the RTM coverage, the conflict register, the DLQ depth and the data quality KPIs must 
+publish to one program page. Trends, not snapshots, are the management signal. • Change rides change control against the manifest. A specification change without a manifest 
+revision must be treated as unauthorized scope. • The three gates stand as defined. DG-1 before design, DG-2 before development, DG-3 before done, and the go live gate of Book III 
+Part H with the Book IV and Book VII additions closes the program. Build Note: Precedence note for this Book. Where Book VIII summarizes, the cited Books govern. Where Book VIII 
+adds, the additions bind, the target state specifications of §6, the reconciliation register of §7 and the archetype discipline of §1 and §2. 
+
+=== PAGE 303 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 303 of 312 
+BOOK	IX TARGET	STATE	MODULE	SPECIFICATIONS Periodic Actual Costing & Material Ledger  •  Advanced Scheduling Optimizer  •  Global Multi-Plant ATP/CTP  •  Supplier & 
+Customer Portals  •  Full EDI Direct Machine Integration, OEE & Downtime  •  Full Field Service Management  •  Plant Maintenance / EAM  •  Broader International Localization  
+
+=== PAGE 304 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 304 of 312 
+Book IX raises the nine target state capabilities from decision register rows to module grade specifications. Each section below must be sufficient to design and build its module 
+without further requirements work. Each module must run on hooks that already exist in Books I through VIII, must add no parallel logic beside an existing engine, and must 
+activate only when its evidence section passes under change control. The activation summaries in Book VIII §6 remain valid and are superseded in depth by this Book. Delivery timing 
+stays governed by the decision register. Depth of definition no longer waits for it. 
+1.	Periodic	Actual	Costing	and	the	Material	Ledger The ledger must compute what every material actually cost each period and must revalue inventory and 
+cost of sales to that truth at period end, while standard cost remains the operational yardstick during the period. Nothing may post at actual mid period. 1.1	Objects Object 
+Required Content Ledger period record, one per material, plant and period Beginning quantity and value at standard and at actual. Receipt lines by category, purchase receipts 
+corrected to invoice price, production receipts at settled order actuals, transfer receipts at sending plant actual. Consumption lines by category, production issues, sales 
+issues, scrap, transfers out. Collected single level differences. The periodic unit price. Distribution results, to consumption, to ending inventory, not distributed, not included 
+Difference categories Price differences from PPV and IPV, exchange differences, settlement variances by cause, transfer differences. Each category must remain reportable 
+separately through the rollup Valuation views Two parallel views per material and period, legal at standard with variances expensed as today, and periodic actual. The actual view 
+must never leak into operational documents. Reports must name their view Rollup graph Consumption relationships per period by low level code, built from the genealogy and order 
+records already captured, so multi level distribution follows real consumption, not the static BOM 1.2	Calculation,	Binding	Order • Step one, single level. Periodic unit price 
+equals beginning actual value plus receipt actual value, divided by beginning quantity plus receipt quantity. Differences allocate pro rata between consumption and ending 
+inventory. Zero or negative denominators must park the material in the not distributed category with a worklist entry, never a division fault. • Step two, multi level. By ascending 
+low level code, differences allocated to consumption roll into the receiving materials of that consumption and re enter their own single level pass. Circular consumption within a 
+level must resolve iteratively to a stated tolerance of one cent per material. • Step three, revaluation preview. Inventory delta per material equals ending quantity times the 
+difference between periodic unit price and standard. Cost of sales delta follows the allocated consumption. The preview must show both by valuation class before anything posts. • 
+Step four, posting. One revaluation journal per entity at period close, reversing option for the actual view where the Controller elects reversal accounting. New event keys MLINV 
+and MLCOGS must resolve through the account determination matrix. 1.3	Screens 
+
+=== PAGE 305 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 305 of 312 
+Screen Type Must Contain ML-COCKPIT-001, period cockpit Wizard Steps for single level, multi level, preview, post. Step status per material group. Error worklist with owners. The 
+run must be restartable per step without recomputation of finished steps ML-MAT-001, material price analysis Detail The full period record of §1.1 for one material, every receipt 
+and consumption line with its source document link, the periodic unit price derivation shown as arithmetic a cost accountant can check by hand ML-CONFIG-001 Config View activation 
+per entity, difference category mapping to matrix rows, reversal election, tolerance values, all effective dated with release ceremony Posting at close, actual view revaluation 
+Debit Credit Amount Basis Notes 13xx by valuation class or MLCOGS expense MLINV offset per matrix Preview deltas per §1.2 step three One journal per entity, close checklist step 
+8b, reversal per election Activation evidence. One full quarter computed in parallel on production data, reconciling to the existing ledger within rounding, with the ML-MAT-001 
+arithmetic audited for twenty sampled materials. 
+2.	The	Advanced	Scheduling	Optimizer A solver must replace the seeded heuristic behind the identical constraint model. The optimizer changes solution quality. 
+It must never change what is feasible, what is frozen, or who decides. 2.1	Requirements • Model class. Constraint programming or mixed integer over operations, work centers, 
+batch cycles, setup families, crews and skills, tools, lanes and maintenance windows, exactly the constraint model already specified. A constraint absent from that model must not 
+be encoded privately in the solver. • Objective. A weighted sum the planner can see and set per horizon, weighted lateness against promises first by default, then setup time, then 
+work in process, then overtime. Weight sets must be named profiles under change control. • Determinism. Fixed seed, fixed time box, best found solution returned with its bound. The 
+same inputs and profile must reproduce the same schedule. • Guardrails. Freeze horizons are absolute. Published promises may not degrade without an at risk record. Every solver 
+move that overrides a planner preference must list in the run log with its objective contribution. • Benchmark. A maintained dataset of real order books must score every solver 
+version against the heuristic on lateness, setup hours and makespan. A version that does not beat the heuristic on the weighted objective must not publish. 2.2	Screens Screen Type 
+Must Contain OPT-RUN-001, optimization runs Wizard Profile selection, horizon, time box, run progress with incumbent objective, compare view against current published schedule 
+with KPI deltas and a per order promise impact list, publish with the standard diff ceremony 
+
+=== PAGE 306 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 306 of 312 
+Screen Type Must Contain OPT-PROF-001, objective profiles Config Named weight sets, effective dating, approval by the planning manager OPT-BENCH-001, benchmark board Dashboard 
+Version scores over the benchmark set, trend per KPI, the gate verdict per version Activation evidence. Benchmark pack results beating the heuristic, plus one month of shadow 
+running beside it with planner decision logs showing no guardrail breach. 
+3.	Full	Global	Multi	Plant	ATP	and	CTP The single plant promise machinery and the network objects already exist. This module must make one availability 
+service answer across every plant, lane and entity, and must make every cross network promise as auditable as a local one. 3.1	Requirements • Check sequences must be configuration 
+per material group and customer class. Each sequence is an ordered walk, own plant stock, named partner plant stock plus lane transit, production CTP at each plant holding a valid 
+production version, purchase lead time as the last resort where policy allows. • Every step of the walk must respect the availability definition already binding, and cross entity 
+steps must respect intercompany pairing rules including transfer price validity before a promise may rely on them. • The promise record must name the sourcing plant, the lane, the 
+plan snapshot and the check sequence version. Soft reservations must hold capacity and stock at the sourcing plant, decaying exactly as local reservations decay. • A global 
+backorder run must re promise across the network after every planning cycle, honoring priority classes globally, with reallocation between plants demanding the same approvals as 
+reallocation between orders. • Substitution across plants must follow approved alternates only, and customer visible substitutions keep their confirmation rule. • Performance. A 
+single line global check must return within ten seconds. The nightly global re promise must complete inside the batch window at the two plant volumes. 3.2	Screens Screen Type 
+Must Contain GATP-SEQ-001, check sequences Config Sequence rows per material group and customer class, effective dated, simulation of a sample check against the draft 
+GATP-SIM-001, global availability cockpit Workbench One material across all plants, stock, inbound, capacity slots, lanes, the walk result with each step accepted or rejected and 
+why Promise dialog, extended Dialog The existing dialog must additionally show sourcing plant and lane, and must let sales prefer a plant where commercial terms demand it, logged 
+Activation evidence. The network test packs for planning, intercompany and recall green in the two plant configuration, plus a promise audit of fifty cross plant confirmations 
+tracing to their snapshots. 
+4.	Supplier	and	Customer	Portals 
+
+=== PAGE 307 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 307 of 312 
+The portals must be external skins over the same services, the same authorization engine and the same validations as internal screens. A portal action that could bypass one 
+internal rule disqualifies the build. 4.1	Architecture	Rules • Separate external identity tenant, invitation based onboarding, per company accounts with named users, multi 
+factor enforced. Internal and external identities must never share a namespace. • Every portal call must carry the partner scope. Row level security must confine a vendor to its 
+own POs and a customer to its own orders, structurally, not by filtering in the page. • All writes must flow through the public APIs of the contract repository with idempotency 
+keys. Rate limits and full audit as third party disclosures apply. • Availability tier two. Portal outage must never block internal operations, and every portal transaction must 
+have an internal fallback path. 4.2	Supplier	Portal	Screens Screen Must Contain Writes PO worklist and detail Open POs with lines, schedules, STP version chip and 
+drawing package download with checksum shown Acknowledgement per line, quantity, date, price, and explicit STP version acceptance or a deviation request Deviation request 
+Structured alternate or concession proposal against a PO line and STP characteristic Creates the supplier deviation record routed to engineering and quality ASN creation Shipment 
+header, lines against open PO schedules, batch or heat and certificate upload per line, package structure Creates the inbound ASN that pre populates the GRN Invoice and payment 
+status Match state per invoice, discrepancy reasons in plain words, remittance history None. Read only Scorecard On time and quality ratings, open SCARs with due dates SCAR 
+responses in the 8D structure 4.3	Customer	Portal	Screens Screen Must Contain Writes Order status Orders with schedule lines, promise dates, milestone strip for ETO, 
+at risk flags with plain language reasons None 
+Drawing approvals Transmittal packages with the released renditions, comment and markup capture Approved, approved as noted, or revise and resubmit, driving the design milestone 
+exactly as the internal capture does Shipment tracking Deliveries, HU list, carrier references, POD state, document dossier download, packing list, CoC, FTR POD acknowledgement 
+where the customer signs electronically Returns RMA request initiation against shipped serials with reason codes Creates the RMA request in Draft for internal approval, never an 
+authorized RMA directly 
+
+=== PAGE 308 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 308 of 312 
+Activation evidence. Two suppliers and one customer completing their full loops for one month without email fallback, with the disclosure audit reviewed. 
+5.	Full	EDI EDI must automate the vendor paper flow on the existing objects. A transaction that would create a state a screen could not create must be rejected at the 
+boundary. 5.1	Transaction	Set	and	Mapping Transaction Direction Binding Behavior 850 purchase order Outbound Generated at PO send from the PO object with the STP 
+reference in the notes segment. A change order must send an 860 with the change summary 855 acknowledgement Inbound Must write the vendor confirmation per line including dates, 
+quantities and the STP acceptance flag. Deviations must raise the exception state, never silently overwrite 856 advance ship notice Inbound Must create the inbound ASN with 
+packages, batches or heats and quantities, pre populating the GRN. Receipt still posts only at the dock scan 810 invoice Inbound Must create the vendor invoice into three way 
+match. Duplicate numbers per vendor must reject with a 997 level error, matching tolerance rules unchanged 997 acknowledgement Both Every envelope must be functionally 
+acknowledged, and a missing 997 beyond the partner window must alert 5.2	Platform	Rules	and	Screens • Partner onboarding must be configuration, a mapping 
+profile, identifiers, channel and certificates, envelope options, never code. Channels AS2 and SFTP at minimum. • Every envelope must log with control numbers, parse state, created 
+documents and errors. Failed envelopes must land in the reprocessing console with edit rights restricted and audited, the same discipline as the integration DLQ. • Screens. 
+EDI-PART-001 partner profiles as governed configuration, EDI-MON-001 envelope monitor inside the integration console with control number continuity checks per partner. Activation 
+evidence. Three months of parallel running with the top volume vendor reconciling to the manual flow with zero unexplained differences, then cutover partner by partner. 
+6.	Direct	Machine	Integration,	OEE	and	Downtime Machines must report what operators today key and scan, without ever removing the manual path. Signals must become 
+the same confirmation and status events the terminal produces, so no downstream consumer knows or cares which source spoke. 6.1	Objects	and	Gateway Element Binding Requirement 
+Device gateway An OPC UA and MQTT capable service at the plant edge, registered per station like printers and scanners, buffering four hours offline exactly as the terminal queue 
+does, publishing signed events with device identity 
+
+=== PAGE 309 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 309 of 312 
+Element Binding Requirement Signal map Configuration per work center, machine tag to system meaning, cycle count, state run idle down setup, alarm code, measured value to a 
+capture template field. Unmapped tags must log and never post Machine state model One current state per machine with a full state history, timestamps at the edge, reason required 
+for down states per §6.2 Test set interface Result files or direct reads from the test bench must fill the final test capture templates with instrument identity bound, the existing 
+calibration interlock unchanged 6.2	Downtime	and	OEE	Rules • A down state beyond a configured grace must open a downtime record automatically. The operator must 
+code the reason at the terminal within the shift, from the maintained reason tree, planned separated from unplanned. Uncoded downtime must escalate to the supervisor and must not 
+silently age out. • OEE must compute per work center per shift from posted data only. Availability equals run time over planned production time from the capacity calendar. 
+Performance equals ideal cycle count over actual against the routing standard. Quality equals good units over total from confirmations. No side spreadsheets and no manual OEE 
+entry may exist. • Machine counted quantities must reconcile daily against operator confirmations, differences beyond tolerance land on the production reconciliation worklist 
+before settlement. • A machine in a down state must flag its dispatch queue and warn the scheduler, and a hard down beyond a threshold must raise a maintenance order once module 
+eight of this Book is active. 6.3	Screens Screen Type Must Contain MI-MAP-001, signal mapping Config Tag rows per machine with meaning, template field, tolerance, effective 
+dating and a live tag value test panel DT-LOG-001, downtime log Workbench Open uncoded downtime first with aging, reason coding inline, shift and machine filters OEE-DASH-001 
+Dashboard OEE with its three factors per work center per shift, loss waterfall from the reason tree, drill to downtime and confirmation records in three clicks Activation 
+evidence. One pilot work center reporting a full month from signals, OEE reconciled against operator confirmations, uncoded downtime under five percent of down minutes. 
+7.	Full	Field	Service	Management Depot repair keeps the RMA loop. Work at the customer site must gain its own order, its own dispatch and its own stock, settling through 
+the same accounts and writing the same genealogy as the plant. 7.1	Objects Object Required Content Service order, SVO series Installed base serial reference, site, problem 
+coding, entitlement verdict with rule trail stamped at creation, priority per contract response class, tasks with skills, planned 
+
+=== PAGE 310 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 310 of 312 
+Object Required Content parts, planned labor, status path New, Triaged, Scheduled, Dispatched, On Site, Work Complete, Customer Signed, Settled, Closed Service contract Coverage 
+per customer or serial set, response and resolution targets, covered services, billing terms for non covered work, validity. Entitlement must read contracts before warranty 
+Technician resource Skills and certifications from the qualification register, service territory, calendar, assigned van stock Van stock A warehouse of type van per technician, 
+replenished by transfer orders against min and max per spare, counted monthly by the standard count documents 7.2	Process	Rules • Triage must call the entitlement service, 
+warranty work settles against the reserve, contract work against the contract, everything else quotes at service rates before dispatch, the customer approves in writing or in the 
+portal. • Scheduling must respect skills, territory and travel, and must reserve technician capacity like a work center slot. The dispatch board is the workbench archetype. • Mobile 
+execution must run offline on the kiosk rules, labor start and stop, parts consumed by scan from van stock, findings with photos, removed and installed serials writing the T12 
+events so the as maintained record stays true, customer signature capture on the device. • Settlement per origin, warranty to the reserve with overflow to warranty expense, 
+contract to contract cost, billable through a service invoice at the service revenue and service COGS accounts already defined. A service order must settle to zero open cost like 
+a production order. • Every visit must update the installed base history and may raise an RMA when the unit must return to the plant, linked both ways. 7.3	Screens Screen Type 
+Must Contain SVO-001, service orders List and detail The object of §7.1 with the entitlement verdict visible and immutable, cost tab live like a production order DSP-BOARD-001, 
+dispatch board Workbench Technician lanes by day, unassigned queue with SLA clocks, drag assignment within skill guardrails, travel warnings Mobile execution set Kiosk archetype 
+My day list, order execution with parts scan, forms, photos, signature, offline banner with queue depth Van stock replenishment Workbench Below min lines per van, proposed 
+transfers, one click create Activation evidence. Ten field orders end to end across warranty, contract and billable cases, entitlement priced correctly, genealogy continuity 
+audited, van stock counts clean. 
+8.	Plant	Maintenance	and	EAM Machines, ovens, cranes, test benches and tools must become maintained assets whose care is planned, whose breakdowns flow from the 
+andon button, and whose windows the finite schedule respects. 8.1	Objects 
+
+=== PAGE 311 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 311 of 312 
+Object Required Content Equipment master, EQ series Hierarchy location to machine to component, link to work center or tool, criticality class, counters hours and cycles fed by 
+confirmations or signals, documents, spare parts list of SPARE materials Maintenance plan Time based or counter based cycles per equipment, task lists with labor, parts and 
+instructions, tolerance windows, next due computed continuously Maintenance order, MO series Type preventive, corrective, breakdown, inspection. Tasks, parts reservations, permits 
+note, planned window, status path parallel to production orders, settlement to the owning cost center, never to product WIP Downtime linkage Breakdown orders must create from the 
+terminal hold reason machine down and from gateway down states per module six, closing the loop reason to work to restoration 8.2	Rules • Preventive plans must generate 
+orders inside the planning horizon and must reserve the equipment window in the finite schedule as blocked capacity, visible to the scheduler in the what if sandbox before 
+publishing. • Spares must plan by reorder point as SPARE materials, consumed to the maintenance order by the standard issue movement, valued like any stock issue, settling with the 
+order to the cost center. • Calibration stays in the quality register and must link to the equipment record so one asset view shows both. • MTBF and MTTR must compute per equipment 
+from the state history and order durations, reported on the maintenance dashboard, feeding criticality reviews. • A work center whose governing equipment holds an open breakdown 
+order must show Maintenance status automatically, warning dispatch exactly as the manual status does today. 8.3	Screens Screen Type Must Contain EQ-001, equipment register List 
+and detail Hierarchy tree, counters, plan list, open orders, history, spares MPLAN-001, maintenance plans Config Cycles, task lists, next due preview, generation horizon MO-001, 
+maintenance orders List and detail The order of §8.1 with parts, labor, window and settlement tabs MAINT-BOARD-001, backlog board Workbench Due and overdue orders by equipment 
+criticality, schedule conflicts with production highlighted Posting, maintenance settlement Debit Credit Amount Basis Notes Owning cost center expense per matrix Spares stock and 
+labor absorption credits Order actual cost at close Never touches product WIP, feeds the work center rate pools next cycle Activation evidence. One quarter of preventive execution 
+with schedule integration proven, breakdown flow from andon to restoration timed, spares consumption through standard movements only. 
+
+=== PAGE 312 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 312 of 312 
+9.	Broader	International	Localization Each new country must be an activation kit assembled from one framework, never a fork. The framework must hold five layers, 
+compliance, tax, documents, language and currency, and a country goes live only when all five pass its checklist. 9.1	The	Five	Layers Layer Binding Requirement Compliance 
+matrix Registrations, statutory books and filing calendar per country, approved before the first transaction, owned by the Controller. The matrix row is the activation trigger Tax 
+regime VAT and GST regimes must run through the existing determination precedence with the tax engine, registrations in the nexus register, reverse charge and import tax rules as 
+regime configuration, e invoicing mandates as adapters on the tax interface, clearance models before invoice issue where the country demands it Documents Invoices, delivery notes, 
+labels and statutory forms must localize through template variants bound to the entity and country, sequential numbering rules per jurisdiction through the number series engine, 
+no hard coded formats Language The text tables already keyed by language must carry translations for customer and vendor facing content, screens remain English at first activation 
+unless the steering decision funds full localization, printed documents must follow the partner language Currency Functional currency per entity as today, daily rates, statutory 
+revaluation runs per country rules, group reporting currency in consolidation 9.2	Screens	and	the	Playbook • LOC-COUNTRY-001, the country activation cockpit, a 
+governed configuration screen holding the five layer checklist per country with owners, evidence links and the go decision record. • Regime configuration extends the existing tax 
+screens, effective dated, simulated before release like every governed configuration. • The first activation must follow the written playbook, entity and books, registrations, 
+regime configuration, template variants, translated texts, opening balances, a statutory close simulation, then the gate. Activation evidence. The first country closes one 
+statutory period with returns generated from the system and reconciled, e invoicing accepted by the authority where mandated, and the checklist archived as the template for the 
+next country. 

@@ -1,0 +1,206 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Geist Variable', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+/* ===== Provisional seed tokens, pasted from 30-design-language/skills-md/tokens.md section 6 (verbatim values) ===== */
+:root {
+  --radius: 0.375rem;                 /* 6 px: cards and badges */
+  --background: #FFFFFF; --foreground: #0A0A0A; --card: #FFFFFF; --card-foreground: #0A0A0A;
+  --popover: #FFFFFF; --popover-foreground: #0A0A0A;
+  --primary: #1F3864;     --primary-foreground: #FFFFFF;   /* PE Blue */
+  --secondary: #EDF1F8;   --secondary-foreground: #1F3864; /* PE Light */
+  --muted: #EDF1F8;       --muted-foreground: #5B6270;
+  --accent: #EDF1F8;      --accent-foreground: #1F3864;
+  --destructive: #A33B3B; --destructive-foreground: #FFFFFF; /* white text on it */
+  --border: #E5E5E5;      --input: #8A8F98;   --ring: #2E5FA3;
+  --link: #2E5FA3;        --table-head: #D9E2F3;            /* PE Accent, PE Mid */
+  /* status: hue = fill/border, ink = text+icon, tint = subtle badge background */
+  --status-draft: #6B7280;     --status-draft-ink: #4B5563;     --status-draft-tint: #EDEEF0;
+  --status-pending: #B58221;   --status-pending-ink: #7A5410;   --status-pending-tint: #F6F0E4;
+  --status-active: #2E5FA3;    --status-active-ink: #24508C;    --status-active-tint: #E6ECF4;
+  --status-blocked: #A33B3B; --status-blocked-ink: #FFFFFF; --status-done: #1F5F3F; --status-done-ink: #FFFFFF;
+  --status-cancelled: #A33B3B; --status-cancelled-ink: #8A2E2E;
+  --status-exception: #B58221; --status-exception-ink: #1C1917;
+  --status-passed: #3E7D4E;    --status-passed-ink: #2F6A3F;    --status-passed-tint: #E8EFEA;
+  --scan-success-bg: #DCE8DF;  --offline-banner-bg: #F2E9D7;
+}
+.dark {
+  --background: #0A0A0A; --foreground: #FAFAFA; --card: #171717; --card-foreground: #FAFAFA;
+  --popover: #171717; --popover-foreground: #FAFAFA;
+  --primary: #9DB4E0;     --primary-foreground: #0A0A0A;
+  --secondary: #262626; --secondary-foreground: #FAFAFA; --accent: #262626; --accent-foreground: #FAFAFA;
+  --muted: #262626; --muted-foreground: #A1A1A1;
+  --destructive: #B33A3A; --destructive-foreground: #FFFFFF;
+  --border: #2A2A2A;      --input: #6B7280;   --ring: #7FA6E0;
+  --link: #7FA6E0;        --table-head: #1F2A3D;
+  --status-draft: #9CA3AF;     --status-draft-ink: #9CA3AF;     --status-draft-tint: #212224;
+  --status-pending: #E0B050;   --status-pending-ink: #E0B050;   --status-pending-tint: #2C2515;
+  --status-active: #7FA6E0;    --status-active-ink: #7FA6E0;    --status-active-tint: #1D232C;
+  --status-blocked: #F08080; --status-blocked-ink: #0A0A0A; --status-done: #4FAF7A; --status-done-ink: #0A0A0A;
+  --status-cancelled: #F08080; --status-cancelled-ink: #F08080;
+  --status-exception: #E0B050; --status-exception-ink: #0A0A0A;
+  --status-passed: #6FBF83;    --status-passed-ink: #6FBF83;    --status-passed-tint: #1A271D;
+  --scan-success-bg: #1E2E22;  --offline-banner-bg: #312817;
+}
+/* also add to the existing @theme inline block: */
+@theme inline {
+  --color-link: var(--link); --color-table-head: var(--table-head);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-status-draft: var(--status-draft);
+  --color-status-draft-ink: var(--status-draft-ink);
+  --color-status-draft-tint: var(--status-draft-tint);
+  --color-status-pending: var(--status-pending);
+  --color-status-pending-ink: var(--status-pending-ink);
+  --color-status-pending-tint: var(--status-pending-tint);
+  --color-status-active: var(--status-active);
+  --color-status-active-ink: var(--status-active-ink);
+  --color-status-active-tint: var(--status-active-tint);
+  --color-status-blocked: var(--status-blocked);
+  --color-status-blocked-ink: var(--status-blocked-ink);
+  --color-status-done: var(--status-done);
+  --color-status-done-ink: var(--status-done-ink);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-cancelled-ink: var(--status-cancelled-ink);
+  --color-status-exception: var(--status-exception);
+  --color-status-exception-ink: var(--status-exception-ink);
+  --color-status-passed: var(--status-passed);
+  --color-status-passed-ink: var(--status-passed-ink);
+  --color-status-passed-tint: var(--status-passed-tint);
+  --color-scan-success-bg: var(--scan-success-bg);
+  --color-offline-banner-bg: var(--offline-banner-bg);
+}
+
+/* a11y floor: visible 2 px focus ring, 2 px offset, never removed (tokens.md T-3) */
+:where(a, button, input, select, textarea, [tabindex], [role="combobox"], [role="tab"], [role="checkbox"]):focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+.tabular { font-variant-numeric: tabular-nums; }
+@keyframes scanflash { from { background: var(--scan-success-bg); } to { background: transparent; } }
+.scan-flash { animation: scanflash 350ms ease-out; }

@@ -1,0 +1,461 @@
+=== PAGE 92 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 92 of 312 
+PART F BARCODING & TRACEABILITY Barcoding is the data-capture backbone: every physical movement, consumption, build step and quality event is confirmed by scan, which is what 
+makes the Material Traceability Report (INV 10.4) trustworthy end to end. This Part specifies symbologies, label formats, hardware, the complete scan-point matrix (which step 
+scans what, validates what, and posts what), error behavior, and the genealogy data model. 
+
+=== PAGE 93 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 93 of 312 
+1. Standards & Symbology Object Symbology Encoded Content Label Item (shelf/product label) Code128 Material Code 2×1 in thermal; item name, code, UoM human-readable Batch Code128 + 
+QR (optional detail) Batch # (BAT-…); QR adds JSON: item, vendor batch, expiry 4×2 in; item, batch, vendor batch/heat #, mfg/expiry dates, qty at print Serial Code128 Serial # (PE-…) 
+4×2 in poly (durable) for components; engraved/rivet nameplate + barcode plate for transformers Location / Bin Code128 Location code 4×1 in reflective for rack labels; floor signs 
+for zones Handling Unit Code128 + GS1-128 SSCC when customer requires HU # / SSCC-18 (AI 00); AI 02+37 contents optional 4×6 in per Part A §5.4 
+WO Traveler / Operations Code128 per op + QR on cover WO # and WO#|OP# composite Laser letter sheets in packet RMA Code128 RMA # On customer return instructions PDF Operator Badge 
+Code128 User ID Badge card Instrument Code128 CAL ID 1×0.5 in asset label  Dev Note: One symbology (Code128) for everything internal keeps scanner config trivial; GS1-128 appears 
+only on outbound HU labels for customers demanding GS1 compliance. QR usage is limited to human-assist payloads (a phone can read the traveler) — transactional scans always use the 
+1D code. Barcode format default per INV 11.1 policy remains Code128; this Part fixes the content standards. 
+
+=== PAGE 94 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 94 of 312 
+2. Hardware & Printing Component Requirement Printers ZPL-compatible thermal transfer (Zebra ZT411 class) at Receiving, Quarantine, Pack, Serial/nameplate station; laser for 
+travelers. Print service: server-rendered ZPL templates, printer registry per station, reprint with reason + audit (reprints watermark “DUPLICATE” except location labels) Scanners 
+Rugged 2D imagers (handheld + hands-free at fixed stations); keyboard-wedge over WebSocket wedge service so the web terminal receives scans as events, not keystrokes into random 
+fields (focus-lock pattern) Mobile Android rugged devices running the responsive web app for count entry, putaway, picking; camera fallback scanning permitted for supervisors only 
+(slower, logged) Offline Terminals queue scan events locally for up to 4 hours of network loss; queued events post in order with original timestamps; conflicts (e.g. stock moved 
+meanwhile) land in a Scan Exception queue for supervisor resolution — never silently dropped  
+
+=== PAGE 95 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 95 of 312 
+3. Scan Point Matrix The definitive list. “Validates” failures always produce an on-device error with the E-code and block the transaction (supervisor overrides where noted create 
+audit + NCR entries). SP Process Step Scans (in order) Validates Posts / Records SP-01 Receiving — start GRN line PO barcode or select; item label or vendor barcode Item on PO; 
+open qty GRN line begin (INV 5.1) SP-02 Receiving — batch capture New batch label printed & scanned back Label printed = record created Batch record w/ vendor batch/heat keyed 
+SP-03 Receiving — serial capture Each serial (vendor or PE-printed) Format; uniqueness Serial records, status Available/QI Hold SP-04 Putaway Item/batch label + destination bin Bin 
+allowed (putaway rules INV 15.6); capacity Bin transfer SP-05 QI sample pull Batch + inspector badge QI Hold status Sample qty logged to inspection SP-06 Stock transfer 
+ship/receive Item/batch/serial + from-bin / to-bin Transfer doc lines INV 5.3 movements SP-07 Terminal login Operator badge Active user; WC assignment Session; labor attribution 
+SP-08 Material issue to WO op Component batch/serial + (bin) Component on op list (E-PP-07); batch Unrestricted; FEFO/FIFO suggestion honored or override-logged Issue posting; 
+genealogy row (WO, op, batch/serial, qty, operator, ts) SP-09 Kit/stage delivery to WC Picklist + staging location Kit complete flags Staged status per op SP-10 Operation start 
+Traveler op barcode Predecessor ops complete; QC gates clear; WO Released Op In Progress; labor clock on SP-11 Operation complete Traveler op barcode + qty entry Good+scrap+rework 
+= started Confirmation; backflush; labor; next-op signal SP-12 Serialized component install Parent serial + child serial Child on BOM; child Available/Issued to this WO; not 
+already linked (E-BC-05) Parent-child link (INV 2.3.4 genealogy); child status In Production SP-13 Nameplate verification Nameplate serial barcode at WC-600 Scanned = WO serial 
+(E-BC-06 on mismatch — wrong nameplate mounted) Verification event on serial SP-14 Test execution Instrument CAL labels + serial Calibration current (E-QM-05) Instruments bound to 
+test record SP-15 Pick confirmation Bin + item/batch/serial + picklist Right batch per FEFO strategy; serial in Reserved status Pick line confirm (INV 5.7 scan-to-pick) SP-16 Pack 
+— add to HU HU + item/batch/serial On pack order; picked status HU content line (Part A §5.3) SP-17 HU close & label New HU label scan-back + scale weight Weight sanity ±2% HU 
+Closed; label printed SP-18 Load & ship Each HU at truck + shipment doc HU on this shipment (E-BC-08); PSI passed; credit gate HU Loaded; completeness check enables PGI SP-19 RMA 
+receipt RMA barcode + serial/batch on crate Authorized line/serial (E-RMA-04) Return receipt lines (Part A §3.5) SP-20 Cycle/physical count Bin + item/batch (+ serials) On count 
+doc; frozen state Count entry (Part A §7) 
+
+=== PAGE 96 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 96 of 312 
+SP Process Step Scans (in order) Validates Posts / Records SP-21 Scrap bin confirmation Item/batch + scrap location Disposition approved Scrap issue posting  
+
+=== PAGE 97 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 97 of 312 
+4. Error Handling & Governance Rule Specification Wrong-scan messaging Every failed validation shows: what was scanned, what was expected, E-code, and the next action (“Scan a 
+component listed for op 30” ) — with audible + color feedback on device Override discipline Overridable validations (batch suggestion, staging shortcuts) require supervisor badge 
+scan inline; hard validations (wrong item, wrong serial, cal expired, HU not on shipment) have no override — the correcting transaction must be done properly Label reprint Any 
+label reprint requires reason code; serial/nameplate reprints additionally require Quality approval (duplicate nameplate risk) Unlabeled stock exception Found stock without label: 
+supervisor flow “Identify & Relabel” — resolves against expected inventory at that bin, prints label, logs exception; feeds count accuracy metrics Scan telemetry All scan events 
+(incl. failures) stored 24 months: device, user, ts, payload, result — the forensic layer beneath the audit trail  
+
+=== PAGE 98 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 98 of 312 
+5. Genealogy Data Model & Traceability Output Entity Key Fields Notes genealogy_event event_id, type (ISSUE/INSTALL/TEST/PACK/SHIP/RETURN), wo_id, op_id, parent_serial_id, 
+child_serial_id, batch_id, item_id, qty, operator_id, station, ts, source_scan_id Append-only; one row per SP-08/11/12/13/14/16/18/19 event with stock impact or linkage 
+serial_link parent_serial_id, child_serial_id, installed_event_id, removed_event_id Current + historical structure (removal during rework recorded, not overwritten) 
+batch_consumption wo_id, op_id, batch_id, qty, event_id Aggregated view for the traceability tree  The Material Traceability Report (INV 10.4) is extended to render from these 
+tables: input a FG serial → tree of ops with consumed batches (vendor, PO, QI result, certs), child serials, operators and inspections per node, forward to customer/site/warranty; 
+input a raw batch (e.g. suspect CRGO heat) → every WO, serial, customer, and shipped location it reached, with one-click customer notification list export. Target: complete tree in 
+< 10 seconds for a 5-level transformer build.  
+
+=== PAGE 99 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 99 of 312 
+PART G PROCUREMENT & PURCHASING Purchasing turns demand (MRP proposals, reorder triggers, manual requests) into on-time, on-spec, on-price supply. It owns the Vendor Master 
+operational view, Approved Vendor Lists, Purchase Requisitions, RFQs, Purchase Orders (including subcontract), confirmations and expediting. Receiving (GRN), three-way match and 
+payment are already specified (INV 5.6, ACC 6/8/25); vendor quality feedback loops in from Part E. 
+
+=== PAGE 100 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 100 of 312 
+1. How Purchasing Orders Parts and Materials — The Daily Operating Loop 1. Demand intake. The buyer’s workbench opens on: PR queue (MRP-generated + reorder auto-PRs + manual), MRP 
+exception messages assigned to buy items (EX-01/02/03/06), and the Expedite Board. Everything is bucketed by buyer code (items carry a Buyer assignment). 2. Source determination. 
+For each PR line the system proposes the source: AVL preferred vendor → last PO price and lead time → open contract/blanket if one exists. Buyer accepts or overrides (override 
+reason logged). No AVL vendor for a QI-critical item = hard block (E-PUR-02) → start AVL qualification or RFQ. 3. RFQ when needed. New items, expiring price agreements, or value > 
+$25k without contract (policy) route through RFQ (§4): multi-vendor invite, sealed responses, comparison grid, award writes the new AVL price basis. 4. PO creation. PRs group into 
+POs per vendor per lot-sizing (one PO, many lines; delivery schedules per line where staged deliveries are wanted). Approval workflow by value (ACC 22 engine): Buyer ≤ $25k, 
+Purchasing Manager ≤ $250k, + Controller above, + CFO above $1M. 5. Transmission & confirmation. PO PDF (entity letterhead, terms, quality clauses, drawing attachments for 
+fabricated parts) emails to vendor; vendor confirmation (date + qty per line) is captured — unconfirmed POs older than 3 business days surface on the workbench. 6. Expedite / 
+de-expedite. MRP reschedule messages write suggestions onto the Expedite Board (§7); buyer actions become dated change requests to the vendor with full history. 7. Receipt & 
+closure. GRN against PO (INV 5.1/5.6), QI per plan, three-way match (ACC 6), PPV/IPV visible in CVA (Part A §8). Lines close at full receipt + invoice; short-close with reason 
+allowed (Purchasing Manager). 
+
+=== PAGE 101 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 101 of 312 
+2. Vendor Master (Operational View) & AVL Screen ID PUR-VEND-001/002 URL Pattern /purchasing/vendors Purpose Single vendor record; financial fields (bank details, 1099, payment 
+terms) are owned by ACC screens and render read-only here  2.1 Fields (Operational) Field Type Req Specification Vendor # / Legal Name / DBA Auto + text Yes VEND-{SEQ:5} Vendor 
+Class Dropdown Yes Raw Material Mill, Component OEM, Distributor, Subcontractor, Freight, MRO, Services Addresses / Contacts Tables Yes Order-from, remit-to (ACC-owned), ship-from 
+sites (multiple; each with country — feeds Buy America) Default Currency / Incoterms / Payment Terms Dropdowns Yes Terms read-only from ACC Buyer User Yes Owning buyer Quality 
+Approval Status Badge Auto Approved / Conditional / Restricted / Disqualified — driven by Part E §6 SCAR enforcement and vendor rating; Restricted blocks new POs without Purchasing 
+Manager override; Disqualified hard-blocks Compliance Panel Group Cond. W-9 on file (link ACC), insurance cert + expiry, ISO 9001 cert + expiry, conflict minerals statement, Buy 
+America capable flag + supporting docs per ship-from site; expiring docs alert at 30 days Onboarding Status Badge Auto Draft → Docs Pending → Under Review → Active (ACC 22 vendor 
+approval workflow; no PO before Active — fraud control per ACC gap register)  2.2 Approved Vendor List (AVL) Column Specification Item + Vendor The AVL row key; surfaced on Item 
+Purchasing tab (INV 2.3.6 A) and here by vendor Preferred Rank 1..n; MRP source determination uses rank 1 Vendor Part # / Lead Time / MOQ / Price Basis Operational sourcing data; 
+price basis = last award or contract Qualification Status Qualified (green) / Conditional (first-article pending; receipts forced 100% inspection) / Suspended First Article FAI 
+record link for made-to-print parts: FAI required flag, report, approval date Quality Rating Rolling acceptance % from IQC results (auto)  
+
+=== PAGE 102 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 102 of 312 
+3. Purchase Requisitions Screen ID PUR-PR-001 URL Pattern /purchasing/requisitions Purpose Demand records awaiting sourcing  Field Type Req Specification PR # / Source Auto + 
+badge Auto PR-{YYYY}-{SEQ:5}; source MRP / Reorder / Manual / ECO / Project Line: Item, Qty, UoM, Need Date Mixed Yes Need date from MRP requirement; manual PRs validate date ≥ 
+today + lead time (warning) Suggested Vendor / Price Auto Auto From source determination Requested By / Cost Center User + lookup Yes Cost center mandatory for expense/MRO 
+purchases (drives GL + budget check ACC 21: shows Budget remaining on the cost center + account combination; over-budget flags approval) Peg Reference Link Auto WO / SO / ECO that 
+created the demand Status Badge Auto Open → In Approval (manual/expense PRs only; MRP PRs pre-approved by policy) → Approved → Converted (PO link) / Rejected / Cancelled  
+
+=== PAGE 103 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 103 of 312 
+4. RFQ Element Specification Create RFQ-{YYYY}-{SEQ:4} from PR(s) or blank; lines = item, qty bands (e.g. 1k/5k/10k lbs), target date; attachments auto-pull item drawings 
+(released revisions only) Invite & respond Vendor list (AVL + prospects); emailed response form; buyer keys or imports responses (per line per qty band: price, lead time, 
+validity, MOQ, tooling/NRE, freight terms) Comparison Grid Vendors as columns, lines as rows; normalized landed cost column (price + est. freight + duty %); lead time, quality 
+rating, Buy America flag displayed; lowest-landed highlighted, buyer picks with justification note when not lowest Award Creates/updates AVL rows (price basis, lead time), 
+optionally creates PO(s) directly; losing vendors get regret notice template Statuses Draft → Issued → Responses In → Awarded / Cancelled; sealed until Issued closes (responses 
+hidden from other vendors always, from buyer until due date if Sealed toggle ON)  
+
+=== PAGE 104 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 104 of 312 
+5. Purchase Orders Screen ID PUR-PO-001/002 URL Pattern /purchasing/orders Purpose The commercial commitment to the vendor; anchor for GRN, QI, 3-way match, PPV  5.1 Header Fields 
+Field Type Req Specification PO # Auto Auto PO-{YYYY}-{ENTITY}-{SEQ:5} Vendor / Order-From / Ship-From Site Lookups Yes Ship-from site pins country of origin default for Buy 
+America accumulation Ship-To Warehouse Dropdown Yes Receiving plant Currency / Rate / Incoterms / Freight Terms Mixed Yes Booked rate display; landed-cost elements estimated at 
+PO, trued at GRN (INV 5.6.1 landed cost allocation) Payment Terms Auto Auto From vendor (ACC) Quality Clauses Multi-select Cond. Clause library: Q1 Mill certs required per heat, 
+Q2 FAI required, Q3 100% inspection, Q4 CoC each shipment, Q5 PPAP-lite; auto-set from item flags; prints on PO Buy America Required Toggle Auto ON when any peg traces to a 
+BA-flagged SO/project: restricts source country and requires vendor BA cert per shipment Status Badge Auto Draft → In Approval → Approved → Sent → Confirmed → Partially Received → 
+Received → Matched/Closed; Cancelled; Change Pending overlay during change orders  5.2 Line Fields Field Specification Item / Vendor Part # / Description Cross-reference printed 
+both ways Qty / UoM / Purchase UoM conversion Dual display (buy in lbs, stock in kg — INV 2.6 conversion mandatory) Unit Price / Extended From AVL basis; deviation > 5% from basis 
+flags approval note Delivery Schedule Sub-rows: date + qty (staged deliveries); each sub-row receivable independently; MRP consumes schedule dates Drawing / Spec Attachments 
+Released revisions frozen onto the PO line; ECO on the drawing after PO issue raises a PO Change task (Part C §4.2 checklist) Inspection Requirement Auto from item QI flag + plan 
+preview link; drives receipt QI Hold Peg WO/SO references (visible to receiving and QI for priority) Tax Code Vendor/use-tax logic per Part A §11.3 Line Status Open / Partial / 
+Received / Closed / Cancelled  
+
+=== PAGE 105 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 105 of 312 
+5.3 PO Change Orders Any edit after Sent creates PO Revision (Rev 1, 2…) with a change summary table (field, old, new), re-approval when value increases beyond threshold, and 
+re-transmission; vendor confirmation resets per changed line. Full revision history renders on the PO detail. Cancellations after confirmed date require reason; cancellation 
+exposure (restock/cancel fees) captured as a note for AP. 
+
+=== PAGE 106 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 106 of 312 
+6. Subcontract Purchase Orders Element Specification PO Type = Subcontract Lines reference a service item (the operation) + a components-provided list (from the WO subcontract op, 
+Part D §10) Material provision Issue to vendor movement prints a provision shipping doc; stock visible “At Subcontractor {vendor}” per item Receipt GRN receives the processed item/op 
+completion; consumes provided components from 1315  Accounting Entry — Issue materials to subcontractor Debit Credit Amount Basis Notes 1315 Subcontract Material at Vendor 1310 Raw 
+Materials Issue Qty × valuation rate PC: product line of parent  Accounting Entry — Subcontract receipt (service + material return) Debit Credit Amount Basis Notes 1320 WIP (order) 
+2110 GR/IR Service qty × PO price Service cost to order; variance vs standard subcontract → 5260 1320 WIP (order) 1315 Subcontract Material at Vendor Provided material at valuation 
+Material returns into order WIP  
+
+=== PAGE 107 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 107 of 312 
+7. Expedite Board & Vendor Performance Screen Content Expedite Board (PUR-EXP-001) All EX-02/EX-06 suggestions + Release-Short shortages (Part D §5.2) + past-due confirmed lines; 
+columns: item, PO/line, vendor, confirmed vs needed date, peg (WO/SO at risk), action log (calls/emails with dates), promise history; buyers work top-down by pegged-order 
+priority; aging SLA coloring Vendor Performance (extends INV 10.8) OTD % (received vs confirmed date), quality acceptance % (IQC), price compliance (invoice vs PO), confirmation 
+responsiveness, SCAR history; quarterly scorecard PDF per vendor; ratings feed AVL status proposals  Role Rights Buyer PR/RFQ/PO create within limit, expedite actions, AVL edit 
+proposals Purchasing Manager Approvals to limit, AVL approval, restricted-vendor override, short-close Quality AVL qualification status, FAI approvals, quality clauses Controller 
+High-value approvals, vendor onboarding financial release Receiving / AP Read POs; their own transactions per INV/ACC   
+
+=== PAGE 108 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 108 of 312 
+PART H COST CENTERS & PROFIT CENTERS (CONTROLLING) Controlling gives every dollar in the GL two management dimensions: where it was incurred (cost center — responsibility for 
+spend) and which business it belongs to (profit center — responsibility for margin). ACC Section 10 already carries the dimensions on journal items; this Part supplies what was 
+still missing per the accounting gap analysis: the masters, the hierarchies, the sources and derivation rules, allocations, and the reports — and wires the dimensions into every 
+logistics and production posting specified in this volume. 
+
+=== PAGE 109 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 109 of 312 
+1. Sources — Where Cost Centers and Profit Centers Come From Dimension Source of Truth Governance Cost Centers The organizational chart: one cost center per department or 
+supervisory area that owns budgetary responsibility. Seeded from the org structure workshop with Finance; created/changed only by Controlling (Controller approval), 
+effective-dated, never deleted (deactivated) 
+Annual review with budget cycle (ACC 21); mid-year changes via change request with mapping rules for history Profit Centers The management view of the business: product lines and 
+service lines per legal entity, defined by the CFO. Stable small set; changes are rare and CFO-approved P&L segmentation must reconcile to entity totals — every P&L-relevant 
+posting carries exactly one PC  1.1 Seed Cost Center Hierarchy (PE Transformer plant) Node Cost Center Contains / Maps To CC-1000 Manufacturing summary node All production cost 
+centers — CC-1100 Core Shop postable WC-100, WC-110 — CC-1150 Fabrication postable WC-050 — CC-1200 Winding postable WC-200, WC-210, WC-220 — CC-1250 Drying postable WC-230 — CC-1300 
+Assembly postable WC-300, WC-310, WC-320 — CC-1400 Final Assembly postable WC-400 — CC-1600 Paint & Finish postable WC-600 — CC-1700 Pack & Ship postable WC-700 + shipping dock 
+CC-1500 Quality postable WC-500 Test Lab + inspectors + calibration CC-2000 Warehousing postable Warehouses (each warehouse master links here — INV 3.2 Cost Center field) CC-3000 
+Engineering postable Design engineering CC-4000 Purchasing & Materials postable Buyers, planners CC-5000 Sales & Customer Service postable — CC-9000 G&A summary CC-9100 Executive, 
+CC-9200 Finance, CC-9300 IT, CC-9400 HR, CC-9500 Facilities  1.2 Seed Profit Center Hierarchy Profit Center Scope PC-100 Distribution Transformers Pad-mount & pole-type product 
+families PC-200 Power Transformers Medium/large power units 
+
+=== PAGE 110 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 110 of 312 
+Profit Center Scope PC-300 Grid Components PE Grid Components merchandise business PC-400 Service & Repair Billable repair, field service, testing services PC-900 Corporate / 
+Unassigned Items and postings pending classification — target zero balance; exception report weekly  
+
+=== PAGE 111 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 111 of 312 
+2. Master Data Screens Screen ID CO-CC-001/002 and CO-PC-001/002 URL Pattern /controlling/cost-centers, /controlling/profit-centers Purpose CRUD + hierarchy management for both 
+dimensions  Field Type Req Specification Code Text (10) Yes CC-#### / PC-###; immutable after first posting Name / Description Text Yes — Entity Dropdown Yes Each CC/PC belongs to 
+one legal entity; intercompany allocations use paired centers Parent Node Lookup Yes Position in the standard hierarchy; summary nodes are not postable (validation V-CO-01) 
+Manager / Owner User Yes Receives budget variance alerts (ACC 21.3 integration) and approval routings scoped to the center Valid From / To Dates Yes/No Postings validated against 
+validity at posting date Default Profit Center (CC only) Lookup Cond. For expense postings that arrive with CC but no PC, PC derives from this mapping (derivation rule 6 below) 
+Allowed GL Ranges Rule No Optional guard: e.g. production CCs may not receive 9xxx G&A accounts Blocked for Posting / Planning Toggles No Soft retirement path before deactivation 
+Status Badge Yes Active / Blocked / Inactive  Hierarchy screen: tree editor with drag-move (effective-dated moves; history preserved for comparative reporting), where-used check 
+before deactivation (open WOs, budget lines, allocation cycles, WC links), and alternate hierarchies (reporting-only groupings) in Phase 2. 
+
+=== PAGE 112 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 112 of 312 
+3. Derivation Rules — How Every Posting Gets Its Dimensions Priority-ordered engine, evaluated at posting time by the shared Posting Service; the first rule that yields a value 
+wins per dimension. Every financially relevant document in all three volumes passes through it. Rule evaluations are stored on the journal item (rule # that fired) for 
+auditability. # Rule Cost Center Profit Center 1 Explicit entry on the document line (role-permitted) As entered As entered 2 Production confirmation / WO posting Work center → CC 
+link (Part D §2) Parent item product line 3 Inventory movement (receipt, issue, transfer, adjustment, count, scrap) Warehouse master CC (INV 3.2) Item product line (item master PC 
+field, new — added to INV 2.3.3 B GL section) 4 Sales documents (PGI/COGS, revenue, freight out, RMA credit) — (revenue/COGS carry PC only; freight/warranty expense: 
+shipping/quality CC) SO line item product line; header PC for order-level charges 5 Purchasing expense lines (MRO/services) PR/PO line cost center (mandatory, Part G §3) CC default 
+PC 6 Expense JE with CC only — CC master Default Profit Center 7 Fallback CC-9000 G&A + exception report row PC-900 + exception report row  Dev Note: Validation posture: for P&L 
+accounts both dimensions are mandatory at posting (rule 7 guarantees a value but writes the posting to the CO Exception Report — target zero rows). Balance sheet accounts carry PC 
+where meaningful (inventory, WIP by product line) and skip CC except where specified. The Posting Service exposes a simulation endpoint so any screen can preview derived 
+dimensions before posting — surfaced as the “GL Preview” panel already specified on Stock Adjustments (INV 5.8) and extended to all posting screens. 
+
+=== PAGE 113 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 113 of 312 
+4. Budgets by Cost Center ACC Section 21 budgeting already supports Cost Center as a dimension. This volume binds it: every postable cost center must have a budget row set for the 
+fiscal year (completeness check in the budget cycle); the Budget vs Actual report gains a Cost Center Manager self-view (their centers only, RBAC-scoped); over-budget indicator on 
+GL account fields (ACC 21.1.1) evaluates at CC + account granularity. 
+
+=== PAGE 114 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 114 of 312 
+5. Allocation Cycles (Period-End) Screen ID CO-ALC-001 (cycle definitions), CO-ALC-002 (run) URL Pattern /controlling/allocations Purpose Distribute shared costs from service/G&A 
+cost centers to consuming cost centers on defined drivers — the Allocation Engine flagged missing in the accounting gap analysis  Element Specification Cycle definition Ordered 
+segments; each segment: sender CC(s) + sender account range, receiver CC set, driver (Fixed %, Headcount, Sq Ft, Machine Hours, Labor Hours, Revenue Share), driver value source 
+(statistical key figures table maintained quarterly, or live from confirmations for hours) Statistical key figures Screen CO-SKF-001: per CC per period: headcount, sq ft, machine 
+hours…; import from XLSX; history kept Run Per period per entity: preview (sender balances, computed distribution, receiver amounts, rounding to cents with remainder-to-largest 
+rule) → post. Rerun replaces prior run for the period (reversal + new posting, both retained in GL with run ID ALC-YYYYMM-NN) Sequence Cycles run in defined order (e.g. Facilities → 
+IT → Finance → to production CCs) before cost-center reporting and before work-center rate review; step 5b added to ACC 26.2 close checklist: “Allocation cycles posted”  Accounting 
+Entry — Allocation posting (per segment) Debit Credit Amount Basis Notes Receiver CC — 7500 Allocation Clearing (or original account mirroring per policy) Sender CC — 7500 Allocation 
+Clearing Driver-proportional share of sender balance Net zero at entity level; both sides carry their CC; PC follows CC default mapping  
+
+=== PAGE 115 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 115 of 312 
+6. Reporting Report Content Cost Center Report (CO-R1) Per CC (respecting hierarchy rollups): actuals by account group, budget, variance $/%, YTD, allocations received/sent shown 
+separately; drill to journal items (ACC 10 filters) Profit Center P&L (CO-R2) Full P&L by PC columns: revenue, COGS at standard, production variances, gross margin, allocated SG&A 
+(optional toggle), operating margin; reconciliation column proves sum = entity P&L Work Center Cost & Rate Review (CO-R3) Per production CC/WC: actual costs vs absorbed (labor + 
+overhead credits from confirmations), over/under absorption — the input to annual rate setting (Part I §2) CO Exception Report (CO-R4) Rule-7 fallback postings, postings to blocked 
+centers, P&L rows missing dimensions (should be structurally zero), PC-900 balance  Role Rights Controlling Analyst Masters draft, SKF maintenance, cycle definition, run preview 
+Controller Master approval, cycle posting, hierarchy changes, exception clearance Cost Center Manager Own-center reports, budget entry (ACC 21) for own centers CFO PC structure 
+changes, all reports   
+
+=== PAGE 116 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 116 of 312 
+PART I COSTING & PRICING Costing computes what things cost — standards built from MBOM + routing + rates, WIP and settlement math, and the estimate engine that prices ETO quotes 
+before a design exists. Pricing computes what things sell for — price lists, agreements, commodity surcharges and margin control. The two meet in the margin floor: no quote or 
+price master survives approval below the floor without the defined escalation. 
+
+=== PAGE 117 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 117 of 312 
+1. Cost Components Component Source Into Standard Cost Of Material Σ (component qty per × (1+scrap%) × component standard cost) over the released MBOM Every make item, rolled level 
+by level Material Overhead % on material value (procurement/handling burden), rate per item group Make and buy items Labor Σ (op std hours × crew × WC labor rate) over released 
+routing Make items Machine Σ (op machine hours × WC machine rate) where used Make items Production Overhead Applied per labor hour (or % labor) at WC overhead rate Make items 
+Subcontract Subcontract op PO price basis Make items with external ops Buy item base AVL price basis (rank-1 vendor) + freight/duty estimate % Purchased items  
+
+=== PAGE 118 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 118 of 312 
+2. Work Center Rates Screen ID CST-RATE-001 URL Pattern /costing/work-center-rates Purpose Annual (and interim) computation and release of labor/machine/overhead rates per work 
+center  Element Specification Rate math Labor rate = planned cost-center labor cost ÷ planned productive hours (from capacity model × efficiency). Overhead rate = planned CC 
+overhead pool (incl. received allocations, Part H §5) ÷ same hours. Machine rate where configured = machine pool ÷ machine hours Screen Grid per WC: planned costs (pull from approved 
+budget, ACC 21, by CC), planned hours (from WC capacity), computed rates, prior-year rates, delta %; simulation column (what-if hours/costs); Release action versions the rates 
+with effective date Governance Rates released annually with the budget; interim change requires Controller approval and triggers costing-run guidance (mid-year rate changes 
+revalue nothing retroactively — they apply to confirmations from effective date; standards keep the rate frozen at last rollup) Feedback CO-R3 over/under-absorption report is the 
+annual sanity check on rate quality  
+
+=== PAGE 119 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 119 of 312 
+3. Cost Estimates & Costing Runs 3.1 Cost Estimate (single item / quote support) Screen ID CST-CE-001 URL Pattern /costing/estimates Purpose Cost one item or one ETO 
+configuration: current-standard simulation, what-if, and quote-backing estimates (CE-# links on quotes, Part B §3.2)  Element Specification Basis selector Released MBOM+routing 
+(standard simulation) / Draft EBOM (engineering what-if) / Parametric ETO model: for quotes before design, estimator enters driver quantities — core weight (kg), copper weight 
+(kg), oil volume (gal), tank steel weight, bushing/tap changer selections, est. labor hours per WC — against a maintained driver-rate table (e.g. $/kg CRGO at current commodity 
+basis); template per product family seeded from historical actuals Itemization view Cost tree: every component and operation with qty, rate, value; component prices show source 
+(standard / AVL basis / manual override with note); subtotals by cost component Comparison Estimate vs current standard vs last actual (settled WOs of same/similar design) side by 
+side Status & reuse Draft → Released (locks values, quotable) → Superseded; quote margin panel consumes Released estimates only  3.2 Costing Run (mass standard rollup) Screen ID 
+CST-RUN-001 URL Pattern /costing/runs Purpose Periodic (annual + on-demand) recalculation and release of standard costs across the item base — the engine behind Standard Cost 
+Maintenance (INV 8.2), which remains the approval/impact UI  1. Scope: plant, item selection (all standard-cost items / item groups / changed-BOM-flag only — the invalidation flags 
+set by MBOM releases, Part C §6). 2. Explode & roll: low-level-code order; errors collected, not fatal (missing rate, missing AVL basis, BOM loop) into an error list with owners; 
+items with errors are excluded from release. 3. Review: per item old standard vs proposed, delta %, value impact on current on-hand (qty × delta); sort by absolute impact; drill to 
+itemization. 4. Mark & release: two-step per INV 8.2 (mark = staged, release = effective). Release posts revaluation per INV Sec 12 #15 (1310/1330 vs 5330) and stamps the new 
+standard + effective date on items; PPV baselines shift from that moment. 5. Frequency policy: full run annually at budget; interim runs for new items weekly (auto, new-items-only 
+scope); ad-hoc runs Controller-approved. 
+
+=== PAGE 120 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 120 of 312 
+4. WIP Accounting & Settlement Math (Worked Example) One place to see the whole cost flow of a production order, consistent with Part D §6.1/§8 and Part A §8. Example: WO-2026-00266, 
+one 1500 kVA padmount, standard cost $61,000 (material 42,000 / labor 8,000 / overhead 11,000). Event DR CR Amount Issue CRGO, copper, oil, components (actual qty) 1320 WIP 1310 
+RM $43,150 Labor confirmations 410 h @ std $48 1320 WIP 7500 absorption (CC credits) $19,680 → of which labor $ per rate split; overhead applied same event Overhead applied 410 h @ 
+$27 1320 WIP 7500 absorption $11,070 Scrap at winding (damaged copper) 5320 Scrap 1320 WIP $600 FG receipt at standard 1330 FG 1320 WIP $61,000 Settlement — MUV (43,150 − 42,000 = 
+1,150 unfav) 5220 1320 $1,150 Settlement — labor+OH variance (30,750 applied? vs std 19,000) split LRV/LEV/OAV per formulas 5230/5240/5250 1320 $11,150 total, split per Part A §8 
+Result — — WIP balance for the order = exactly $0  Dev Note: Numbers are illustrative; the settlement engine must reproduce the invariant, not the example: FG receipt at standard + 
+variances posted = total actual charges − scrap already expensed, leaving order WIP at zero. The 7500 absorption credits sit on the sending cost centers and are the counterweight 
+measured by CO-R3 over/under absorption. 
+
+=== PAGE 121 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 121 of 312 
+5. Actual Costing Note (Scope Boundary) The system is standard-cost primary for make items with full variance capture; moving average remains available for purchased items per INV 
+valuation methods. A parallel actual-costing ledger (periodic actual cost per unit) is explicitly out of Phase 1–2 scope; the data to enable it later (actual charges per order, 
+per-batch receipt costs) is already captured, so no schema change is expected. 
+
+=== PAGE 122 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 122 of 312 
+6. Pricing Masters 6.1 Price Lists Screen ID PRC-PL-001 URL Pattern /pricing/price-lists Purpose Header master for the lists consumed by the Material Master Sales tab (Part A §4.2) 
+ Field Specification List Code / Name WHOLESALE, OEM, GOVT, DISTRIB + customs Entity / Currency One currency per list Basis Manual rates / Derived (base list + formula: ±% or 
+margin-over-standard) — derived lists recompute on demand with preview, never silently Rounding Rule e.g. nearest $1 / $5 / two decimals Validity, Status, Approval Draft → Pending 
+Approval → Active → Archived; mass rate changes ride the same approval (Pricing Manager; Controller when any row breaches floor)  6.2 Customer Price Agreements Contract container: 
+customer, validity, scope (items / groups), rates or discount matrix off a base list, volume rebate terms (accrual note to ACC), attachment of signed contract. Rows surface on the 
+item Sales tab §4.3 and resolve at precedence step 2 of the Pricing Service. 6.3 Margin Floors Level Floor Source Breach Handling Product line (PC) Annual plan: floor % per PC 
+(e.g. PC-100 22%, PC-300 18%) Quote/SO/price rows below floor route: Pricing Manager → Sales Director → (below floor−5pts) CFO; every approval stores justification; breach register 
+report monthly Item override Optional stricter floor per item Same chain  6.4 Commodity Surcharges (Copper / CRGO Escalators) Element Specification Index master Indexes: COMEX 
+copper $/lb, CRGO basis $/kg (published internal basis), monthly values maintained by Costing with source note; history immutable Surcharge rule per item/family Base index value 
+(the value embedded in the list price), content per unit (e.g. lbs copper per unit — from design sheet or estimate), formula: surcharge = (index at pricing date − base index) × 
+content × pass-through % (default 100) Document behavior Quote/SO lines show surcharge as separate component line with index, date and math printed; re-fires at defined repricing 
+events only (quote issue, order confirm — per contract term Fixed at Order vs Ship-Date Adjusted; the latter recalculates at PGI and prices the delta on the invoice as a surcharge 
+adjustment line)  
+
+=== PAGE 123 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 123 of 312 
+7. Margin Analytics Report Content Quote Margin Register All quotes: estimate cost, price, margin, floor status, approval trail Order Margin — three-view Per SO line: quoted margin 
+(vs estimate), standard margin (vs standard at PGI), actual margin (vs settled WO actuals) — the closed loop from Part B §6 Price Realization Average realized price vs list by 
+item/customer; discount and surcharge decomposition Floor Breach Register Every below-floor approval with ageing and win/loss outcome  Role Rights Cost Accountant Estimates, 
+costing runs (mark), rates draft, driver tables Controller Rate release, costing release, floor policy, interim runs Pricing Manager Price lists, agreements, surcharge rules, 
+first-line floor approvals Estimator Parametric estimates, quote costing Sales roles Consume prices; margin visibility per company toggle (Part B §6)   
+
+=== PAGE 124 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 124 of 312 
+PART J CROSS-MODULE ACCOUNTING INTEGRATION MAP (EXTENDED) This table extends the inventory map (INV Section 12) and the accounting map (ACC Section 28) with every posting 
+introduced in this volume. Together the three tables are the complete journal universe of the system. CC = cost center, PC = profit center, derived per Part H §3 unless stated. # 
+Transaction Debit Credit Amount Basis Trigger / Dimensions 17 RMA receipt (PE ownership) 1335 RMA Inventory 5120 COGS reversal Qty × valuation at original issue RMA receipt post; 
+PC item line 18 RMA restock 1330/1310 Inventory 1335 RMA Inventory Valuation Disposition Restock 19 RMA credit note 4100 Revenue (+2300 tax reversal) 1200 AR; 4910 restocking fee 
+portion Credit value ACC 4 credit note from CMR; PC item line 20 RMA scrap 5320 Scrap & Waste 1335 RMA Inventory Valuation Disposition Scrap; CC quality 21 Warranty repair 
+settlement 2610 Warranty Reserve (overflow 6300) 1325 WIP-Rework Actual repair cost RWO close (warranty) 22 Billable repair 5130 COGS-Service / 1200 AR 1325 / 4150 + 2300 Cost; 
+invoice value RWO close + service invoice; PC-400 23 Replacement shipment (warranty) 6300 Warranty Expense 1330 FG Standard cost PGI on $0 replacement SO 24 Warranty reserve 
+accrual 6300 Warranty Expense 2610 Warranty Reserve Accrual % × FG shipments (policy rate per product line) Month-end recurring JE (ACC 9.2); PC product line 25 PGI — sales shipment 
+5120 COGS 1330 FG Qty × standard Shipment post; PC item line 26 Freight out accrual 6410 Freight Out 2100 AP accrual Quoted freight PGI (PE-paid terms); CC shipping 27 Packing 
+materials consumption 5120 COGS (packaging element) 1360 Packaging on Hand Backflush at standard HU close 28 Material issue to WO 1320 WIP 1310 RM Qty × valuation SP-08/backflush; 
+CC from WC, PC parent item 29 Labor + overhead applied 1320 WIP 7500 Absorption (CC credit) Hours × std rates Op confirmation 30 Operation scrap 5320 Scrap & Waste 1320 WIP 
+Scrapped value Confirmation scrap qty; CC of WC 31 FG production receipt 1330 FG 1320 WIP Good qty × standard Receive to stock 32 WO settlement variances 5220/5230/5240/5250 1320 
+WIP Per Part A §8 formulas Order close; CC primary WC, PC product line 
+
+=== PAGE 125 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 125 of 312 
+# Transaction Debit Credit Amount Basis Trigger / Dimensions 33 Rework (production-caused) 1325 WIP-Rework → parent 1320 various Actuals RWO settlement 34 Subcontract provision 
+1315 Subcontract at Vendor 1310 RM Valuation Issue to subcontractor 35 Subcontract receipt 1320 WIP 2110 GR/IR + 1315 PO price + provided material GRN subcontract; variance → 5260 
+36 Allocation cycle Receiver CC 7500 Sender CC 7500 Driver share Period-end run; net zero 37 Milestone invoice 1200 AR 2600 Contract Liability (or 4100 per ASC 606 timing) 
+Milestone % Invoice request post; rev rec per ACC 24 38 Surcharge adjustment at PGI 1200 AR 4100 Revenue (surcharge element) Index delta math Ship-date-adjusted contracts  Dev 
+Note: Every posting above flows through the shared Posting Service: single implementation of account mapping, dimension derivation (Part H §3), period validation (Part A §9), and 
+journal creation with source-document back-links. No module posts to the GL directly. 
+
+=== PAGE 126 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 126 of 312 
+Period Close Additions The ACC 26.2 twelve-step checklist gains these operational sub-steps (auto-validated like the rest): Step Task Validation 5b Allocation cycles posted All 
+active cycles have a posted run for the period 6b Inventory period closed INV 8.3 status = Closed for the period 6c WIP reconciliation Σ open WO WIP (Part D §7) = GL 1320 + 1325 
+balances 6d Production orders settled No WO in Completed status older than 5 days unsettled 6e RMA aging review No RMA in Settling with posted-document gaps 9b Warranty reserve 
+adequacy Reserve balance vs open warranty RWO exposure; top-up JE proposed   
+
+=== PAGE 127 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 127 of 312 
+PART K DATA MODEL, INTEGRATION MATRIX & ROADMAP 
+
+=== PAGE 128 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 128 of 312 
+1. New Core Entities Entity Key Fields Relationships Customer customer_id, class, status, price_list_id, credit_limit, hold_flag → Addresses, Contacts, Tax Profile, SOs, RMAs 
+Quotation / QuoteLine qt_id, version, status, valid_until; line: item_id, config_json, ce_id, price, source → Customer, Cost Estimate, SO (conversion) SalesOrder / SOLine so_id, 
+type, status, billing_plan; line: item_id, qty, price, promised_date, peg refs → Customer, Quote, WO, Shipments, Invoices, Revenue Contract Shipment / HandlingUnit / HULine shp_id, 
+status; hu_id, type, weights, sscc; contents → SOLines, Picklists, PackOrders RMA / RMALine rma_id, class, status, warranty_flag; line: item, serial, qty auth/recd, disposition → 
+Customer, Invoice, CreditNote, RWO, NCR EngineeringRequest er_id, so_line_id, design_type, due, status, checklist → SOLine, EBOM, Documents EBOM / EBOMLine ebom_id, parent_item, 
+rev, status; line: component, qty, scrap, op_map, effectivity → Items, MBOM, Documents, ECOs Document / DocRevision / Transmittal doc_id, type, security; rev, files, status; tr 
+recipients & responses → Items, BOM lines, Routings, WOs, SOs ECR / ECO / ECOTask ecr_id, impact snapshot, ccb votes; eco_id, effectivity, dispositions; tasks → affected objects 
+WorkCenter / Routing / RoutingOp wc_id, cc_id, capacity, rates; rtg_id, rev, status; op: hours, qc_flag, wi docs → CostCenter, WOs ProductionOrder / WOOperation / Confirmation 
+wo_id, item, serial, revs, status, pegs; op status; conf: qtys, hours, operator → MBOM, Routing, SOLine, Inspections, GL ReworkOrder rwo_id, origin, receiver, status → WO/RMA/NCR 
+GenealogyEvent / SerialLink / BatchConsumption per Part F §5 → Serials, Batches, WOs PR / RFQ / RFQResponse / PO / POLine / POSchedule standard procurement chain with revisions → 
+Vendors, Items, WO/SO pegs, GRNs AVLEntry item_id, vendor_id, rank, status, price_basis, fai_ref → Item, Vendor CostCenter / ProfitCenter / Hierarchy / SKF / AllocationCycle per 
+Part H → every journal item 
+CostEstimate / CostingRun / WCRateVersion per Part I → Items, Quotes PriceList / PriceListRate / CustomerPrice / SurchargeRule / IndexValue per Part I §6 → Items, Customers 
+InspectionPlan / PlanCharacteristic per Part A §6 → Items, Vendors, Operations, Inspections CountDocument / CountLine per Part A §7 → CountPlan, Locations, SAs CAPA / SCAR / 
+Instrument / CalibrationEvent per Part E → NCRs, Vendors, Tests  
+
+=== PAGE 129 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 129 of 312 
+2. Integration Matrix (New Flows) Source Target Trigger Payload / Effect SO Confirm (ETO) Engineering Request Auto-create Configuration attributes, due date EBOM Release MBOM 
+transform Guided action Structure + op mapping MBOM Release Costing Invalidation flag Next run re-rolls item MRP Run PRs / Planned WOs Nightly + on-demand Proposals with pegs WO 
+Release Inventory Reservation firm-up + serial generation INV 5.5 source Production Op Confirmation GL + WIP + genealogy Real-time Postings #28–30, events SP-08…SP-13 QC gate WO 
+Inspection result Op complete enable / block Final Test pass SO milestone + FTR + CoC chain Event Billing request, documents PGI GL + AR trigger + serial status Event Postings 
+#25–27; invoice request RMA disposition Credit note / RWO / replacement SO / NCR Per §3.6 Linked documents IQC result Vendor rating + AVL Rolling calc Quality %, SCAR triggers 
+Budget approval (ACC 21) WC rates (Part I §2) Annual cycle Planned cost pools Allocation run CC reports + rates review Period-end Posting #36  
+
+=== PAGE 130 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 130 of 312 
+3. Implementation Roadmap (This Volume) Sequenced to extend the inventory build (INV Section 13 phases, weeks 1–12) and the accounting plan (ACC Section 27, 24 weeks). 
+Dependencies: Controlling masters precede any posting-bearing module here; Engineering precedes Production; Production precedes full Costing; the nine gap items ride with their 
+host modules. Phase Weeks Scope Key Deliverables M1 — Controlling & Foundations 1–4 Part H masters + derivation engine; Posting Service extension; number series; Part A §9 period 
+matrix; Part A §11 tax determination CC/PC live on all existing postings; CO exception report at zero on test data M2 — Sales Core & Gap Items 3–8 Customers, quotes, SOs (MTS path), 
+pricing service + Sales tab (§4), safety stock (§10), count documents (§7) Order-to-cash MTS demo incl. reservation→pick→pack (§5)→PGI→invoice M3 — Engineering 6–12 Part C complete: 
+requests, EBOM, documents, ECR/ECO, MBOM transform ETO design cycle demo with customer approval loop M4 — Production Core 10–18 WCs, routings, WOs, terminal, confirmations, WIP, 
+receipt; barcode scan points SP-07…SP-13; MRP workbench Full build of a pilot transformer in-system with genealogy M5 — Quality & RMA 14–20 Part E (plans already from M2 config), 
+final test & FTR, CAPA/SCAR, calibration; Part A §3 RMA end-to-end Quality gates enforced; RMA classes RC1–RC4 demo M6 — Procurement & Costing 16–22 Part G full loop incl. 
+subcontract; Part I rates, estimates, costing runs, surcharges; CVA workbench (§8) Standards released system-wide; PPV/settlement variances reconciling M7 — Integration Hardening & 
+UAT 20–26 Extended close checklist, traceability performance, load tests at target volumes, security/SOD review, training Parallel-run month-end close; go-live readiness sign-off  
+
+=== PAGE 131 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 131 of 312 
+4. Non-Functional Requirements Area Requirement Volume assumptions 50k items, 5k active BOM structures avg 120 lines × 4 levels, 300 WOs/month, 2,000 SO lines/month, 40k scan 
+events/day, 1.2M journal lines/year Performance Scan round-trip < 400 ms P95; MRP full run < 30 min; traceability tree < 10 s; costing run (full) < 60 min; dispatch list refresh < 
+2 s Availability Shop-floor path (terminal, scans, printing) 99.5% during production hours; offline scan queueing per Part F §2 Auditability Every posting reachable from its source 
+document in ≤ 3 clicks and vice versa; scan telemetry 24 months; document files WORM after release Security RBAC per ACC 23 extended with roles named in each Part; SOD checks 
+extended: WO confirm vs settlement approve; PO create vs GRN post; price edit vs price approve  
+
+=== PAGE 132 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 132 of 312 
+5. Document Sign-Off Metric Count Parts 11 (A–K) Gap-register items closed 9 of 9 (100%) New screens specified 75+ across Sales, Engineering, Production, Quality, Purchasing, 
+Controlling, Costing Field-level tables 190+ GL posting rules added 22 new journal templates (#17–38) with dimensions Status lifecycles 18 complete workflows Barcode scan points 21 
+(SP-01…SP-21) with validations and postings Seed data sets Work centers, cost/profit center hierarchies, number series, quality test catalog, RMA policies  This volume, together 
+with Inventory & Warehouse Specification V3.0 and Accounting Implementation Specification V2.0, constitutes the PE Transformer ERP Build Package — Phase 1 functional scope with an 
+architected target-state path per the Enterprise Completeness Specification V1.0. Any deviation during development must be documented and approved by the PE ERP project lead 
+before implementation. Role Name Signature Date Project Sponsor    Product Owner    Technical Lead (PE)    Development Partner Lead    Engineering Manager    Production Manager    
+Quality Manager    Controller    CFO     
+BOOK	II MATERIAL	MANAGEMENT	MODULE 
+
+=== PAGE 133 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 133 of 312 
+Material Model  •  Material Master Views  •  Creation & Change Governance  •  Valuation & Account Determination Cross-Module Linkage Contracts  •  Special Stock  •  Batch & Serial 
+Profiles  •  Migration & Data Quality  
+

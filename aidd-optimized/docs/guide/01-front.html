@@ -1,0 +1,250 @@
+<div class="cover">
+  <div class="kicker">Developer &amp; Designer Guide</div>
+  <h1>The AIDD<br>Agent System</h1>
+  <div class="rule"></div>
+  <h2>AI-Augmented Discovery and Design:<br>a gate-controlled process for domain-heavy products</h2>
+  <div class="blurb">
+    How the system works, what every agent and skill does, how to run a project through it end to
+    end, and how to extend it. Written for the designer running the process, the developer
+    receiving its output, and anyone maintaining the system itself.
+  </div>
+  <div class="stats">
+    <div class="stat"><b>14</b><span>Agents</span></div>
+    <div class="stat"><b>34</b><span>Skills</span></div>
+    <div class="stat"><b>9</b><span>Commands</span></div>
+    <div class="stat"><b>3</b><span>Gates</span></div>
+  </div>
+  <div class="meta">
+    <span>Version 2.0</span>
+    <span>Built to the Agent Skills open standard</span>
+    <span>{{DATE}}</span>
+  </div>
+</div>
+
+<div class="toc">
+  <h1>Contents</h1>
+  {{TOC}}
+</div>
+
+<h1 class="part" id="s-howtoread"><span class="num">Before you start</span>How to read this guide</h1>
+<div class="part-intro">
+  This guide is a reference, not a novel. Nobody needs all of it. Find your row below, read those
+  parts, and come back to the rest when the project reaches it.
+</div>
+
+<table>
+  <tr><th style="width:31%">You are</th><th>Read</th></tr>
+  <tr>
+    <td><strong>Running a project</strong> through the system for the first time</td>
+    <td>Part 1 (orientation), Part 2 (core mechanics), then Part 3 phase by phase as you reach
+    each one. Keep Part 6 (commands) open in a tab.</td>
+  </tr>
+  <tr>
+    <td><strong>A designer</strong> joining a project mid-flight</td>
+    <td>Part 1.3 (the process at a glance), Part 2.1 and 2.5 (provenance and corrections), then
+    the agent cards in Part 4 for whichever role you are covering, and the skills those agents
+    load in Part 5.</td>
+  </tr>
+  <tr>
+    <td><strong>A developer</strong> receiving a handoff</td>
+    <td>Part 2.1 (what the tags mean), Part 3.9 (what handoff contains and how the walkthrough
+    runs), Part 7 (the artifacts you are being given), and Part 9.2 (the routing rule for
+    build-time questions). Roughly twenty minutes.</td>
+  </tr>
+  <tr>
+    <td><strong>A product owner or client-side reader</strong></td>
+    <td>Part 1, Part 2.4 (what gates ask of you), and Part 2.7 (what happens when there is no
+    spec). The rest is machinery you are welcome to but do not need.</td>
+  </tr>
+  <tr>
+    <td><strong>Extending or maintaining</strong> the system</td>
+    <td>Part 2 in full, Part 5 (skill anatomy), and Part 9.5 (extension rules). The system is
+    plain markdown throughout; nothing is compiled.</td>
+  </tr>
+</table>
+
+<div class="box">
+  <span class="lbl">Conventions in this guide</span>
+  <p><code>monospace</code> marks a file path, a command, or a literal value.
+  <span class="tag p1">PHASE</span> chips mark which phase a thing belongs to.
+  Boxed rules in red are non-negotiable constraints from <code>GUARDRAILS.md</code>; boxed notes
+  in amber are the failure modes teams actually hit.</p>
+</div>
+
+<h1 class="part" id="s-part1"><span class="num">Part 1</span>Orientation</h1>
+<div class="part-intro">
+  What this system is, the ideas it rests on, the shape of the process, and how to start a project
+  in the next ten minutes.
+</div>
+
+<h2 id="s-1-1">1.1 What this system is</h2>
+<p>
+  An agentic implementation of the AI-Augmented Discovery and Design process: a three-phase,
+  gate-controlled product design workflow built for domain-heavy projects, where the cost of
+  misunderstanding the client's rules is far higher than the cost of drawing the wrong screen.
+</p>
+<p>
+  You talk to the orchestrator, which is the main session. It routes work to specialist agents.
+  Agents load skills. Skills carry the craft: the procedures, the decision tables, the probing
+  banks, the failure modes. Nothing advances past a gate without that gate's exit criteria met and
+  its report filed, and a standing conformance engine continuously checks that every artifact still
+  agrees with the documents it derives from.
+</p>
+<p>
+  Everything is plain markdown. It can be dropped into a repository and used directly with Claude
+  Code, or read by any agent runtime that understands markdown instructions, or used by humans with
+  no agent at all: the templates, the provenance tags and the gate reports work identically.
+</p>
+
+<h2 id="s-1-2">1.2 The five ideas it is built on</h2>
+
+<h3>1. Provenance is the load-bearing wall</h3>
+<p>
+  Every claim about the client's world carries a source tag and a confidence marker. Most failure
+  modes of a discovery process are attribution collapse: six weeks in, nobody can say whether "the
+  system must lock the record after posting" came from the domain authority, from the anchor
+  document, from an industry convention, or from a model's plausible guess. Once that distinction
+  is lost it cannot be recovered, and every downstream decision inherits an unknown risk.
+</p>
+
+<h3>2. Gates are the only thing that stops work</h3>
+<p>
+  Three formal gates, each with required attendees, written exit criteria and a filed report. A
+  gate held without its required attendees is recorded as NOT HELD, whatever happened in the room.
+  This strictness is the point: a process whose checkpoints can be waved through has checkpoints
+  that mean nothing.
+</p>
+
+<h3>3. The prototype is an interview instrument, not a preview</h3>
+<p>
+  Phase 2A produces a throwaway prototype whose success is measured in <em>corrections produced</em>,
+  not approval received. It is built to be wrong in a useful way, framed that way out loud, and
+  archived immediately after Gate 1. Hi-fi never starts from its screens.
+</p>
+
+<h3>4. One document reconciles everything</h3>
+<p>
+  The refined requirement document does not restate the client's spec; it shows where the spec and
+  the domain authority disagreed and why the resolution won. Its rationale column is the answer to
+  "why does this rule work this way" for the life of the product. Every structural correction, from
+  any source and at any time, passes through it before any artifact is edited.
+</p>
+
+<h3>5. The loop pays the next project</h3>
+<p>
+  At close, a developer and a designer review three shared specification files against what the
+  project actually built. Those files are consumed by the next project's prototype prompts, so
+  generated output matches real team conventions and can be re-used rather than referenced. It is
+  the only step that pays out later rather than now, which makes it the easiest to skip and the
+  most expensive to have skipped.
+</p>
+
+<h2 id="s-1-3">1.3 The process at a glance</h2>
+
+<div class="flow">PHASE 0   <b>Intake</b>            Classify what actually arrived. Fill the spec slot.
+                                Open the assumption register.
+                                     |
+PHASE 1   <b>Empathize + Define</b>  Anchor analysis, glossary, questions, the D&amp;D call,
+                                contradiction mining.
+   GATE                         Written confirmation of the problem set by the DA.
+                                     |
+PHASE 2A  <b>Initial Design</b>      Parallel: research, knowledge base, as-is flows,
+                                style seed, prompts, throwaway prototype.
+   GATE 1                       DA + PO. The set reviewed together, never piecemeal.
+                                Heavy correction = success. Prototype archived.
+                                     |
+PHASE 2B  <b>Further Design</b>      Refined requirements -&gt; ERD -&gt; to-be flows -&gt;
+                                breakdown -&gt; flow optimization -&gt; IA -&gt; userflows
+                                -&gt; prioritized feature list (signed).
+   GATE 2                       DA + PO + developer. Model first, screens last.
+                                List locks on fixed-bid engagements.
+                                     |
+PHASE 3   <b>Test + Prototype</b>    Hi-fi specs for prioritized features only:
+                                every state, dev notes, interactions, status
+                                mapping, real copy, realistic content.
+   GATE 3                       Internal, line by line against requirements.
+                                Then client validation.
+                                     |
+HANDOFF   <b>Transfer + Loop</b>     Full artifact set, live walkthrough with the dev
+                                team, md-spec loop updating shared-specs and
+                                recording the three cross-project metrics.</div>
+
+<p>
+  Two properties of this shape are worth naming. First, the Test stage re-opens the problem space:
+  corrections found late are routed <em>backward</em> through the requirement document, never
+  absorbed silently into a screen. Second, the phases are deliberately front-loaded. Phase 3 designs
+  only what the prioritized list contains, and that narrowing is what pays for the investment in
+  Phases 1 and 2.
+</p>
+
+<h2 id="s-1-4">1.4 Quick start</h2>
+
+<h3>Starting a new project</h3>
+<pre><span class="c"># in the repository root, with Claude Code running</span>
+/new-project acme-invoicing</pre>
+<p>
+  The orchestrator copies <code>workspace/_TEMPLATE/</code>, then asks for the five adaptation
+  variables plus two the design layer needs (accessibility obligation, and device and environment
+  per role). Answer honestly; they change how the whole process routes. Do not guess the domain
+  authority: if nobody knows who can rule on correctness, that is the first thing to find out, and
+  Phase 1 blocks until you do.
+</p>
+<p>Immediately after, intake runs:</p>
+<pre>/intake-spec</pre>
+<p>
+  Give it whatever you have: a PRD, a gap document, a slide deck, a login to the old system, or
+  nothing at all. It classifies what arrived, audits it against fourteen dimensions, fills the spec
+  slot at <code>00-inputs/PRD.md</code>, and starts a substitute path if there is no real spec.
+</p>
+
+<h3>Joining a project already running</h3>
+<pre>/phase-status</pre>
+<p>
+  The standup view: current phase, open blockers, next gate and its unmet exit criteria, stale
+  artifacts with the dependency that staled them, the conformance headline, and the next three
+  concrete actions with their owning agents.
+</p>
+
+<div class="box">
+  <span class="lbl">The one habit that matters most</span>
+  <p>When you paste notes, forward an email, or relay a call, <strong>say who said what</strong>.
+  The system can do nothing honest with "the client wants X". It can do a great deal with
+  "[DA] said X on 14 March, and [DOC:4.2] says the opposite".</p>
+</div>
+
+<h2 id="s-1-5">1.5 Repository layout</h2>
+
+<div class="flow">CLAUDE.md            orchestrator: state machine, routing, gates, rework, conformance cadence
+GUARDRAILS.md        global rules; every agent loads this; overrides everything else
+docs/                USAGE.md, SKILL-INDEX.md, and this guide
+config/              PROJECT_CONFIG and STATE templates, copied per project
+.claude/agents/      14 subagents, one file per role
+.claude/commands/    9 slash commands
+.claude/skills/      34 skills, one folder each, SKILL.md plus references/ for depth
+templates/           16 artifact templates the skills reference
+shared-specs/        design-system / EngineeringSpec / CodeReadability (cross-project)
+workspace/           _TEMPLATE/ skeleton with placeholders, plus one folder per project</div>
+
+<p>
+  Inside a project workspace, folders are numbered in the order the process fills them, so the
+  directory listing is itself a progress indicator:
+</p>
+
+<div class="flow">workspace/{project}/
+  PROJECT_CONFIG.md   the adaptation variables; routing reads this
+  STATE.md            live ledger: phase, gates, freshness, rework log, risks, conformance
+  00-inputs/          PRD.md (the spec slot, never absent), spec-intake.md, assumptions.md,
+                      audit/, client materials (read-only once filed)
+  10-discovery/       anchor-analysis, glossary, questions, transcripts/, problem-statements,
+                      solution-hypotheses, open-questions, derived-brief
+  20-research/        incumbents/, research-notes/, kb-index.md, client/ authority/ external/
+  30-design-language/ style-guide.md, skills-md/, prompts/
+  40-models/          as-is/, to-be/, flow-optimization/, erd.md, process-breakdown.md,
+                      ia.md, ia-validation.md, userflows/, sitemap.md
+  50-prototype/       prompt-used.md, build-notes.md, the build; ARCHIVED/ after Gate 1
+  60-requirements/    prd-draft.md, refined-requirements.md, prioritized-features.md,
+                      traceability.md
+  70-hifi/            {feature}/spec.md, {feature}/content.md, status-mapping.md, critiques/
+  80-gates/           gate reports, pre-gate critiques
+  90-handoff/         manifest.md, walkthrough-notes.md
+  conformance/        dated conformance snapshots</div>

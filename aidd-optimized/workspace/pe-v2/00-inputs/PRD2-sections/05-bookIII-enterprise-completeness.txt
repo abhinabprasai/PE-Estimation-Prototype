@@ -1,0 +1,560 @@
+=== PAGE 174 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 174 of 312 
+Distribution	List Role Access Level Entity Engineering Lead Full Access PE Transformer Development Partner Team Full Access PE Transformer IT / Infrastructure Lead Full Access 
+PE Transformer QA Lead Full Access PE Transformer Controller / Finance Review & Comment PE Power Grids Project Management Read Only PE Transformer 
+1.	Purpose	and	Coverage	Map This Book supplies the enterprise architecture layer of the specification. Functional depth alone does not constitute an enterprise 
+build package. The flows must be proven closed across modules, and the platform, security, operational, planning, global and delivery requirements must exist as controlled 
+content. This Book carries them. It is deliberately cross-cutting: it specifies behavior that spans the Inventory and Accounting specifications, Book I and Book II rather than 
+repeating any of them. Ref Requirement Specified In P0-01 Version and change control, closure map Version and change control governed through the build package manifest; this 
+table is the requirement to section map P0-02 Cross-volume flow closure matrix Part A: eight flows, each specified against the fifteen field closure template P0-03 Integration and 
+transaction architecture Part B P0-04 Security architecture Part C P0-05 Resilience and operations Part D P0-06 Finite scheduling and CTP requirements Part E, including the 
+explicit go-live boundary statement P0-07 Multi-plant, intercompany and global model Part F P0-08 CAD/PDM/PLM integration specification Part G P0-09 Test, migration, cutover and 
+acceptance plan Part H Scope statement. This package carries the Phase 1 build scope with an architected path to the target state. Capabilities phased beyond first go live are 
+listed in each Part with their trigger conditions and are specified at module depth in Book IX. External descriptions must use the benchmark language on the cover and nothing 
+stronger. Build Note: Executed test evidence and executed sign off cannot be supplied by any document. Part H defines the traceability structure, the test classes and the 
+acceptance gates so that evidence accumulates during the build. The sign off pages must remain blank until the named approvers execute them. 1.1	Reading	Conventions 
+
+=== PAGE 175 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 175 of 312 
+• Abbreviations: INV (Inventory & Warehouse Spec V3.0, external), ACC (Accounting Spec V2.0, external), MFG (Book I), MM (Book II). • Journal template numbers #1 to #38 refer to the 
+unified posting map (INV Section 12, ACC Section 28, MFG Part J); MM postings reference the account determination matrix (MM Part B). • Interface names use the catalog in Part B §3; 
+test case ranges use the scheme in Part H §2. • Requirement IDs: this volume assigns the package-wide scheme REQ-{VOL}-{SECTION}-{SEQ}; Part H §2 defines how existing volume content 
+maps into it without rewriting the volumes.  
+
+=== PAGE 176 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 176 of 312 
+PART	A CROSS-VOLUME	FLOW	CLOSURE	BOOK Each flow below is specified against the full fifteen field closure template. Every field cites the controlling specification section 
+so the closure is verifiable, and every flow carries a reserved test-case range that Part H binds into the traceability matrix. A flow is accepted as closed only when its test 
+range shows passing evidence for every row class: happy path, partial, cancellation, reversal, late posting, concurrency, integration failure, security and reconciliation. 
+FL-01	—	Make-to-Stock	Order-to-Cash Closure Field Specification 1. Flow and objective Sell stocked components and standard transformers from FG with credit-safe, 
+tax-correct, reconciled cash closure 2. Trigger and prerequisites Confirmed SO (MFG Part B §4.6) for MTS lines; customer Active with Bill-To/Ship-To; price resolved (MFG Part A 
+§4.4); credit check passed (MFG Part B §2.2) 3. Source document and owner Sales Order; owner: Sales Admin until Confirmed, then fulfillment owned by Warehouse (pick/pack/ship) and 
+Finance (invoice to cash) 4. Status transitions and approvals SO lifecycle per MFG Part B §4.6; shipment statuses per §5; invoice/payment statuses per ACC 3/5; approvals: credit 
+release (Finance), price-floor breaches (MFG Part I §6.3) 5. Master data dependencies Material Sales view + price rows (MM §3.12/MFG A §4), customer commercial+tax profile, warehouse 
+strategies (MM §3.9), tax nexus config (MFG A §11.4) 6. Inventory and valuation effects Reservation at confirm; pick/pack no GL; PGI: DR COGS / CR FG at standard (template #25); 
+packaging backflush #27 7. Financial postings Invoice: DR 1200 AR / CR 4100 + 2300 (ACC 3, Avalara commit per MFG A §11.2); cash application ACC 5; freight accrual #26; 
+discounts/deductions per ACC 4 credit memo rules 8. Quality and traceability gates Pre-shipment inspection gate blocks PGI (INV 15.3, E-OM-07); CoC auto-generation (INV 15.5); 
+serial ship status + customer/site write (MFG Part F SP-18) 9. Interface contract and boundary IF-04 sales-order events, IF-07 shipment events, IF-09 invoice-request (Part B §3); 
+PGI is one atomic transaction: stock decrement + serial update + journal + invoice request row via transactional outbox (Part B §2.3) 10. Timeout, retry, duplicate, recovery 
+Invoice-request consumer idempotent on shipment ID; Avalara failover per MFG A §11.1 step 6 (rate override + 15-min recalc queue); scan offline queue per MFG Part F §2; duplicate 
+PGI structurally impossible (single state transition with optimistic lock) 11. Exceptions and reversals Partial shipment (line split per MFG B §4.3); cancellation before PGI 
+releases reservation; post-PGI correction only via RMA (FL-05) or credit/rebill (ACC 4); invoice reversal re-opens revenue via ACC rules; bad debt per ACC 5 write-off with 
+Controller approval 12. Reconciliation and closure Daily: PGI COGS vs FG movement report; monthly: AR subledger = 1200 (ACC 26.2 step 6), revenue vs shipped-not-invoiced report. 
+Closure: all lines Shipped + Invoiced, cash applied or receivable approved open, no open credit requests. Terminal status Invoiced/Closed 13. Security and SoD Sales cannot release 
+credit holds; shipping cannot edit prices; PGI role ≠ invoice-posting role; per ACC 23 + MFG Part B §6 role table 14. Performance and availability PGI round-trip < 2 s P95; invoice 
+request visible to Finance < 1 min; shipping path inside the 99.5% shop-floor availability envelope (Part D §2 service tiers) 
+
+=== PAGE 177 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 177 of 312 
+Closure Field Specification 15. Test range and evidence TC-O2C-001…060: happy path, partial, split, cancel, credit hold, tax failover, PGI concurrency (two users one HU), invoice 
+reversal + rebill, cash application, close reconciliation. Evidence per Part H §4 FL-02	—	Engineer-to-Order	Quote-to-Cash Closure Field Specification 1. Flow and 
+objective Custom transformer from firm quote through design, build, test, ship, milestone billing and revenue closure 2. Trigger and prerequisites Firm quotation Won → SO with ETO 
+lines (config attributes complete); released cost estimate CE-# linked (MFG B §3.2); Estimator + margin approval trail 3. Source document and owner SO line is the commercial 
+anchor; Engineering Request owns design phase (MFG C §2); WO owns build; revenue contract (ACC 24) owns recognition 4. Status transitions and approvals SO §4.6 + ER lifecycle + 
+EBOM/MBOM release approvals + WO §5.3 + milestone approvals (Finance posts each invoice request after evidence review, MFG B §4.4) 5. Master data dependencies Placeholder-to-active 
+materials via MCR (MM §4.2/4.3); work centers and rates (MFG D §2 / I §2); inspection plans FIN type; drawing set released (E-PP-03) 6. Inventory and valuation effects Issues to WIP 
+#28; subcontract legs #34/35; FG receipt at standard #31 into SO-pegged bucket (MM §14.4); PGI #25 7. Financial postings Milestone invoices #37 with ASC 606 recognition per ACC 24 
+(billing plan ≠ revenue timing); WO settlement variances #32; surcharge adjustment at PGI #38 for ship-date-adjusted contracts 8. Quality and traceability gates Customer drawing 
+approval milestone (MFG C §5.2 transmittals); in-process gates per routing; Final Test + FTR (MFG E §4) gates the Production Complete milestone; full genealogy per Part F 9. 
+Interface contract and boundary IF-03 engineering events, IF-05 WO events, IF-06 confirmation postings, IF-09 invoice requests; confirmation posting is atomic: issue + labor + 
+genealogy + WIP journal in one boundary (Part B §2.3) 10. Timeout, retry, duplicate, recovery Milestone triggers are event-driven with idempotent invoice-request creation (unique 
+milestone ID); scan retries per offline queue; costing simulation calls are read-only and safely retryable 11. Exceptions and reversals Drawing rejection loops (transmittal Revise 
+& Resubmit); config change after Design Release only via ECR→Sales Change Order (MFG B §4.5); WO cancellation dispositions; milestone reversal only via credit note with contract 
+re-measurement (ACC 24.2); promise-date change control per Part E §5 12. Reconciliation and closure WIP by order = 1320/1325 (close step 6c); billing plan total = contract value; 
+deferred/unbilled roll per ACC 24.2. Closure: unit delivered, all milestones invoiced, revenue recognized per contract, WO settled to zero WIP, genealogy complete, warranty record 
+active 13. Security and SoD Engineer cannot approve own EBOM release; milestone evidence reviewer ≠ SO owner; costing release ≠ costing mark (MFG NFR SOD set + Part C §4 role model) 
+14. Performance and availability Design-to-release cycle tracked (MFG C §7); scheduling board refresh < 2 s; test-data capture within shop-floor availability tier 15. Test range 
+and evidence TC-ETO-001…080: incl. drawing rejection, ECO mid-build with serial effectivity, shortage-released WO, failed final test + rework + retest, partial milestone, surcharge 
+true-up, contract modification, full close simulation 
+
+=== PAGE 178 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 178 of 312 
+FL-03	—	Procure-to-Pay Closure Field Specification 1. Flow and objective Demand to paid supplier with three-way-match integrity, PPV capture and supplier-account 
+reconciliation 2. Trigger and prerequisites MRP PR / reorder PR / manual PR (MFG G §3); source resolved per MM §7.5; vendor Active; material purchasable per MM type matrix 3. Source 
+document and owner PR → PO (Buyer owns to Confirmed); GRN owned by Receiving (INV 5.1/5.6); invoice and payment owned by AP (ACC 6/8) 4. Status transitions and approvals PO 
+approval ladder (MFG G §1: Buyer ≤ $25k → PM ≤ $250k → Controller → CFO > $1M); GRN QI routing; match exceptions to AP approval queue (ACC 22) 5. Master data dependencies Material 
+Purchasing view + info record + source list (MM §3.7/7.2/7.4); AVL qualification (MFG G §2.2); quality clauses; tax profile (MFG A §11.3) 6. Inventory and valuation effects GRN: DR 
+13xx (or DR at MAV) / CR 2110 GR/IR with PPV #—per INV Sec 12 #3; QI Hold until inspection; landed cost true-up INV 5.6.1; consignment fill-up posts nothing (MM §14.2) 7. Financial 
+postings Three-way match: DR 2110 / CR 2100 with IPV to 5210; payment run ACC 8; use-tax accrual per vendor profile; subcontract legs #34/35 with 5260 variance 8. Quality and 
+traceability gates Incoming inspection per plan (INV 6.1); certificates enforced (E-QM-06); batch provenance captured (heat #, CoO per MM §15.1); vendor rating updates from IQC 9. 
+Interface contract and boundary IF-01 PO transmission (email PDF Phase 1, EDI Phase 2 field reserved), IF-02 vendor confirmation capture, IF-08 GRN events, IF-10 AP match; GRN is 
+atomic: stock + batch/serial + QI + journal + match-basis row 10. Timeout, retry, duplicate, recovery Duplicate GRN prevented by PO-line open-quantity lock; duplicate vendor 
+invoice by (vendor, invoice #) uniqueness (ACC 6); match retries idempotent; over-receipt beyond tolerance blocked E-MM-11 11. Exceptions and reversals Over/under receipt, RTV 
+with GRN reversal and PPV mirror (MFG A §8.4), invoice variance routing, PO cancellation exposure notes, short-close with reason (MFG G §1), consignment true-up 5215 12. 
+Reconciliation and closure GR/IR aging report: 2110 items > 30 days worked weekly; supplier statement reconciliation monthly (ACC 6); PPV/IPV visible in CVA. Closure: PO lines 
+Received + Matched/Closed, GR/IR cleared, payment executed or scheduled, no open NCR/SCAR against the receipts 13. Security and SoD PO create ≠ GRN post ≠ invoice approve ≠ payment 
+release (four-way separation, ACC 23 + MFG NFR); vendor bank-detail changes dual-approved (ACC fraud controls) 14. Performance and availability GRN scan round-trip < 400 ms P95; 
+match job latency < 5 min; payment runs inside close calendar windows 15. Test range and evidence TC-P2P-001…070: incl. partial receipts across schedules, RTV, price/qty match 
+variances, duplicate-invoice attempt, consignment fill-withdraw-settle, subcontract loop, GR/IR aging clearance, supplier reconciliation FL-04	—	Plan-to-Produce Closure 
+Field Specification 1. Flow and objective Demand netting to settled production with zero residual WIP and complete genealogy 
+
+=== PAGE 179 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 179 of 312 
+Closure Field Specification 2. Trigger and prerequisites MRP run inputs (MFG D §3.1); released MBOM + routing (E-PP-01); materials Active; standards released (warning otherwise + 
+CVA exception) 3. Source document and owner Planned order (Planner) → WO (Production Scheduler owns to Close); confirmations owned by operators at WCs 4. Status transitions and 
+approvals WO lifecycle MFG D §5.3 with release gates §5.2; Release Short override (Planner flag); settlement approval at close; reopen requires Controller 5. Master data 
+dependencies Material Planning + Production views (MM §3.6/3.8); WC capacity + rates; issue methods; serial/batch profiles (MM §15) 6. Inventory and valuation effects 
+Issues/backflush #28; scrap #30; subcontract #34/35; FG receipt #31; rework via 1325 (MFG D §9) 7. Financial postings Labor/overhead absorption #29; settlement variance split #32 
+to 5220–5250; CC/PC derivation rules 2–3 (MFG H §3) 8. Quality and traceability gates QC checkpoint ops block completion (MFG D §4); wrong-material scans hard-block E-PP-07 with 
+auto-NCR on override; genealogy rows per SP-08…SP-13 9. Interface contract and boundary IF-05 WO events, IF-06 confirmation postings, IF-11 MRP proposals; MRP run publishes a 
+run-ID-stamped proposal set atomically (all-or-nothing swap, no partial plan visible) 10. Timeout, retry, duplicate, recovery Confirmation posting idempotent on (WO, op, event 
+UUID) — offline queue replay-safe; MRP run recovery = rerun (regenerative, side-effect free until conversion); reservation races resolved by row locks at firm-up 11. Exceptions and 
+reversals Shortage release, rework loops, WO cancellation dispositions (finish/stop-scrap/hold per MFG B §4.5), confirmation correction (reversal confirmation with mirror postings, 
+reference to original), settlement reversal on reopen 12. Reconciliation and closure WIP report = GL 1320+1325 (close 6c); settled orders leave exactly zero WIP (MFG I §4 
+invariant); unsettled Completed > 5 days breach (close 6d). Closure: TECO with variances posted and genealogy complete 13. Security and SoD WO confirm ≠ settlement approve; scrap 
+beyond threshold needs supervisor + reason; standards never manually editable 14. Performance and availability Full MRP < 30 min; dispatch refresh < 2 s; terminal path in top 
+availability tier with 4-hour offline queueing 15. Test range and evidence TC-PTP-001…070: incl. backflush vs direct-issue mix, batch WC oven multi-order confirm, offline queue 
+replay with conflict, mid-order ECO, scrap and rework, settlement math property test (invariant), WIP reconciliation FL-05	—	RMA	and	Warranty	Resolution 
+Closure Field Specification 1. Flow and objective Authorized return through disposition and financial settlement with linked-document closure (per MFG Part A §3, closure fields 
+added here) 2. Trigger and prerequisites Approved RMA per policy matrix §3.10; reference document or No-Reference exception path 3. Source document and owner RMA; Customer Service 
+owns to Authorized; Receiving/Quality own the middle; Finance owns settlement documents 4. Status transitions and approvals Lifecycle §3.8; warranty adjudication mandatory when 
+claimed; disposition approvals per class; Controller for credits > $50k, goodwill, reopen 
+
+=== PAGE 180 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 180 of 312 
+Closure Field Specification 5. Master data dependencies Serial warranty windows; customer credit state; RMA inspection plans; restocking policies 6. Inventory and valuation 
+effects Receipt #17 to 1335 (or non-valuated customer property per ownership rule §3.5); restock #18; scrap #20 7. Financial postings Credit note #19 with restocking fee 4910; 
+warranty repair settlement #21 against 2610 reserve; billable repair #22; replacement shipment #23; reserve accrual #24 monthly 8. Quality and traceability gates Return inspection 
+with teardown checklist (RC3); NCR forced for manufacturing/supplier causes; SCAR path; genealogy return events SP-19 9. Interface contract and boundary IF-12 RMA events feeding 
+credit note creation, RWO creation and replacement SO — each an idempotent consumer keyed on RMA line disposition ID 10. Timeout, retry, duplicate, recovery Disposition executes 
+outcomes as separate retry-safe steps; partial execution visible on Settling status with per-document state; no outcome executes twice (disposition ID uniqueness) 11. Exceptions 
+and reversals Full register in MFG A §3.9 (no-reference, unauthorized extra, credit hold, wrong serial, freight claims); credit note reversal via rebill; reopen window 30 days 
+Controller 12. Reconciliation and closure Close checklist 6e: no Settling RMAs with posted-document gaps; warranty reserve adequacy 9b; AR effects reconciled in ACC. Closure: 
+every line terminal disposition + all linked documents posted and closed 13. Security and SoD Adjudicator ≠ credit approver; receiving cannot disposition; reopen restricted 14. 
+Performance and availability Receipt-to-inspection SLA 5 days with alerting; settlement documents created < 1 min after disposition approval 15. Test range and evidence 
+TC-RMA-001…050: all four return classes, warranty approve/deny, every disposition outcome, credit-hold block, unauthorized return, reopen, reserve overflow to 6300 FL-06	
+—	Period	Close Closure Field Specification 1. Flow and objective Monthly operational and financial close with subledger-to-GL tie-out across all volumes 2. Trigger and 
+prerequisites Close calendar (ACC 26.1); soft close at day −2 per MFG A §9.3 3. Source document and owner Close checklist instance (ACC 26.2, extended by MFG Part J and MM); 
+Controller owns; module owners execute their steps 4. Status transitions and approvals Period Open → Soft → Hard per matrix MFG A §9.2; reopen dual-control Controller + CFO 5. Master 
+data dependencies Allocation cycles + SKFs current (MFG H §5); accrual templates; valuation-class mapping current (MM §5) 6. Inventory and valuation effects Count postings settle; 
+valuation snapshot at inventory close (INV 8.3); E&O reserve run quarterly (MM §17.3) 7. Financial postings Allocations #36; warranty accrual #24; close JEs per ACC; no 
+back-posting into Closed (E-PER-01) 8. Quality and traceability gates None blocking; quality-cost reporting feeds dashboards 
+
+=== PAGE 181 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 181 of 312 
+Closure Field Specification 9. Interface contract and boundary IF-13 close-checklist automation events: each auto-validated step queries its module report API; steps are read-only 
+checks plus explicitly posted close JEs 10. Timeout, retry, duplicate, recovery Checklist steps re-runnable; allocation rerun = reversal + repost with run ID (MFG H §5); failed 
+batch steps alert and hold the gate, never silently pass 11. Exceptions and reversals Late postings via Soft-Close warnings; corrections in next period with Reference Date; reopen 
+protocol with tagged postings (MFG A §9.3) 12. Reconciliation and closure Steps 5b, 6, 6b–6e, 9b as specified (MFG Part J); MM adds by-valuation-class tie-out (MM §13). Closure: Hard 
+Close with zero unresolved checklist items and archived close report 13. Security and SoD Step executor ≠ step approver where flagged; reopen dual-control; allocation posting 
+restricted to Controller 14. Performance and availability Close-critical batch jobs complete inside the close window; target day+3 hard close by M7 exit 15. Test range and 
+evidence TC-CLS-001…040: full close simulation (M7 parallel run), late-posting handling, reopen with audit, allocation rerun, tie-out failures surfaced, checklist gate enforcement 
+FL-07	—	Intercompany	Supply Closure Field Specification 1. Flow and objective Cross-company sale/transfer between PE entities with transfer pricing, IC AR/AP and 
+elimination-ready postings. Phase: model live at go-live for the PE Grid Components ↔ PE Transformer merchandise flow; full multi-plant manufacturing transfers activate with plant 
+2 (Part F) 2. Trigger and prerequisites IC relationship configured (Part F §3); transfer price list active; both entities open periods 3. Source document and owner Paired 
+documents: selling-entity SO (auto) ↔ buying-entity PO; owner: initiating entity buyer/CSR; Finance owns IC reconciliation 4. Status transitions and approvals Standard SO/PO 
+lifecycles; IC price deviations from transfer price list require Controller approval on both sides 5. Master data dependencies Material extended to both entities (MM §3.3 Extend 
+action); transfer price rules (Part F §4); IC partner mapping in CoA (ACC intercompany accounts) 6. Inventory and valuation effects Seller PGI at transfer price basis; buyer GRN at 
+PO (transfer) price into own valuation; in-transit bucket 1350 between 7. Financial postings Seller: DR IC AR / CR IC Revenue + tax as applicable; buyer: DR inventory / CR IC AP; 
+profit-in-inventory tracked via transfer-margin field for elimination (ACC consolidation feed); elimination itself executes in ACC group reporting 8. Quality and traceability 
+gates Genealogy continues across entities (serial retains chain, entity stamped per event); certificates travel with the transfer 9. Interface contract and boundary IF-14 
+intercompany pairing: one business event creates both documents atomically or neither (single transaction, both entity contexts); no async pairing that could orphan one side 10. 
+Timeout, retry, duplicate, recovery Pairing idempotent on source event; mismatch monitor (order pairs whose values or statuses diverge) alerts Finance daily 11. Exceptions and 
+reversals Partial shipments mirror on both sides; returns create paired reversal documents; FX differences post to ACC 7100 at settlement 
+
+=== PAGE 182 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 182 of 312 
+Closure Field Specification 12. Reconciliation and closure Monthly IC reconciliation: IC AR(seller) = IC AP(buyer) per pair, differences worked before Hard Close (ACC 26.2 IC 
+step); profit-in-inventory schedule ties to elimination entries. Closure: pair settled and reconciled 13. Security and SoD Transfer price maintenance restricted to Controlling; 
+entity data isolation per Part C authorization model 14. Performance and availability Pair creation synchronous < 2 s; reconciliation report on demand 15. Test range and evidence 
+TC-ICO-001…030: pair creation/atomicity, partial ship, return pair, FX difference, mismatch detection, elimination schedule accuracy FL-08	—	Recall	and	
+Suspect-Batch	Campaign Closure Field Specification 1. Flow and objective Contain, notify, recover and disposition all product affected by a suspect batch or serial population, 
+with regulator-ready evidence 2. Trigger and prerequisites Quality Manager opens a Recall Campaign from a suspect batch/serial (source: NCR, field failure, supplier notice); 
+campaign object RCL-{YYYY}-{SEQ:3} (new, this volume) 3. Source document and owner Recall Campaign; Quality Manager owns; executive approver for external notifications 4. Status 
+transitions and approvals Identify → Contain → Notify → Recover → Disposition → Effectiveness → Closed; external notification text requires dual approval (Quality Manager + executive) 
+5. Master data dependencies Complete genealogy (MFG Part F §5); customer/site data on serials; batch provenance (MM §15.1) 6. Inventory and valuation effects Contain: automatic 
+Blocked status on all on-hand affected stock (batch/serial holds INV 6.2, mass-applied by the campaign); recovered units via RMA class Recall (freight PE-pays per reason code) 7. 
+Financial postings Recall RMAs post per FL-05 templates; campaign cost accumulation (freight, credits, rework) tagged with campaign ID for total-cost reporting; reserve raise 
+proposal if material (Controller) 8. Quality and traceability gates Population derivation: forward trace from the suspect batch (< 10 s per tree, MFG F §5) producing the affected 
+list: serials, customers, sites, in-house stock, WIP, in-transit; effectiveness check requires 100% population accounted (recovered / field-corrected / documented-exception) 9. 
+Interface contract and boundary IF-15 campaign actions: mass-hold command, customer notification list export, RMA batch creation — each executed as an auditable bulk job with 
+per-item result log 10. Timeout, retry, duplicate, recovery Bulk jobs resumable; per-item idempotency (a serial already held is a no-op, logged); notification list versioned as 
+population refines 11. Exceptions and reversals Unreachable customer procedure (documented attempts, escalation); partial recovery accepted only with Quality Manager + executive 
+sign-off; campaign scope expansion re-runs population derivation with diff 12. Reconciliation and closure Closure condition: population fully accounted, dispositions complete, 
+effectiveness check passed, total-cost report issued, CAPA linked and in progress or closed. Campaign record and evidence retained per genealogy retention (10 years minimum, Part 
+D §6) 13. Security and SoD Campaign creation restricted; external notification dual-approved; population data export logged (contains customer PII, Part C §6) 
+
+=== PAGE 183 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 183 of 312 
+Closure Field Specification 14. Performance and availability Population derivation < 60 s for worst-case multi-level batch; mass-hold execution < 10 min for 10k units 15. Test 
+range and evidence TC-RCL-001…030: annual recall drill is an operating requirement — mock campaign end-to-end incl. population accuracy audit against seeded genealogy, mass-hold, 
+notification list, recovery RMAs, effectiveness gate Build Note: The Recall Campaign object (RCL) is the one net-new functional object introduced by this Book; it is a thin 
+orchestration layer over existing holds, RMA, genealogy and notification exports, specified here so recall closes as a first class flow. Build effort sits in M5 alongside RMA.  
+
+=== PAGE 184 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 184 of 312 
+PART	B INTEGRATION	AND	TRANSACTION	ARCHITECTURE This Part turns the integration matrices of the functional Books into executable contracts. It defines the platform 
+standards every interface must obey, the transaction and consistency model, the interface catalog with ownership and reconciliation, and the operational tooling. 
+2.	Platform	Standards 2.1	API	Standard Standard Specification Style and versioning REST over HTTPS, JSON payloads; URI-versioned (/api/v1/...); breaking changes 
+require a new major version; N and N−1 supported concurrently; deprecation announced ≥ 90 days with response-header warnings and consumer-usage reporting before shutdown Schemas 
+Every endpoint and event carries a published JSON Schema in the contract registry (source-controlled with the code); payloads validate at the boundary; unknown fields ignored on 
+read, never emitted undocumented Authentication OAuth2 client-credentials for system callers; user-context calls carry the OIDC access token (Part C §2); every token scoped to 
+named interfaces; no shared secrets in code (Part C §7) Authorization The API layer enforces the same role/entity/plant authorization as screens (single policy engine, Part C §4); 
+no “trusted internal caller” bypass Idempotency All mutating endpoints require an Idempotency-Key header (UUID); the platform stores (key, caller, request hash, response) for 7 days 
+and replays the stored response on retry; mismatched hash with same key returns 409 Errors RFC 7807 problem+json: type, title, status, detail, correlation ID, and the domain error 
+code (the E-codes from the functional volumes travel here); 4xx never retried by clients, 5xx retried per policy below Pagination, filtering Cursor-based pagination; filter 
+grammar consistent with listing screens; hard response cap with explicit continuation 2.2	Event	Standard Standard Specification Transport and format Durable log-based 
+broker (Kafka-class) with JSON envelopes: event_id (UUID), event_type + schema version, occurred_at, producer, correlation_id, causation_id, entity context, payload 
+
+=== PAGE 185 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 185 of 312 
+Standard Specification Ordering Partition key = business object key (material_id, wo_id, so_id…) guaranteeing per-object ordering; consumers must not assume cross-object order 
+Delivery and idempotency At-least-once delivery; every consumer keeps a processed-event store keyed on event_id (or a natural idempotency key named in the contract) — duplicate 
+deliveries are no-ops by construction Retry and dead-letter Consumer retry with exponential backoff (1 s → 5 min cap) for 24 h, then dead-letter queue; DLQ items alert the owning 
+team and are replayable from the integration console (§4) after cause resolution; DLQ replay preserves original event_id so idempotency still holds Replay Topics retain 30 days; 
+full-history rebuild for read models via snapshot + replay procedure documented per consumer Schema evolution Additive changes only within a version; consumers tolerate unknown 
+fields; breaking change = new event_type version, dual-published during migration window 2.3	Transaction	and	Consistency	Model • Atomic business transactions: the 
+boundaries named in Part A field 9 (GRN, PGI, confirmation, IC pairing, disposition outcomes) execute as single database transactions covering stock, tracking, journal and outbox 
+rows together. No business event is ever half-posted. • Transactional outbox: events and cross-module commands are written in the same transaction as the state change and published 
+by a relay with at-least-once semantics. Direct dual-writes (DB + broker in separate steps) are prohibited. • Concurrency: optimistic locking (version column) on documents; 
+pessimistic row locks only inside posting transactions (reservation firm-up, stock decrement, number-series allocation). Stock rows use atomic conditional decrements — 
+negative-stock races are structurally impossible where policy forbids negatives. • Compensating actions: where a saga spans modules (RMA disposition outcomes, IC pairing rollback 
+on partial config error), each step has a named compensator specified in the interface contract; sagas surface in the console with step-level state. • Clock and sequence: all 
+timestamps UTC server-side; document numbers from gap-free series where finance requires (invoices) and gap-tolerant elsewhere (performance), per series configuration. 
+3.	Interface	Catalog Every integration in the four volumes maps to a cataloged contract. Owner = the team accountable for the contract, its monitoring and its 
+reconciliation. Contracts live in the registry with schemas; this table is the governance index. ID Interface Type Producer → Consumer Owner Reconciliation Control IF-01 PO 
+transmission to vendor Email PDF (Phase 1) / Purchasing → Vendor Purchasing Unconfirmed-PO report > 3 days (MFG G §1) 
+
+=== PAGE 186 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 186 of 312 
+ID Interface Type Producer → Consumer Owner Reconciliation Control EDI 850 (Phase 2) IF-02 Vendor confirmation capture Screen / EDI 855 (Phase 2) Vendor → Purchasing Purchasing 
+Confirmed-vs-need-date exception board IF-03 Engineering lifecycle events Events ENG → MM/PP/CST Engineering IT Exceptions panel: EBOM-ahead, placeholder aging IF-04 Sales order 
+events Events OM → PP/INV/ACC Sales IT Open-order book vs pegged supply daily IF-05 WO lifecycle events Events PP → OM/INV/CST Production IT WIP report = GL tie (close 6c) IF-06 
+Confirmation postings Internal atomic + events Shop floor → GL/genealogy Production IT Scan telemetry vs posted confirmations daily count match IF-07 Shipment/PGI events Events OM → 
+ACC/INV Sales IT Shipped-not-invoiced report IF-08 GRN events Events INV → ACC/QM/PUR Inventory IT GR/IR aging (FL-03 field 12) IF-09 Invoice requests Outbox command OM/RMA → ACC 
+Finance IT Request-to-invoice latency + orphan report IF-10 Three-way match basis Internal contract INV/PUR → ACC Finance IT Match exception queue age IF-11 MRP proposal set Batch 
+publish (run ID) MRP → PUR/PP Planning IT Proposal count + exception count per run logged and trended IF-12 RMA disposition outcomes Outbox commands RMA → ACC/PP/OM Sales IT Close 
+step 6e (Settling gaps) IF-13 Close checklist automation Read APIs ACC → all modules Finance IT The checklist itself IF-14 Intercompany pairing Atomic internal Entity A ↔ Entity B 
+Finance IT Monthly IC recon (FL-07) IF-15 Recall campaign bulk actions Bulk jobs QM → INV/OM/RMA Quality IT Per-item result log; population audit IF-16 Tax engine (Avalara) 
+External REST OM/ACC → Avalara Finance IT Tax reconciliation report (ACC 19.3) + recalc queue IF-17 CAD/PDM connector External (Part G) PDM ↔ ENG Engineering IT Sync conflict queue 
+(Part G §4) IF-18 Identity provider OIDC/SAML + SCIM IdP → platform IT Security Access recertification (Part C §3) IF-19 Label/print service Internal REST All → printers Plant IT 
+Failed-print queue with reprint audit IF-20 Scale/instrument capture Station integration (Phase 2) Devices → QM/Pack Plant IT Manual-entry fallback flagged rows 
+
+=== PAGE 187 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 187 of 312 
+Build Note: Rule for the build: no module-to-module dependency exists unless it appears in this catalog with a contract in the registry. A developer adding an uncataloged 
+integration is making an architecture change and must extend this table through change control. 4.	Integration	Operations	Console Element Specification Message 
+monitor Per interface: throughput, lag, error rate, DLQ depth, oldest unprocessed age; drill to individual message with full envelope and correlation chain DLQ management Inspect, 
+edit-and-replay (edit rights restricted + audited), bulk replay after fix, discard with mandatory reason (discard of a financially relevant command requires Controller) 
+Correlation tracing correlation_id propagates from originating user action through every API call, event, job and journal line; a single search reconstructs the distributed flow 
+(feeds the ≤ 3 clicks auditability NFR) Reconciliation reports The per-interface controls in §3 run scheduled; failures raise incidents per Part D §5, not emails that can be missed 
+Contract tests Every contract has producer and consumer tests in CI (schema + behavior incl. idempotent-replay test); a contract change that breaks a consumer test cannot merge  
+
+=== PAGE 188 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 188 of 312 
+PART	C SECURITY	AND	IDENTITY	ARCHITECTURE RBAC role tables exist throughout the functional Books. This Part supplies the enterprise identity, authorization, 
+data protection and security-operations architecture those tables plug into. 
+2.	Identity	and	Authentication Control Specification SSO OIDC (primary) with SAML 2.0 fallback against the corporate IdP (Entra ID assumed; confirm at kickoff — the 
+design is IdP-agnostic). No local passwords for workforce accounts; local break-glass accounts only per §5 MFA Enforced at the IdP for all interactive access; step-up 
+authentication (re-prompt) for: payment release, vendor bank changes, period reopen, matrix release (MM §5.3), user-admin actions Provisioning SCIM 2.0 from the IdP: 
+joiner/mover/leaver automation; role assignment via IdP groups mapped to ERP roles; leaver deactivation SLA 1 hour from HR trigger; orphan-account report weekly Shop-floor 
+sessions Kiosk terminals: device-bound certificate + operator badge scan opens a scoped session (WC-limited, per MFG D §6); inactivity lock 10 min (config per station class); 
+badge-out on operation complete optional per plant policy; no shared browser sessions Service accounts OAuth2 client-credentials per integration (one client per IF-nn); secrets in 
+the vault (§7), rotated ≤ 90 days, usage-monitored; no user-account API usage by systems External parties Vendors/customers (portal phases) authenticate through a separate external 
+IdP tenant; internal and external identities never share a namespace 
+3.	Authorization	Model • One policy engine, three layers: Role (what functions), Scope (which entity/plant/warehouse/cost-center rows), Field group (which attributes, per MM 
+§3.2 ownership and ACC field rules). Screens, APIs and events all consult the same engine; there is no UI-only hiding of data (the blind-count rule INV/MFG A §7.3 is the model 
+everywhere). • Roles are the ones named per module in the four volumes, catalogued centrally with their permission sets; new roles or permission changes ride change control with 
+SoD analysis. • Separation of duties: the SoD rule set consolidates every pair named in the volumes (PO create vs GRN post vs invoice approve vs payment release; WO confirm vs 
+settlement; price edit vs approve; count vs approve; matrix edit vs release; MCR task vs activation). The engine blocks toxic combinations at role-assignment time, not just at 
+transaction time; exceptions require CFO approval with expiry date. • Row-level scope: every query filters by the user’s entity/plant grants server-side; documents render 
+cross-entity only for explicitly granted group roles (Controller group view). • Restricted documents: export-controlled drawings (MFG C §5.1 Security Class) require the EAR user 
+flag; access logged individually. • Recertification: quarterly access review per role owner with attestation; failed attestations auto-revoke; report retained as audit evidence. 
+4.	Privileged	Access	and	Break-Glass 
+
+=== PAGE 189 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 189 of 312 
+Control Specification PAM Infrastructure and database access only through the PAM broker: just-in-time elevation, ticket-linked, session-recorded; standing admin access prohibited 
+in production Production data access Developers have no default production access; diagnostic access via time-boxed grants with masked PII views unless the ticket justifies raw 
+access (Controller/ISO approval for finance data) Break-glass Two sealed local emergency accounts (app + infra), credentials in escrow, use alarms the security channel immediately 
+and forces post-incident review + rotation Change execution Deployments run from CI/CD service identities (Part D §4); humans do not apply schema or config changes by hand in 
+production 
+5.	Data	Protection Control Specification Encryption in transit TLS 1.2+ everywhere including internal service traffic and printer/scanner websocket wedge; no plaintext 
+listeners Encryption at rest Storage-level encryption for databases, object storage and backups; column-level encryption for bank details and personal data fields (key separation 
+from storage keys) Key and secret management Central vault: application secrets, API clients, encryption keys; automatic rotation schedules; access audited; certificates 
+auto-renewed with expiry alerting ≥ 30 days PII inventory Personal data catalog: employee operator data (badges, labor records), customer contacts, vendor contacts; retention and 
+access rules per class; recall exports (FL-08) logged as PII disclosures Export control EAR-restricted document class enforced (Part C §3); denied-party screening on new 
+customers/vendors (Phase 2 service via IF catalog extension) with interim manual checklist at onboarding Data residency Phase 1 US region deployment; residency constraints 
+re-evaluated at international expansion (Part F trigger) 
+6.	Security	Operations • Security event logging: authentication events, authorization denials, privilege use, SoD exception use, data exports, break-glass, admin 
+changes — shipped to the SIEM with 13-month retention minimum. • Alerting: brute-force patterns, impossible travel (IdP), privilege anomalies, DLQ tampering, mass-export anomalies; 
+alerts route to the incident process (Part D §5) with security severity mapping. • Vulnerability management: dependency scanning in CI, monthly platform patching windows, annual 
+penetration test whose findings enter the risk register with owners and dates; criticals block go-live (Part H gate). • Incident response: documented runbook with roles, evidence 
+preservation, notification decision tree (customers, insurers, counsel); tabletop exercise annually alongside the recall drill.  
+
+=== PAGE 190 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 190 of 312 
+PART	D RESILIENCE,	AVAILABILITY	AND	OPERATIONS Targets are set per business service, not as one global number, because the shop floor stopping is a different event 
+from a report being slow. 
+2.	Service	Tiers,	RTO	and	RPO Tier Business Services Availability Target RTO RPO T1 — Production-critical Shop-floor terminal, scanning, label printing, GRN/issue/PGI 
+posting, WO confirmations 99.5% during production hours (existing target, now formalized as T1) 
+1 hour 0 (committed transactions); ≤ 4 h of offline scan queue replays after recovery per MFG F §2 T2 — Business-day critical Order entry, purchasing, engineering, quality screens, 
+MRP on-demand, costing 99.0% business hours 4 hours 15 minutes 
+T3 — Periodic Nightly MRP, costing runs, allocations, close jobs, reporting/analytics Job-window commitments (below) 24 hours 24 hours (rerunnable jobs) Batch windows: nightly MRP 
+completes by 05:00 plant time; label/scan services never share a maintenance window with production shifts; close-critical jobs have priority lanes in the last 3 and first 3 
+business days of each month. 
+3.	Disaster	Recovery	and	Degraded	Modes Element Specification Topology Primary region multi-zone: database synchronous replication across zones 
+(zero-RPO zone failure); warm standby in a second region with continuous async replication for regional disaster (RPO ≤ 15 min, RTO ≤ 4 h for T1/T2) Backups Continuous WAL archiving 
++ daily full snapshots; 35-day point-in-time recovery; quarterly restore test to an isolated environment with checksum and row-count verification — restore evidence filed in the 
+operations log (Part H gate input) Failover Zone failover automatic; region failover is a decided action (runbook, two-person rule) with DNS cutover and consumer replay from 
+outbox/topics; annual full region-failover exercise in the staging replica Degraded modes Defined per dependency: broker down → outbox accumulates, postings continue, consumers 
+catch up (monitor depth); tax engine down → MFG A §11.1 failover; IdP down → existing sessions continue, break-glass for new critical access; printer down → station failover printer + 
+queued reprints; WAN down at plant → T1 terminals run the 4-hour offline queue, everything else read-only Data integrity on recovery Recovery always replays from the committed log; 
+the outbox pattern (Part B §2.3) guarantees no lost events for committed transactions and idempotent consumers absorb replays 
+4.	Deployment	and	Change 
+
+=== PAGE 191 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 191 of 312 
+• Environments: DEV → TEST (integrated, contract tests) → UAT (business validation, migration rehearsal target) → PROD; configuration promoted as versioned artifacts, never 
+hand-edited upward. • CI/CD: trunk-based with mandatory review; pipeline gates: unit, contract (Part B §4), migration dry-run, security scans; artifacts immutable and signed. • 
+Zero-downtime releases: rolling deploys behind health checks; database migrations expand-and-contract (additive first, code tolerant of both schemas, contraction after soak); 
+feature flags for functional cutover so deploy ≠ release. • Rollback: every release has a tested rollback path (previous artifact + contract-compatible schema); flags allow 
+functional rollback without redeploy; rollback drills part of M7. • Release calendar: T1-affecting releases outside production shifts; close-freeze on finance-touching releases 
+during Hard Close days. 
+5.	Observability	and	Support	Operations Element Specification Telemetry Metrics, structured logs and distributed traces on every service; correlation_id (Part B §4) 
+joins traces to business documents; scan telemetry retained 24 months per MFG F §4 SLOs and error budgets Per NFR: scan round-trip < 400 ms P95, PGI < 2 s, detail load < 1.5 s, MRP 
+< 30 min, traceability tree < 10 s, dispatch refresh < 2 s. Each is an SLO with burn-rate alerting; sustained budget burn freezes feature releases for the offending service until 
+recovered Alerting and incidents Severity matrix (S1: T1 service down or data-integrity suspicion → 15-min response 24×7 during production; S2: T2 degradation → 1 h business hours; 
+S3/S4 queued); on-call rotation; incident timeline, postmortem without blame, action items tracked to closure Job monitoring Batch framework with run history, SLA timers, 
+dependency chains, auto-retry policy and failure escalation; failed close-critical jobs page, never just log Support model Tier 1 (plant super-users, runbook-driven), Tier 2 
+(application support, console access per Part C), Tier 3 (the development partner engineering with SLA per support contract); month-end hypercare roster for the first three closes 
+Runbooks Written per degraded mode and per S1 scenario before go-live (Part H readiness gate item); stored versioned beside the code 
+6.	Capacity	and	Retention • Capacity model: sized for the NFR volumes (MFG Part K §4, MM §20.2) with 3× headroom on scan peaks (shift start bursts) and 5-year growth; 
+load, stress, soak and failover tests against these profiles are Part H test classes, executed in M7 with results filed as evidence. • Data retention: transactional data online 7 
+years; genealogy and quality evidence 10 years minimum (recall support, FL-08); released document files WORM per MFG NFR; scan telemetry 24 months; archives queryable read-only; 
+legal hold flag suspends any purge per object.  
+
+=== PAGE 192 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 192 of 312 
+PART	E FINITE	SCHEDULING	AND	CAPABLE-TO-PROMISE A contractual ETO promise date computed on infinite capacity is not defensible. This Part defines the constraint 
+model, the scheduling engine requirements, the CTP check, the governance around promises, and an explicit statement of what ships at go-live versus what follows. The data model 
+already carries operation durations, calendars, crews and alternates (MFG D), so this is an engine and policy layer, not a redesign. 
+2.	Constraint	Model Constraint Source Data Scheduling Behavior Work center capacity WC capacity model: shifts, hours, parallel stations, efficiency (MFG D §2) Finite 
+buckets per WC per shift; operations consume capacity; overload impossible in the finite plan (only in the released past) Batch resources Oven/vacuum cycle size and hours (MFG D 
+§2) Cycle-level scheduling: orders pack into cycles; a cycle is one capacity consumption regardless of fill Labor and crews Crew size per op/WC; workforce calendar (new: crew 
+roster per WC per shift, maintained by Production Scheduler) Operation needs both machine slot and crew slot; crew shortfall delays exactly like machine shortfall Skills and 
+certifications Operator qualification register (new object QAL-: operator, skill, level, expiry; linked to training records) Ops flagged with required skill schedule only into 
+shifts with a qualified operator; expired certification removes the operator from eligibility automatically (and interlocks the terminal at SP-07 login for flagged ops) Tooling 
+and fixtures Tool register (new object TOOL-: tool, quantity, WC compatibility, maintenance status) Ops declaring a tool requirement consume tool availability; tools in 
+maintenance are unavailable Material availability MRP supply picture incl. confirmed PO dates An operation cannot schedule before its op-mapped components’ availability dates 
+(full-kit by operation, consistent with staging SP-09) Maintenance windows WC status Maintenance (MFG D §2) + planned maintenance calendar (new) Blocked capacity; planned windows 
+visible in what-if before commitment Subcontract capacity Vendor lead times + declared weekly capacity on the AVL row (new field) Subcontract ops schedule against vendor capacity 
+declarations; breach raises buyer exception rather than silent slip 
+3.	Scheduling	Engine	Requirements • Modes: backward from due date (default), forward from release, and bottleneck-centered (schedule the constraint WC first — Test Lab 
+and Vapor Phase Drying are the expected bottlenecks — then subordinate upstream/downstream). • Alternates: alternate WC with efficiency factor (existing field) is engine-selectable 
+under load, logged as a decision; alternate routings are planner-selected only (engineering-controlled, never silent). • Setup families: sequence-dependent setup reduction by 
+grouping (e.g. winding wire gauge families); family definitions per WC maintained by Manufacturing Engineer. 
+
+=== PAGE 193 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 193 of 312 
+• Freeze horizon: inside N days (default 5, per WC) the schedule does not auto-move; changes inside the freeze require Production Scheduler action with reason. Consistent with the 
+material-level planning fence (MM §3.6). • What-if: sandbox copies of the schedule for scenario testing (rush order insertion, WC outage); publishing a scenario is an explicit 
+replace action with diff preview; sandboxes never post. • Rescheduling policy: engine proposes moves as exceptions (EX-02/03 extended to operations); auto-apply only outside the 
+freeze horizon and only within promise-date guardrails (§5); everything else is planner-confirmed. • Determinism and audit: same inputs produce the same schedule (seeded 
+heuristics); every published schedule stores its input snapshot ID so any promise can be traced to the plan that made it. • Performance: full plant reschedule < 5 min at NFR 
+volumes; single-order CTP < 10 s (the quote-time budget). 
+4.	Capable-to-Promise Element Specification CTP check For a quote line or SO line: explode the (template or released) BOM and routing, check material availability dates 
+(supply picture + info-record lead times for unstocked buys) AND finite capacity insertion across constrained WCs, returning the earliest feasible completion + ship date with the 
+binding constraint named (“Test Lab week 34” / “bushing lead time 16 wks”) Quote integration Firm ETO quotes must carry a CTP result (replaces the feasibility check reference in MFG B 
+§3.1); Budgetary quotes may quote lead-time bands without CTP, watermarked accordingly Promise capture Accepting a CTP result reserves soft capacity (decaying reservation, config 
+14 days) so parallel quotes do not double-promise the same bottleneck slot; SO confirmation converts to firm capacity load Revalidation Promise dates re-validate automatically on: 
+ECO affecting the order, WC outage inside its path, supply slip on a pegged PO, schedule publish that moves its operations. A promise at risk raises the at-risk workflow (§5), 
+never a silent new date ATP vs CTP boundary MTS lines keep the existing ATP (stock + scheduled receipts, MFG B §4.3); CTP applies to MTO/ETO. Global multi-plant ATP activates with 
+Part F plant 2 
+5.	Promise-Date	Governance • A customer-visible promise changes only through the Sales Change Order path with reason, impact and (per customer class policy) customer 
+notification; planners move internal schedule, not promises. • At-risk workflow: projected completion beyond promise − transit buffer creates an at-risk record routed to Production 
+Scheduler + Sales owner with recovery options (overtime shift, alternate WC, partial ship, re-promise); decisions logged against the order. • Promise reliability is a first-class 
+KPI: promised-vs-actual distribution by product family and by binding constraint, monthly; CTP model calibration (planned vs actual durations) reviewed quarterly and fed back into 
+routing standards. 
+6.	Delivery	Boundary	Statement 
+
+=== PAGE 194 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 194 of 312 
+Capability Go-Live (Phase 1) Phase 2 Phase 3 Finite capacity per WC + batch resources Yes — finite buckets, freeze horizon, exceptions Refinement — CTP on ETO/MTO with soft 
+reservation Yes — single plant Calibration + broader adoption Global ATP/CTP (multi-plant, Part F) Skills/certification constraints + terminal interlock Yes (register + interlock) 
+Training-system integration — Tooling constraints Register + availability check Maintenance-plan integration — Setup families and sequence optimization Manual family grouping 
+Heuristic optimization Optimizer/solver-based scheduling Interactive drag reschedule with validation View + move via actions Full interactive board (existing Phase 2 item) — 
+What-if simulation Single-scenario sandbox Multi-scenario compare Optimization-assisted Build Note: This table is the explicit statement of what is and is not delivered at go 
+live. Contractual promises from day one rest on finite CTP, not infinite scheduling. What is deferred is optimization quality, not promise integrity.  
+
+=== PAGE 195 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 195 of 312 
+PART	F MULTI-PLANT,	INTERCOMPANY	AND	GLOBAL	OPERATIONS	MODEL PE operates one manufacturing plant today with four legal entities. This Part fixes the enterprise 
+organization model in the data structures now, specifies the flows that are live at go-live (intercompany merchandise, FL-07), and defines the activation packages for plant 2 and 
+international expansion so neither requires redesign. 
+2.	Enterprise	Organization	Model Object Definition Keyed Into Legal Entity PE Power Grids, PE Grid Components, PE Transformer, Power Electronics; owns books, 
+currency, tax registrations, fiscal calendar Every document and journal (entity-aware series exist); ACC multi-entity as built Plant Physical manufacturing/distribution site 
+belonging to one entity; owns work centers, warehouses, plant-level material data (MM §3.3) material_plant_data, WCs, routings (plant-keyed), MRP scope Sales Organization Selling 
+unit per entity (Phase 1: one per selling entity); owns price lists and customer commercial terms Price lists (entity/currency per MFG I §6.1), SO header Purchasing Organization 
+Buying unit (Phase 1: central); owns vendor terms, info records (entity-keyed per MM §7.2) PO series PO-{YYYY}-{ENTITY}-…, info records Shipping Point Dock/yard grouping within a 
+plant (Phase 1: implicit one; field reserved) Shipments Calendars Plant working calendar (exists), entity fiscal calendar (exists), crew calendars (Part E) Scheduling, MRP 
+offsets, close Build Note: Build rule: no table added from this point may assume single-plant or single-entity. The review found entity-aware fields already present; this section 
+makes the remaining implicit assumptions (one shipping point, central purchasing) explicit reserved objects instead of hidden constants. 3.	Intercompany	Flows	at	
+Go-Live • Live flow: PE Grid Components sells merchandise sourced from PE Transformer stock and vice versa — the paired SO/PO mechanism, postings, in-transit handling and monthly 
+reconciliation are specified as FL-07 and build in M6. • IC relationships are configuration: (selling entity, buying entity, transfer price list, IC account pair, tax treatment); 
+undefined pairs cannot trade (hard block at pairing). • Entity-level financial separation is already carried by ACC; this volume adds the operational pairing and the 
+profit-in-inventory data feed for consolidation. 
+4.	Transfer	Pricing 
+
+=== PAGE 196 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 196 of 312 
+Element Specification Method Cost-plus per product family (markup % table per IC relationship, Controller-owned, effective-dated) or negotiated fixed price rows (transfer price 
+list, same structure as customer price lists per MFG I §6.1) Documentation Markup table changes require attached rationale (tax compliance file); annual review with the close 
+calendar Profit in inventory Buyer-side stock received via IC carries the transfer margin per unit; the PII schedule (qty on hand × margin) feeds the elimination entry in group 
+reporting (ACC); consumption/sale releases it Audit Every IC document stores the price source row (fixed or markup + basis cost version) so any transfer price is reproducible 
+5.	Plant	2	Activation	Package	(pre-specified) • Master data: Extend materials to plant 2 (MM §3.3 Extend action + data-completion workflow); plant-level 
+MRP/production/warehouse/valuation data per plant; WCs, routings and rates per plant; production versions (material + plant → MBOM/routing pair) activate as the selector object. • 
+Planning: network MRP — demand at plant A satisfiable by transfer from plant B via Special Procurement = Stock Transfer (field reserved, MM §3.6); transfer lead times on a 
+plant-lane table; global ATP checks both plants’ supply pictures. • Logistics: stock transport orders with in-transit bucket 1350 (intra-entity) or FL-07 pairing (cross-entity); 
+cross-plant genealogy continues on the same serial/batch chain with plant stamped per event (already in the event model). • Finance: plant-level valuation already keyed (MM §18.1 
+material_valuation has plant_id); cost center hierarchy gains a plant dimension node; work-center rates per plant. • Acceptance: plant 2 go-live requires re-running the FL-04 and 
+FL-07 test packs in the multi-plant configuration plus a cross-plant recall drill (FL-08). 
+6.	International	Expansion	Package	(pre-specified) Area Phase 1 Reality Expansion Design Tax US + Canada via Avalara and nexus register (MFG A §11.4) Additional 
+regimes as jurisdictions in the same determination layer; VAT/GST logic via tax engine; e-invoicing mandates as country adapters on IF-16; no document flow redesign Currency 
+Multi-currency documents with daily rates (ACC 3) already live Additional functional currencies per new entity; group reporting currency in consolidation (ACC scope) Trade 
+compliance HTS/Schedule B/CoO on materials (MM §2.4/15.1); Buy America; export doc checklist on shipments Customs interfaces, export licenses, denied-party screening service (Part 
+C §5), Incoterms-driven landed cost expansion (duty engine on IF catalog) Localization English, dual units (lb/kg) on documents Language layer on document templates (material_text 
+is language-keyed already, MM §18.1); statutory report adapters per country in ACC 
+
+=== PAGE 197 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 197 of 312 
+Area Phase 1 Reality Expansion Design Governance — Each new country enters via a compliance matrix (registrations, statutory books, filing calendar) approved by Controller before 
+first transaction  
+
+=== PAGE 198 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 198 of 312 
+PART	G CAD,	PDM	AND	PLM	INTEGRATION	SPECIFICATION The controlled document repository (MFG Part C §5) remains the ERP system of record for released renditions. 
+This Part specifies the integration that connects native CAD authoring to it. Toolchain decision required at kickoff: this specification is written against SolidWorks + SolidWorks 
+PDM Professional as the working baseline because it matches PE Engineering’s current authoring environment; every requirement is stated tool-neutrally so a different selection 
+(Inventor/Vault, Creo/Windchill) changes the connector implementation, not the contract. 
+2.	Ownership	Rules	(the	contract’s	foundation) Data System of Record Rule Native CAD files, assembly structure, in-work revisions PDM vault ERP never edits 
+native files; check-in/check-out authority lives in PDM once the connector is live (the ERP check-out screens become read views of vault state) Released drawing renditions (PDF), 
+release stamps ERP controlled documents (MFG C §5) Release in PDM triggers rendition publish to ERP; the floor and customers consume only ERP renditions — unchanged Item identity 
+(material number) ERP (MM §2.3) PDM parts carry the ERP material number as an attribute; number creation only via MCR/placeholder path — the connector requests numbers, never 
+invents them EBOM structure ERP (MFG C §3) CAD assembly structure proposes; the engineer confirms in the EBOM editor; ERP EBOM remains the released truth (MBOM derives from it, 
+unchanged) ECO/change control ERP (MFG C §4) PDM change states map to ECO tasks; effectivity and disposition decisions are ERP-only 
+3.	Connector	Functional	Requirements	(IF-17) Function Specification Part attribute sync PDM part card ↔ ERP material: number, description, material group, UoM, 
+revision; bidirectional field-level mapping table with per-field direction (most fields ERP→PDM read-only; description/mass PDM→ERP proposal); sync on vault check-in and on ERP MCH 
+apply New part flow Engineer creates part in CAD → connector detects missing ERP number → raises placeholder request (MM §4.3) pre-filled from the part card → returns the reserved 
+number to the PDM attribute; drawing annotations reference the real number immediately (same guarantee as the manual path) Assembly-to-EBOM extraction On demand or at PDM release: 
+extract the assembly structure (find numbers, quantities, reference designators from CAD properties) → stage as an EBOM import proposal in the existing CAD BOM Import wizard (MFG C 
+§3.3) with line-level match/conflict states; commit remains transactional and engineer-confirmed Structure comparison Diff view: current ERP EBOM vs current CAD assembly — 
+added/removed/qty-changed lines; runs automatically when a released EBOM’s source assembly gets a newer vault revision, feeding the “EBOM ahead”-style exception panel with a 
+CAD-ahead banner File dependency handling The connector resolves assembly external references (sub-assemblies, drawing sheets, design tables) and publishes the complete rendition 
+set on release; broken 
+
+=== PAGE 199 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 199 of 312 
+Function Specification references block release on the PDM side (vault rule) so ERP never receives partial sets Rendition publishing On PDM release: generate PDF (and STEP where 
+flagged) → create/replace the ERP document revision with release stamp → link to items/BOM lines per the mapping; checksum verified; failure queues for retry with alert (never a 
+silently missing drawing) Title-block extraction Extract drawn-by/checked-by/scale/sheet/size from CAD properties at publish (structured properties, not OCR), populating MFG C §5.1 
+metadata automatically; mismatch between title block and vault attributes blocks publish Conflict resolution Concurrent edits (ERP MCH on a synced field vs PDM check-in) land in a 
+conflict queue: side-by-side values, resolver role per field ownership, resolution audited; no last-write-wins anywhere in the mapping Offline/cache behavior Designers work 
+vault-local per PDM standard behavior; the connector is server-side (vault events), so designer offline work syncs on their next check-in; ERP outages queue vault events for 
+replay (at-least-once, idempotent on vault transaction ID) 
+4.	Change	Flow	Mapping PDM State/Event ERP Effect Work in progress (checked out) ERP document shows In-Work at vault (informational); released rendition unaffected PDM 
+change order opened Proposal to link/create ERP ECR (engineer confirms); PDM CO number cross-referenced PDM release approved Requires the linked ERP ECO task set to be 
+release-ready (the connector checks via API); publishes renditions; ERP ECO release then executes the atomic cutover (BOM/routing/docs/effectivity per MFG C §4.2) — the two releases 
+are sequenced, PDM first, ERP effectivity governs the floor Obsolete in PDM ERP document → Obsolete with the standard exclusion rules; where-used sweep warns on active usage before 
+allowing it Build Note: Sequencing rule to make explicit in the build: the shop floor keys off ERP effectivity, never off PDM state. A PDM release with a future ERP effectivity 
+date is the normal case, not an error. This preserves the single source of execution truth while giving engineering native tools. 5.	Acceptance	Test	for	the	
+Connector • TC-CAD-001…030 covering: new part with number reservation; assembly extraction to committed EBOM; structure diff after CAD change; full release round-trip with rendition 
+checksum; title-block mismatch block; conflict queue resolution both directions; ERP-outage event replay; broken-reference block; ECO-linked release sequencing; publish-failure 
+retry with alert. • Exit criterion: an ETO design executed end-to-end (configuration → CAD → EBOM → MBOM → WO → floor drawings) with zero manual file uploads and zero manual number 
+entry.  
+
+=== PAGE 200 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 200 of 312 
+PART	H TEST,	MIGRATION,	CUTOVER	AND	ACCEPTANCE	FRAMEWORK This Part defines the structures that produce evidence during the build. It does not claim the evidence 
+exists today; it makes its accumulation mandatory and auditable, and it gates go-live on it. 
+2.	Requirements	Traceability • Requirement ID scheme: REQ-{VOL}-{SECTION}-{SEQ} generated by parsing the four functional volumes plus this volume: every field table, 
+validation code, posting rule, status transition, button, interface and NFR becomes one or more requirement rows. The parse is mechanical (the volumes are structured for it) and 
+the resulting register is the master RTM backbone, maintained in the ALM tool, exported monthly to the project record. • Every RTM row links: requirement → design/build ticket → test 
+case ID(s) → latest execution result → defects → acceptance status. Requirements to test traceability for every screen, rule, transition, posting and integration is satisfied 
+structurally: an RTM row without a test case is a visible gap count on the readiness dashboard, target zero at M7 exit. • Test case ID ranges reserved per flow in Part A field 15, 
+plus module ranges (TC-MM-, TC-VAL-, TC-CAD-, TC-SEC-, TC-OPS-) — IDs are stable so evidence remains traceable across runs. 
+3.	Test	Classes	(mandatory	per	flow	and	per	module) Class Content Examples Already Bound Positive / happy path Every specified screen behavior and 
+posting All Part A flows field 15 Negative / validation Every E-code and V-rule fires as specified E-RMA-03/04, E-MM-11…14, E-PER-01…04 Concurrency Documented race scenarios: double 
+PGI, parallel reservations, simultaneous count vs movement, two buyers one PR TC-O2C concurrency set; reservation firm-up locks Reversal / correction Every reversal path posts 
+mirrors with references GRN reversal, confirmation correction, invoice reversal + rebill, settlement reopen Integration failure & recovery Kill the broker/tax engine/printer 
+mid-flow; verify outbox, DLQ, replay, no loss, no duplicates Avalara failover; offline scan replay with conflict Security & SoD Role matrix enforcement, scope isolation, SoD toxic 
+pairs blocked, field-group edit rights TC-SEC range; recertification evidence 
+Performance SLO verification at NFR volumes + peak profiles (Part D §6) Scan P95, MRP window, traceability tree, CTP < 10 s Resilience Zone kill, region failover exercise, restore 
+test, rollback drill TC-OPS range; quarterly restore evidence Reconciliation Every Part A field-12 control produces correct results on seeded discrepancies WIP=GL, GR/IR aging, IC 
+recon, subledger tie-outs 
+
+=== PAGE 201 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 201 of 312 
+4.	Evidence	Standard • A test execution is evidence only with: test case ID + version, environment + build ID, data set reference, executor, timestamp, result, and 
+artifacts (screens, journal extracts, report outputs) attached in the ALM record. • UAT sign-off is per business scenario pack (one per Part A flow) signed by the named business 
+owner — these signatures are the content of the acceptance gate, collected as they pass, not at the end. • Defect policy at gates: zero open S1/S2 on gated scope; S3 with approved 
+workarounds documented; the defect-to-requirement link keeps the RTM honest. 
+5.	Data	Migration	(package	level) MM §16.3 specifies the material-domain migration in full. Package level adds: Object Set Approach Reconciliation Proof Open 
+AR/AP and GL balances ACC opening-balance load at cutover date Trial balance tie to legacy close; subledger = GL by account Open sales orders Load open lines with statuses mapped; 
+historical closed orders stay in legacy read archive Open order book value = legacy report; per-customer spot checks Open POs and GR/IR Open lines + received-not-invoiced 
+positions 2110 opening = legacy accrual schedule Open WOs Preferred: drain to minimum by cutover freeze; residual WOs load with WIP value as opening 1320 by order WIP by order = 
+legacy job cost report 
+Stock with batch/serial Count-verified quantities with provenance (MM §16.3) Value by valuation class = legacy inventory sub-ledger Genealogy history Active-stock provenance 
+operational; deeper history to read archive Sample-based trace equivalence checks (20 serials end-to-end) Customers/vendors/prices Full masters with dedup pass; price rows 
+effective-dated Count + spot checks; no document loads without resolved master • Two full mock conversions minimum (M7), each timed to prove the cutover window, each producing the 
+reconciliation set above; mock 2 must pass with zero manual fixes to qualify for go-live. • Freeze and delta: legacy freeze T-5 days for masters, T-1 for transactions; delta list 
+re-keyed under dual control; go/no-go checkpoint reviews reconciliation results before unfreeze in the new system. 
+6.	Cutover	Runbook	and	Rollback Element Specification Runbook Sequenced task list with owner, planned duration, dependency, verification step and sign-off per task 
+(master load → balance load → open documents → verification → user enablement → first transactions witnessed); rehearsed in mock 2 Checkpoints Named go/no-go points with criteria: 
+post-master-load reconciliation, post-balance tie-out, smoke-test pack green (a 40-case cross-flow subset), print/scan infrastructure verified live on the floor 
+
+=== PAGE 202 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 202 of 312 
+Element Specification Rollback Before the first productive posting: rollback = discard and return to legacy (legacy kept fully operational through the first close); after 
+productive postings: roll-forward-only with the incident process — this boundary is stated to the steering committee at go/no-go, no ambiguity Fallback operation Paper travelers 
+and manual GRN forms pre-printed for 48 h of T1 outage during hypercare; re-key procedure defined (the offline queue covers terminals; fallback covers total outage) Hypercare 
+Three closes with the Part D §5 hypercare roster; exit criteria: close on time twice consecutively, SLOs met for 30 days, defect arrival below threshold 
+7.	Go-Live	Readiness	Gate	and	Acceptance Gate Item Pass Condition RTM completeness Zero requirements without test linkage on go-live scope; coverage report 
+signed by QA Lead Flow closure evidence All eight Part A flows: UAT scenario packs signed; reconciliation controls demonstrated on seeded errors Integration health Contract tests 
+green; DLQ drill executed; correlation tracing demonstrated end-to-end Security Pen-test criticals closed; SoD matrix verified; recertification round-1 complete; break-glass 
+tested Resilience Restore test + zone-failure test + rollback drill evidence on file; runbooks complete Performance SLO verification report at NFR volumes + peak profiles 
+Migration Mock 2 passed clean; cutover window proven inside plan Operations Support model staffed; hypercare roster confirmed; monitoring dashboards live Training Role-based 
+training completion ≥ 95% for go-live roles; super-users certified per plant area Formal acceptance Signatories per the sign-off table below have executed; deviations carry 
+approved waivers with dates 
+8.	Document	Sign-Off This Book, together with the Inventory & Warehouse and Accounting specifications and Books I and II, constitutes the ERP Build Package. Signatures 
+below accept this volume as the controlling specification for enterprise architecture, security, operations, planning, global model, CAD integration and delivery governance. This 
+page is issued blank and is executed through the approval workflow, never pre filled. Role Name Signature Date Project Sponsor    Product Owner    Technical Lead (PE)    IT / 
+Infrastructure Lead    
+
+=== PAGE 203 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 203 of 312 
+Role Name Signature Date Information Security Officer    Development Partner Lead    QA Lead    Engineering Manager    Production Manager    Controller    CFO    
+BOOK IV DESIGN & DEVELOPMENT COMPLETION Controlling Baseline & Decision Register  •  Flow A: Sales Order to Delivery  •  Flow B: Design-to-Source  •  Flow C: Traceability Contract 
+Pricing Condition Model  •  Production Versions & Planning Baseline  •  Module Completions  •  Architecture Decision Records  •  Gates & Authoring Standards  •  Action Register The 
+controlling design governance layer of this specification  
+

@@ -1,0 +1,672 @@
+=== PAGE 134 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 134 of 312 
+Distribution	List Role Access Level Entity Engineering Lead Full Access PE Transformer Development Partner Team Full Access PE Transformer Materials Manager / Master Data 
+Steward Full Access PE Transformer Purchasing Manager Review & Comment PE Transformer QA Lead Review & Comment PE Transformer Controller / Finance Review & Comment PE Power Grids 
+Project Management Read Only PE Transformer 
+1.	Purpose,	Scope	and	Position	in	the	Document	Set This volume is the definitive, field-by-field implementation specification for Material 
+Management in the PE Transformer ERP. It is the fourth controlled volume of the build package and is written to the same standard, structure and depth as the three volumes already 
+in the development partner’s hands: Volume Covers Status Inventory & Warehouse Module Spec V3.0 Warehousing, stock transactions, serial/batch tracking, counting, valuation screens, 
+inventory GL map. Owns the Material Master record physically (screens INV 2.2/2.3). Released — build in progress Accounting Module Implementation Spec V2.0 AR, AP, GL, bank, tax 
+engine, intercompany, budgeting, workflows, RBAC, ASC 606, period close. Released Manufacturing Core Spec V2.0 Order Management, Engineering & BOM, Production, Quality, Barcoding 
+& Traceability, Procurement, RMA, Controlling, Costing & Pricing, plus the nine gap-register closures. Released 
+This Book — Material Management The material object itself and every contract it has with the rest of the system: material types and numbering, all Material Master views to field 
+level, creation and change governance, valuation and automatic account determination, purchasing info records and source lists, planning parameters, special stock ownership, 
+batch/serial profiles, mass maintenance, migration and data quality. 
+This document 
+1.1	Why	a	Separate	Material	Management	Volume	Exists The material hub principle is stated in Book I (MFG Core §2.3, the Material Master is the 
+hub), and the hub itself must be specified as a buildable object. Attributes were defined where each module needed them: the Sales tab in MFG Core Part A §4, purchasing data in 
+Part G, planning data split between INV 2.2 and Part D, valuation data in INV 2.3.3. What was missing, and what this volume supplies, is: • A single material type model with a 
+behavior matrix that tells the development team exactly which views, validations, postings and defaults apply to each kind of material PE handles, from CRGO coils to nameplates to 
+transformer oil to MRO consumables to service items. • The complete Material Master screen specification: every view, every field, every validation, every button, ownership and 
+edit rights per field group, and what each downstream module reads from it. 
+
+=== PAGE 135 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 135 of 312 
+• Governed lifecycles: how a material comes into existence (including the engineering placeholder path already sketched in MFG Core Part C §3.2), which departments must complete 
+which data before it can be used, how it is changed under control, and how it is retired without stranding stock, open orders or history. • Automatic account determination: the 
+deterministic matrix that turns any stock-relevant transaction into GL postings using valuation class and event keys, replacing the per-screen posting notes with one engine 
+specification. • Purchasing master data in full: vendor-material info records, source lists and their interaction with AVL, MRP source determination and PO pricing. • Special stock 
+and ownership types: vendor consignment, customer property, subcontract stock, sales-order-pegged stock and in-transit stock, each with quantity, value and posting treatment. • 
+Data governance, mass maintenance, migration and completeness measurement, covering data governance, migration and the master ownership register. Build Note: Nothing in this 
+volume moves a screen out of INV, ACC or MFG Core. Where an existing screen gains fields or behavior, the change is specified here as a delta and flagged “DELTA to INV x.x” or “DELTA 
+to MFG x”. Where an existing specification already covers a view in full (for example the Sales tab, MFG Core Part A §4), this volume references it and specifies only what is new. 
+Build against all four volumes together. 1.2	Enterprise	Requirements	Addressed	by	This	Book The following enterprise requirements are specified or 
+advanced in this Book. Finite scheduling, CAD and PLM connectors, intercompany, platform architecture, testing and cutover are owned by Book III and Book IV. Ref Requirement 
+Specified In F-04 (partial) Plant-specific master data readiness for multi-plant manufacturing Section 3.3 (plant-level data split), Section 18 (material_plant_data entity) F-11 
+(partial) Consignment/VMI foundations within advanced procurement Section 14.2 vendor consignment, Section 7.4 source list T-01 (partial) Physical data model for master data: 
+keys, effectivity, audit Section 18 with constraints, effectivity and audit rules for all MM entities T-10 Master-data stewardship, quality rules, lineage, retention Part F: 
+governance roles, completeness KPIs, change logging, archive rules D-01 Cross-volume master ownership register Section 3.2 field-group ownership matrix, Section 6–13 linkage 
+contracts D-04 (partial) Migration: source inventory, mapping, cleansing, mock loads Section 16.3 migration specification for material, batch, serial and info-record data 1.3	
+Reading	Conventions • Screen IDs follow the established pattern with the module prefix MM (MM-MAT-001, MM-MCR-001, MM-IR-001, MM-SL-001, MM-VAL-001). Existing screens keep their 
+INV/MFG IDs. • Field tables use the columns Field / Type / Req / Specification. “Cond.” means conditionally required and the condition is stated in the specification column. • GL 
+posting tables use the chart of accounts already defined in INV 11.4, ACC Section 13 and MFG Core §2.4. New accounts introduced by this volume are listed in Section 2.6 and follow 
+
+=== PAGE 136 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 136 of 312 
+the same numbering logic; every posting rule references mapping keys, never hard-coded numbers. • Every listing screen inherits the standard table pattern and every create screen 
+inherits the standard layout exactly as established in INV Section 2 and ACC Section 2. Every screen carries the Entity Selector, immutable Audit Trail and Document Attachment 
+components defined in ACC Section 2. These global behaviors are not repeated per screen. • The abbreviations INV, ACC and MFG refer to the three companion volumes with their 
+section numbers.  
+
+=== PAGE 137 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 137 of 312 
+PART	A MATERIAL	MODEL	AND	MASTER	DATA Part A defines what a material is in this system: the type model that drives all behavior, the numbering and classification 
+schemes, the unit-of-measure model, and the complete view-by-view Material Master specification. 
+2.	Material	Type	Model 2.1	Material	Types Every material carries exactly one Material Type, assigned at creation and immutable afterwards (conversion 
+is a controlled supersession, §4.6, never an edit). The type decides which Material Master views exist, which defaults apply, whether the material is inventory-managed and 
+valuated, and which valuation classes are allowed. The current item categories in INV 2.2 map onto these types one-to-one at migration (Section 16.3). Type Code Typical PE 
+Examples Key Behavior Raw Material RAW CRGO coil by heat, copper wire/CTC/foil, insulation kraft, tank steel plate, transformer oil in bulk Inventory-managed, valuated (1310 
+range), batch-managed by default, purchased only (no BOM as parent), QI-required by default Semi-Finished SEMI Wound coils, stacked cores, fabricated tanks, sub-assemblies 
+Inventory-managed, valuated (1320/1310 per policy), made in-house, must carry released EBOM/MBOM and routing before use, serial or batch per profile Finished Good FIN Padmount 
+transformers, power transformers, catalog distribution units Inventory-managed, valuated (1330), sellable default ON, serialized default ON, standard cost mandatory before first 
+receipt Trading Good TRADE PE Grid Components merchandise: bushings, arresters, connectors bought and resold Inventory-managed, valuated (1330 or 1310 per mapping), purchased and 
+sellable, no BOM as parent Packaging PACK Crates, skids, oil totes, desiccant, VCI wrap Inventory-managed, valuated (1360), consumed by backflush at HU close (MFG Part A §5.4) 
+Spare Part SPARE Service spares for field and warranty work: gaskets, gauges, valves, radiator fins Inventory-managed, valuated, sellable optional, links to service BOMs (Phase 2 
+field reserved) Consumable / MRO CONS Welding wire, gloves, blades, shop supplies Inventory-managed optional (config per material), expensed at receipt or issue to cost center; no 
+product costing relevance Service SERV Testing services, subcontract operations, freight, engineering services Never inventory-managed, never valuated; PO lines post to expense or 
+WIP per context; sellable for service revenue (4150) Non-Stock NSTK One-time buys direct to a WO or cost center, customer-supplied reference items No stock record; quantity 
+tracked on the consuming document only; expensed on receipt 2.2	Type	Behavior	Matrix 
+
+=== PAGE 138 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 138 of 312 
+This matrix is configuration seed data, not code. Each cell is enforced by the Material Master save validations and by document entry (a PO line for a SERV material can never 
+create stock; an SO line for a RAW material is blocked unless Sellable was explicitly allowed by an authorized role). Behavior RAW SEMI FIN TRADE PACK SPARE CONS SERV NSTK 
+Inventory-managed Yes Yes Yes Yes Yes Yes Config No No Valuated Yes Yes Yes Yes Yes Yes Config No No Purchasable Yes Exception Exception Yes Yes Yes Yes Yes Yes Producible (BOM 
+parent) No Yes Yes No No Config No No No 
+Usable as BOM component Yes Yes Yes Yes Yes Yes Yes Subcontract op only No 
+Sellable default Off Off On On Off Config Off On Off Batch-managed default On Config Off Config Off Config Off n/a n/a 
+Serialized default Off Config On Config Off Config Off n/a n/a QI at receipt default On On (prod.) On (prod.) Config Off Config Off n/a n/a Costing relevance Std/MAV Standard 
+Standard MAV MAV MAV Expense Rate only Expense Build Note: “Exception” for purchasable SEMI/FIN covers buy-complete scenarios (a fabricated tank bought outside during capacity 
+crunch). The purchase of a make item requires the Special Procurement key on the Planning view (§3.6) so MRP and costing know the sourcing; it is not a free-for-all flag at PO 
+entry. 2.3	Material	Numbering Material numbers are system-assigned from type-specific series, extending the Number Series Configuration screen (INV 11.3). Legacy codes 
+migrate into the Legacy Code field and remain searchable everywhere a material lookup exists. Material Type Format Example RAW RM-{GROUP:3}-{SEQ:5} RM-CRG-00114 (CRGO), 
+RM-CU-00021 (copper) SEMI SA-{GROUP:3}-{SEQ:5} SA-COIL-00092 FIN TX-{FAMILY:3}-{SEQ:5} TX-PAD-00034, TX-PWR-00007 TRADE GC-{GROUP:3}-{SEQ:5} GC-BSH-00220 PACK PK-{SEQ:5} PK-00017 
+SPARE SP-{GROUP:3}-{SEQ:5} SP-GSK-00456 CONS MRO-{SEQ:5} MRO-00873 SERV SV-{SEQ:5} SV-00041 
+
+=== PAGE 139 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 139 of 312 
+Material Type Format Example NSTK NS-{SEQ:5} NS-00202 • The {GROUP} token is the first-level material group code (§2.4), fixed at creation. Renumbering is prohibited; if the group 
+was wrong the material is superseded (§4.6). • Manual numbers are not permitted. The Engineering Placeholder path (§4.3) reserves the number at placeholder creation so drawings and 
+BOM lines never reference a temporary code. • Material numbers never encode revision. Revision-controlled materials (fabricated parts to drawing) carry revision on the linked 
+document set and BOM effectivity, per MFG Part C. 2.4	Material	Groups	and	Classification Material Groups are a three-level hierarchy used for search, reporting, 
+approval routing, material overhead rates (MFG Part I §1) and default assignment of valuation class, buyer and inspection plans. The hierarchy is maintained in Configuration → 
+Material Settings → Material Groups (Materials Manager approval; effective-dated; nodes deactivate, never delete). Level 1 (examples) Level 2 (examples) Level 3 (examples) CRG Core 
+Steel CRGO Standard Grades, CRGO HiB M-4, M-5, 23ZDKH85 CU Copper & Conductors Wire, CTC, Foil, Busbar By gauge/spec family INS Insulation Kraft/Crepe, Pressboard, DDP, Resins By 
+spec OIL Fluids Mineral Oil, Ester Fluid By standard (D3487 Type II…) STL Steel & Fabrication Plate, Structural, Hardware By grade/size family BSH Components Bushings, Tap 
+Changers, Gauges, Relays, Radiators By voltage class / vendor family PKG Packaging Crates, Totes, Dunnage — MRO Consumables Weld, PPE, Shop — In addition to the group hierarchy, 
+each material carries the classification attributes needed for compliance and trade: HTS/HS code (customs), Schedule B (export), country of origin default (overridden by batch 
+actuals at receipt), Buy America relevance flag (feeds MFG Part G §5.1), and hazardous material profile (UN number, packing group, hazard class) used by Packing (MFG Part A §5) and 
+shipping documents. A free characteristic panel (typed key-value attributes defined per material group, e.g. voltage class, kVA, conductor gauge) supports parametric search; 
+characteristics are search and print data only in Phase 1 and become configuration model inputs in the product-configuration phase flagged by the review (F-02). 2.5	Units	
+of	Measure The UoM model extends INV 2.6 and is restated here as the binding contract because every module depends on it: • Base UoM: the unit in which stock quantities and 
+valuation are kept. Immutable after the first stock-relevant posting (hard rule; enforced at save, E-MM-04). • Alternative UoMs with fixed conversion factors: Purchase UoM (per 
+vendor overridable in the info record, §7.2), Sales UoM (MFG Part A §4.1), Issue UoM (shop-floor convenience, e.g. copper issued by kg while stocked by kg but bought by lb), and up 
+to 6 additional conversions. Every conversion is a rational pair (numerator/denominator) to avoid floating drift: 1 lb = 45359237/100000000 kg is stored, not 0.45359237. 
+
+=== PAGE 140 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 140 of 312 
+• Dimension classes (mass, length, volume, count, area) prevent nonsense conversions; cross-dimension conversions (e.g. length of conductor to mass) are permitted only via a 
+material-specific conversion with both UoMs declared on the material and an engineering-approved factor. • Catch weight is out of scope; oil is bought and stocked by volume (gal) 
+with density held as a characteristic for freight calculations. 2.6	New	GL	Accounts	Introduced	by	This	Volume These accounts extend GL Account 
+Mapping (INV 11.4) and the CoA (ACC Section 13). As with the MFG Core additions, the numbers are proposals consistent with existing ranges; the Controller confirms or remaps them 
+once in GL Account Mapping, and every posting rule references mapping keys. GL Account # Account Name Type Used By 1311 Raw Materials — Consignment Offset Memo (statistical) Memo / 
+statistical Vendor consignment quantity visibility (§14.2); never in trial balance 1340 Spare Parts Inventory Balance sheet (asset) SPARE type materials when the Controller elects 
+separate disclosure; else maps to 1310 2120 Consignment Payable Clearing Balance sheet (liability) Consignment withdrawal to settlement (§14.2) 5215 Consignment Price Variance P&L 
+(expense) Consignment settlement price vs info record price (§14.2) 5340 Inventory Reserve — Excess & Obsolete Balance sheet (contra-asset) E&O reserve postings (§17.3) 6320 Excess & 
+Obsolete Expense P&L (expense) E&O reserve build/release 2.7	Document	Number	Series	Additions Document Type Prefix / Format Example Material Creation Request 
+MCR-{YYYY}-{SEQ:4} MCR-2026-0117 Material Change Request (mass or controlled single) MCH-{YYYY}-{SEQ:4} MCH-2026-0031 Purchasing Info Record IR-{SEQ:6} IR-004215 Supersession 
+Record SUP-{YYYY}-{SEQ:4} SUP-2026-0009 E&O Reserve Run EOR-{YYYY}{MM}-{SEQ:2} EOR-202607-01 
+3.	Material	Master	—	Complete	View	Specification The Material Master remains physically hosted where INV built it (INV 2.2 item listing, INV 2.3 item 
+detail). This section is the binding specification of every view on that record, including the views INV stubbed and this volume completes. All additions are DELTA to INV 2.2/2.3. 
+3.1	Material	Listing	(DELTA	to	INV	2.2) 
+
+=== PAGE 141 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 141 of 312 
+Screen ID MM-MAT-001 (extends INV-ITEM-LIST) URL Pattern /inventory/items Purpose Single register of all materials across types and plants; the working queue for master data 
+stewards, buyers and planners Added columns and filters: Column Type Specification Material Type Badge RAW (brown), SEMI (teal), FIN (blue), TRADE (purple), PACK (gray), SPARE 
+(green), CONS (gray), SERV (outline), NSTK (outline) Material Group Text Level 1 / Level 2 path; filterable by any level Lifecycle Status Badge Per §4.1: Draft, Data Completion, 
+Active, Restricted, Blocked, Obsolete Data Completeness Percent bar Computed per §16.4: share of mandatory-for-use fields populated across required views; red < 100% for Active 
+materials (should be structurally impossible; report row if it occurs) Plants Extended Chips Plant codes where a plant-data record exists (§3.3); Phase 1 shows the single PE plant 
+Buyer / Planner / Steward Users Owning roles; filter “My Materials” per role Std Cost / MAV Currency Current released standard or moving average per valuation method Legacy Code 
+Text Migrated identifier; searchable Bulk actions: Assign Buyer/Planner/Steward, Set Block (function-specific, §4.5), Export, Add to Change Request (mass maintenance, §16.1). Quick 
+stat pills: Draft, In Data Completion, Active with Missing Info Record, Restricted, Blocked, Obsolete with Stock. 3.2	Field-Group	Ownership	(supersedes	MFG	
+Core	§2.3	table) Ownership means only the owning role’s screens may edit the field group; every other view renders it read-only with a link to the owning screen. The Posting 
+Service and all documents consume the fields regardless of ownership. This table is the master ownership register required by review item D-01. View / Field Group Owner (edit 
+rights) Primary Consumers General, classification, UoM, tracking config Master Data Steward (Inventory Admin role group) All modules Planning (MRP) view §3.6 Production Planner 
+MRP, reservations, ATP, shortage checks Purchasing view §3.7, info records §7.2, source list §7.4 Buyer / Purchasing Manager MRP source determination, PR/PO pricing, expediting 
+Production view §3.8 Manufacturing Engineer WO creation, backflush, staging, scheduling Warehouse view §3.9 Warehouse Manager Putaway/pick strategies, counting Quality view §3.10 
+Quality Engineer GRN QI routing, plan resolution, certificates Sales view (MFG Part A §4) Sales Admin Quotes, SOs, invoices 
+
+=== PAGE 142 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 142 of 312 
+View / Field Group Owner (edit rights) Primary Consumers Accounting & Costing view §3.11 Cost Accountant / Controller Valuation, account determination, costing runs Standard cost 
+(released) Costing run only (MFG Part I §3) — never manual edit Valuation, PPV, settlement BOM view Engineering (read-only render of MFG Part C output) Production, Costing, 
+Purchasing CC/PC defaults Controlling (MFG Part H) Every financially relevant posting 3.3	Global	vs	Plant-Level	Data To satisfy review item F-04 without redesign 
+later, the material record is split now into global data (one per material) and plant data (one per material per plant). Phase 1 operates one plant, so screens show the plant 
+block inline; the data model (Section 18) keys plant data separately from day one. Extending a material to a future plant is an Extend action that copies plant defaults and routes 
+through the same data-completion workflow as creation (§4.2). Scope Field Groups Global (material level) Type, number, descriptions, material group, classification/characteristics, 
+UoM set, batch/serial profile, hazmat profile, documents, sales-global data (Sellable, warranty default), HTS/origin defaults Plant level MRP/planning parameters, purchasing data 
+(buyer, GR processing time), production data (issue warehouse, backflush, tolerances), warehouse assignments and strategies, quality settings (QI flag, plan scope), valuation 
+(class, method, standard cost, MAV) — valuation is per plant per entity 3.4	View:	General	(DELTA	to	INV	2.3.1) Field Type Req Specification Material # Auto Auto 
+Per §2.3 series; shown with copy button and barcode preview (Code128) Short Description Text (80) Yes Uppercase-normalized for search; uniqueness warning (not block) on 90% 
+similarity per §4.4 Long Description Rich text (2000) No Prints on POs and travelers when flagged Material Type Badge Auto From creation; immutable (§2.1) Material Group L1/L2/L3 
+Cascading dropdowns Yes Drives valuation class default, buyer default, overhead group, search Legacy Code Text (40) No Migration identifier; indexed for lookup Manufacturer / Mfr 
+Part # Table No Rows: Manufacturer, MPN, preferred flag. Used by CAD BOM import matching (MFG Part C §3.3) and PO print Characteristics Panel Cond. Typed attributes per material 
+group class (§2.4); mandatory set configurable per group (e.g. voltage class mandatory for BSH group) HTS Code / Schedule B / Country of Origin Lookups Cond. Mandatory before first 
+international PO or export shipment (validation fires at document, not at save) 
+
+=== PAGE 143 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 143 of 312 
+Field Type Req Specification Hazmat Profile Group Cond. UN #, class, packing group, proper shipping name; mandatory when Hazardous toggle ON; consumed by HU labels and BOL Buy 
+America Relevant Toggle No ON: origin accumulation and vendor BA cert requirements activate on POs (MFG Part G §5.1) Lifecycle Status Badge Auto Per §4.1 with function-block chips 
+(§4.5) Steward / Buyer / Planner User lookups Yes (Active) Owning users; mandatory before Active 
+3.5	View:	Units	&	Dimensions	(DELTA	to	INV	2.3.2) Field Type Req Specification Base UoM Dropdown Yes Immutable after first posting (E-MM-04) 
+Alternative UoMs Table No Rows: UoM, numerator, denominator, usage tag (Purchase / Sales / Issue / Other); rational factors per §2.5; delete blocked while referenced by an open 
+document Net / Gross Weight + Weight UoM Numbers Cond. Mandatory for FIN, SEMI, RAW (freight, HU gross-weight sanity ±2% per MFG Part F SP-17) Volume + UoM Number No Oil and 
+fluids: mandatory Dimensions L×W×H Numbers Cond. Mandatory for FIN (permits and load planning, MFG Part B §5.1) 3.6	View:	Planning	(MRP)	—	NEW This view 
+consolidates and supersedes the scattered planning fields (INV 2.2 reorder fields, Safety Stock per MFG Part A §10). It is the single input surface the MRP Workbench (MFG Part D §3) 
+reads. All fields are plant-level. Field Type Req Specification MRP Type Dropdown Yes MRP (deterministic net-requirements; default for RAW/SEMI/FIN in BOMs), Reorder Point 
+(consumption-based; default for CONS/PACK/SPARE), None (no planning; NSTK/SERV forced). Drives which engine plans the material — an item is never planned by both (V-MM-07) 
+Procurement Type Dropdown Yes Buy / Make / Both (Both requires planner quota note; MRP defaults to Make and flags for review) Special Procurement Dropdown No Subcontracting 
+(component provision per MFG Part D §10 / G §6), Consignment (§14.2), Buy-Complete for make item (§2.2 note), Stock Transfer (reserved for multi-plant) Lot Sizing Dropdown Yes 
+Lot-for-Lot (default), Fixed Qty (+ field), Min Qty / Order Multiple (+ fields), Period (weekly bucket consolidation + field) Safety Stock Link + grid No Per-warehouse grid per 
+MFG Part A §10 (renders here; same data) 
+
+=== PAGE 144 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 144 of 312 
+Field Type Req Specification Reorder Point / Max Stock Numbers Cond. Mandatory when MRP Type = Reorder Point; arithmetic per MFG Part A §10.2 Planned Delivery Time (days) Number 
+Cond. Buy items: vendor-independent default; the info record (§7.2) overrides per vendor at source determination GR Processing Time (days) Number No Dock-to-stock time incl. 
+inspection; MRP adds it to supply availability dates In-House Production Time (days) Number Cond. Make items without released routing (early ETO); once a routing is released, 
+scheduling uses routing times and this field grays out with “from routing” Planning Time Fence (days) Number No Inside the fence MRP does not create or re-date proposals 
+automatically; exceptions EX-08 “inside fence” raised instead. Answers the review’s planning-fence gap at the material level Scrap % (assembly) Number No Parent-level scrap applied 
+on top of component scrap from BOM lines Backflush Toggle No ON: components of this material’s orders consume at confirmation per MFG Part D §6.1; per-component override on the MBOM 
+line wins Issue Method Dropdown Yes (make) Staged Kit (picklist to WC staging per SP-09), Direct Issue (scan at op, SP-08), Backflush; default per material type, overridable per 
+MBOM line Strategy Dropdown Yes (FIN/SEMI) MTS (plan from forecast + SO consumption), MTO/ETO (plan only from SO peg; no anonymous stock), Assembly-to-Order reserved Phase 2. 
+Governs whether forecast rows (INV 15.8) are consumed for this material ABC / XYZ Class Badges Auto ABC by value (annual usage × cost), XYZ by demand variability; computed monthly 
+by job; drives count frequency (INV 7) and buyer review lists Discontinuation Group Cond. Run-out date + Follow-Up Material (supersession §4.6); MRP switches new proposals to the 
+follow-up after stock of the old is consumed Build Note: MRP reads exactly this view plus BOM, routing, info records and source list. Any field MRP consumes that is not on this 
+view (or its linked grids) is a build defect. The MRP Workbench exception EX-07 (missing/unreleased BOM or routing) extends with EX-08 (inside planning fence) and EX-09 (no valid 
+source of supply, §7.4). 3.7	View:	Purchasing	—	NEW	(consolidates	MFG	Part	G	references) Field Type Req Specification Buyer User Yes (Buy items) 
+Workbench bucketing (MFG Part G §1) Purchase UoM Dropdown No Default order unit; info record may override per vendor; conversion to base mandatory 
+
+=== PAGE 145 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 145 of 312 
+Field Type Req Specification Min Order Qty / Order Multiple Numbers No Applied to PR→PO grouping and MRP lot rounding Over/Under Delivery Tolerance % Numbers No GRN validation: 
+over-receipt beyond tolerance requires Purchasing Manager override (E-MM-11); under-delivery closes line as short-closed when flagged final GR-Based Invoice Verification Toggle 
+Yes Default ON: three-way match at ACC 6 requires GRN; OFF only for SERV with Purchasing Manager approval Source Determination Policy Dropdown Yes AVL Rank (default; MFG Part G 
+§2.2), Source List Fixed (§7.4 fixed vendor per period), RFQ Always (forces RFQ for every PR, high-value engineered parts) Default Quality Clauses Multi-select No Pre-selects PO 
+quality clauses Q1–Q5 (MFG Part G §5.1) for this material Purchasing Text Rich text No Prints on PO below the line (packaging instructions, mill cert wording) Tax Category (purchase 
+side) Dropdown Yes Feeds use-tax logic per MFG Part A §11.3 Info Records Embedded grid — All IR rows for this material (§7.2) with vendor, price basis, lead time, validity; Add opens 
+MM-IR-002 pre-filtered Source List Embedded grid — Per §7.4 3.8	View:	Production	—	NEW Field Type Req Specification Production Scheduler User Yes (Make) Dispatch 
+escalations and WO exception routing Default Issue Warehouse Dropdown Yes (Make) Where components stage from; per-WC override via WC master (MFG Part D §2) Production Batch Size 
+(default) Number No Default WO qty for components made in lots; ETO transformers fixed at 1 (enforced by serialization rule, MFG Part D §5.1) Over/Under Delivery Tolerance % 
+(production) Numbers No FG receipt beyond WO qty + tolerance blocked (E-MM-12); underdelivery allowed with WO short-close reason Serialization at Dropdown Cond. WO Release 
+(default FIN; serial exists during build — required for genealogy) / FG Receipt (components serialized only when stocked) Batch at Dropdown Cond. WO Release (batch per order) / FG 
+Receipt / Per Shift (repetitive, reserved) Active MBOM / Routing Read-only links — Current released revisions with “EBOM ahead” banner logic per MFG Part C §6 Standard Text / Work 
+Notes Rich text No Prints on traveler cover when flagged 3.9	View:	Warehouse	&	Storage	(DELTA	to	INV	2.3.5) 
+
+=== PAGE 146 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 146 of 312 
+Field Type Req Specification Default Warehouse / Bin Lookups No Putaway proposal seed; rules engine (INV 15.6) can override Putaway / Picking Strategy Dropdowns Yes Putaway: Fixed 
+Bin, Next Empty, Zone by Group. Picking: FIFO, FEFO (forced ON when shelf-life managed, V-MM-09), Serial-Directed Storage Conditions Multi-select No Indoor Dry, Climate 
+Controlled, Outdoor Allowed, Flammable Cabinet, Oil Containment; validated against warehouse capabilities at putaway (E-MM-13) Min / Max Bin Qty Numbers No Replenishment of fixed 
+pick bins from bulk (INV movement type Bin Replenishment) Count Class Override Dropdown No Overrides ABC-derived count frequency for this material Shelf Life (days) / Remaining 
+Life for GR % Numbers Cond. Shelf-life managed materials: GRN rejects receipts with less remaining life than the threshold (E-MM-14); expiry from vendor batch data at receipt 
+3.10	View:	Quality	(DELTA	to	INV	2.3.7) Field Type Req Specification QI Required at Receipt Toggle Yes ON routes GRN to QI Hold and requires an Active INC plan per 
+MFG Part A §6.5 policy QI Required from Production Toggle Yes (Make) Final/in-process gates from routing QC checkpoints; this flag adds receipt-side inspection for SEMI stocked 
+into inventory Certificate Requirements Multi-select No Mill Cert per Heat, CoC per Shipment, CoA, FAI Report; GRN blocks Accept until required certificates attach (E-QM-06) 
+Vendor Qualification Required Toggle No ON: only AVL vendors with Qualified status may appear on POs (hard block E-PUR-02 already specified, MFG Part G §1) Inspection Plan Scope 
+Preview Read-only panel — Shows which Active plans currently resolve for this material by plan type, with effective dates (runtime resolution per MFG Part A §6.2) Batch Record 
+Requirements Multi-select No Heat # mandatory, Vendor batch mandatory, Expiry mandatory — enforced as GRN field requirements per material 3.11	View:	Accounting	&	
+Costing	(DELTA	to	INV	2.3.3) Field Type Req Specification Valuation Class Dropdown Yes (valuated) Per §5.1; defaulted from material type + group, editable by Cost 
+Accountant only while no stock and no open documents exist; afterwards changes via §5.4 procedure Valuation Method Dropdown Yes Standard (mandatory for Make: SEMI, FIN) / Moving 
+Average (default for Buy: RAW, 
+
+=== PAGE 147 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 147 of 312 
+Field Type Req Specification TRADE, PACK, SPARE, CONS). Change procedure per §5.4 Price Unit Number Yes Cost per 1 / 100 / 1000 of base UoM (copper and steel priced per 100 kg 
+avoid rounding drift) Standard Cost (current) Read-only — Released standard with effective date and costing run link; never manually editable (MFG Part I §3) Moving Average 
+(current) Read-only — Live MAV with last-movement drill Future / Previous Standard Read-only — Marked (staged) cost from current run; previous released cost for reference Profit 
+Center Lookup Yes (valuated) Item product line; feeds derivation rule 3 (MFG Part H §3). Formalizes the “item master PC field” noted there Overhead Group Dropdown No Material 
+overhead % differentiation per group (MFG Part I §1) Costing Lot Size Number Yes (Make) Lot size for which the standard is computed; setup amortization uses it Do Not Cost Toggle 
+No Excludes from costing runs (obsolete or customer-property materials); requires reason E&O Reserve % Read-only — Current reserve rate applied by the E&O run (§17.3) GL 
+Determination Preview Panel — Simulates the account determination matrix (§5.2) for this material: shows the accounts each event key resolves to today, via the Posting Service 
+simulation endpoint (MFG Part H §3 Dev Note) 3.12	View:	Sales The Sales view is specified in full in MFG Core Part A §4 (sales data, price list assignments, 
+customer-specific prices, price determination contract) and is not repeated. Deltas introduced by this volume: • The Sellable toggle is now governed by the type behavior matrix 
+(§2.2): switching it ON for types where the default is OFF requires Sales Admin plus Materials Manager approval and records a governance entry (§4.4). • Sales view completeness 
+(Sales UoM path, tax category, Avalara code when active) joins the data-completion checklist gating Active status for sellable materials (§4.2). 3.13	Reference	Tabs Tab 
+Content / Source BOM Read-only render of the active MBOM revision (MFG Part C §6); Where-Used button; “EBOM ahead” banner passthrough Documents Controlled documents linked to the 
+material (MFG Part C §5): drawings, specs, MSDS/SDS for hazmat (mandatory when Hazardous ON — V-MM-11), photos 
+
+=== PAGE 148 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 148 of 312 
+Tab Content / Source Stock Overview Live stock by warehouse/bin/status incl. special stock buckets (§14.1): At Subcontractor, Consignment (vendor-owned), Customer Property, 
+SO-Pegged, In-Transit Info Records / Sources Purchasing grids per §3.7 Where-Used Multi-level where-used across EBOMs/MBOMs/inspection plans/price lists (MFG Part C §7 engine) 
+Change History Immutable field-level audit: field, old, new, user, timestamp, source (screen / mass change MCH- / migration / API), and governance reference where applicable 
+3.14	Buttons	and	Global	Actions	(Material	Detail) Button Enabled When Behavior Save / Submit for Completion Draft or Data Completion Runs view-level validations; 
+Submit routes per §4.2 workflow Activate All completion tasks done Materials Manager action; runs full validation set V-MM-01…; sets Active Set Block… Active/Restricted 
+Function-specific block dialog per §4.5 with reason code Supersede… Active/Restricted/Blocked Starts supersession record §4.6 Extend to Plant… Active; multi-plant enabled Copies plant 
+defaults; data-completion workflow for the new plant Copy From… Create mode Deep copy of a template or similar material minus stock/history; copies flagged field groups only 
+(checklist dialog) Simulate GL Valuated Opens §3.11 GL Determination Preview Print Label Always Item shelf label per MFG Part F §1 with reprint governance 3.15	Validation	
+Register	(Material	Master) Code Rule V-MM-01 Activation requires: descriptions, group, UoM set, steward/buyer/planner per type, all mandatory views complete per type 
+matrix, valuation class + method for valuated types, PC assigned V-MM-02 Material type immutable; group L1 immutable (encoded in number); L2/L3 changes allowed with governance 
+entry V-MM-03 Batch-managed and Serialized flags immutable once any stock or genealogy record exists; changes only via supersession V-MM-04 / E-MM-04 Base UoM immutable after 
+first stock-relevant posting V-MM-07 Exactly one planning engine per material (MRP Type) V-MM-09 Shelf-life managed forces FEFO picking V-MM-11 Hazardous ON requires SDS document 
+link before Active E-MM-11 / E-MM-12 Receipt tolerance violations (purchase / production) 
+
+=== PAGE 149 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 149 of 312 
+Code Rule E-MM-13 Storage-condition vs warehouse capability mismatch at putaway E-MM-14 Remaining shelf life below GR threshold at receipt 
+4.	Material	Lifecycle	and	Governance 4.1	Lifecycle	Statuses Status Color Meaning Allowed Transitions Draft Gray Skeleton exists (number reserved); 
+free edit by creator; invisible to documents Data Completion, Deleted (only status where physical delete is allowed, and only with zero references) Data Completion Yellow MCR 
+workflow running (§4.2); each department completes its view; material usable nowhere except as EBOM placeholder line (MFG Part C §3.2) Active, Draft (recall), Rejected Active Green 
+Fully usable per type behavior matrix Restricted, Blocked, Obsolete (via supersession/run-out) Restricted Amber Use-up: existing stock consumable, open documents finish; NEW 
+demand blocked (no new BOM lines, no new PO/SO/WO except closure of existing) Active (reinstate, Materials Manager), Blocked, Obsolete Blocked Red All movements and documents 
+blocked except the correcting transactions named in the block reason (§4.5) Active, Restricted, Obsolete 
+Obsolete Dark Red Terminal for use; record retained for history/traceability; stock must be zero and all documents closed before entry (V-MM-20) None (Archive per retention 
+policy, §18.4) 
+4.2	Material	Creation	Request	(MCR)	Workflow Screen ID MM-MCR-001 (queue), MM-MCR-002 (detail) URL Pattern /materials/creation-requests Purpose Controlled 
+multi-department creation of a material; nothing becomes Active by a single person Creation paths all converge on the same MCR object: Path Initiator Notes Engineering Placeholder 
+Design Engineer from EBOM editor (MFG Part C §3.2 Create Placeholder Part) Number reserved instantly; MCR auto-created with engineering data pre-filled; EBOM release stays blocked 
+while the MCR is open (V-ENG-03 unchanged) Purchasing Initiated Buyer (new vendor part, MRO, packaging) Purchasing view pre-filled; engineering task skipped for non-engineered 
+types Sales Initiated Sales Admin (new trading good / service) Sales view pre-filled 
+
+=== PAGE 150 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 150 of 312 
+Path Initiator Notes Migration Data load (Section 16.3) MCRs auto-approved by load policy but completeness KPIs still computed The MCR carries a task checklist generated from the 
+material type. Each task = one view to complete + its owning role + SLA. Default matrix: Task (view to complete) Owner RAW SEMI/FIN TRADE PACK/CONS SERV General + classification + 
+UoM Master Data Steward Yes Yes Yes Yes Yes Planning (MRP) Production Planner Yes Yes Yes Yes No Purchasing + first Info Record Buyer Yes If buy-complete Yes Yes Yes Production 
+Manufacturing Engineer No Yes No No No Warehouse Warehouse Manager Yes Yes Yes Yes No Quality (+ inspection plan check) Quality Engineer Yes Yes Config No No Accounting & Costing 
+(valuation class, method, PC) Cost Accountant Yes Yes Yes Yes Yes (rates) Sales (when sellable) Sales Admin No FIN yes Yes No Yes • Tasks run in parallel except Accounting & 
+Costing, which requires Planning and Purchasing done first (valuation method and first price basis depend on them). • SLA default 2 business days per task; breach escalates to the 
+role’s manager and appears on the Data Quality dashboard (§16.4). • Activation: when all tasks complete, the Materials Manager reviews the assembled record and Activates (runs 
+V-MM-01). Rejection returns to the responsible task with comments. • The MCR stores the originating demand (EBOM line, PR, quote) and unblocks it automatically at activation: the 
+EBOM placeholder flag clears, the PR becomes sourceable, the quote line resolves. Build Note: Do not implement per-department “mini masters”. There is one material record; the MCR 
+only orchestrates who fills which view and in what order, with field-group edit rights per §3.2 enforced the same during and after creation. 4.3	Engineering	Placeholder	
+Path	—	Exact	Behavior • Create Placeholder Part (in the EBOM editor) captures: description, material group, UoM, est. cost, target vendor note, drawing link. The system 
+reserves the real material number (§2.3) and creates the material in Draft plus the MCR in Data Completion. • The BOM line references the real number from minute one; there is no 
+renumbering event later, so CAD drawings annotated with the number never go stale. • Est. cost from the placeholder becomes the costing simulation basis until the Accounting task 
+releases a real basis (info record award or first standard). Estimates consuming placeholder costs flag “contains placeholder pricing” on the quote margin panel (MFG Part B §3.2). • 
+Placeholder aging report (MFG Part C §7) reads MCR ages; the 14-day exception remains. 
+
+=== PAGE 151 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 151 of 312 
+4.4	Change	Governance	and	Duplicate	Prevention Control Specification Field change classes Class 1 — free edit by owner role (texts, notes, non-controlling 
+attributes). Class 2 — governed edit: owner role + approval by the named second role, recorded with reason (Sellable override, valuation class, method, batch/serial flags 
+pre-stock, MRP type, procurement type, PC). Class 3 — never editable (type, number, base UoM after posting); change = supersession. The class of every field is part of the field 
+dictionary (Section 18) — the UI derives editability from it, not from per-screen code Material Change Request (MCH) Class 2 single changes and all mass changes (§16.1) run as MCH 
+documents: proposed rows (material, field, old, new), approval per class rules, scheduled apply (immediate or effective-dated), full audit. MCH links to ECO when the change 
+originates from engineering change control (MFG Part C §4.2 task “update material”) Duplicate check On create and on description edit: fuzzy match (trigram similarity ≥ 0.9) against 
+descriptions + manufacturer part numbers within the same material group L1. Matches show side-by-side compare; creating anyway requires a “not a duplicate because…” note stored on 
+the MCR. Hard block only on identical MPN + manufacturer (E-MM-02) Reference-data protection Deactivation/blocks run a where-used sweep (open POs, WOs, SOs, BOM lines, price rows, 
+info records, source lists, inspection plans) and show the impact list before confirmation; the same sweep gates Obsolete (must be empty) per V-MM-20 4.5	
+Function-Specific	Blocks Blocks are additive chips on an Active/Restricted material, each with reason code, set-by and date; each blocks a specific document family rather 
+than the whole record: Block Blocks Typical Reason Set By Purchasing Block New PRs/RFQs/POs (open POs receivable) Quality escalation on the only vendor; commercial dispute 
+Purchasing Manager Sales Block New quotes/SO lines (open SOs shippable unless Shipping Block too) Recall candidate; margin review Sales Director 
+Production Block New WOs; existing WOs continue unless Immediate-effectivity ECO says otherwise Design problem under ECR Engineering Manager Shipping Block PGI for this material 
+Quality hold at product level (batch/serial holds stay in INV 6.2) Quality Manager 
+Posting Block All stock movements (count correction transactions exempt) Valuation investigation; migration freeze Controller 
+4.6	Supersession	(Follow-Up	Material) Screen ID MM-SUP-001 URL Pattern /materials/supersessions Purpose Controlled replacement of one material by another with stock 
+run-out and document cutover 
+
+=== PAGE 152 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 152 of 312 
+• Supersession record SUP-#: predecessor, successor, relationship (One-for-One / One-for-Many note), run-out policy (Use-Up stock then switch / Immediate switch + stock 
+disposition), effective date, initiating ECO/MCH link. • MRP behavior: with Use-Up, demand pegs to predecessor stock until exhausted, then proposals flip to the successor 
+automatically (mirrors ECO use-up logic, MFG Part C §4.2). With Immediate, remaining predecessor stock routes to the disposition chosen (rework/scrap/RTV) via the ECO disposition 
+engine. • Document behavior: open POs on the predecessor raise buyer tasks (change or receive-and-close); BOM lines flip per ECO effectivity; sales cross-references (customer part 
+numbers) carry to the successor with a supersession note printed on order confirmations. • The predecessor moves Active → Restricted at record approval and → Obsolete when V-MM-20 
+conditions are met; the successor’s record links back for history. Traceability (MFG Part F) is unaffected: genealogy always stores the material that was actually consumed.  
+
+=== PAGE 153 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 153 of 312 
+PART	B VALUATION	AND	AUTOMATIC	ACCOUNT	DETERMINATION This Part specifies the engine that turns every stock-relevant transaction in all four volumes into GL 
+postings without any screen naming account numbers. It formalizes and supersedes the per-screen posting notes: those tables remain correct, but they are now outputs of this 
+matrix, not independent rules. 
+5.	Valuation	and	Account	Determination 5.1	Valuation	Classes The valuation class is the single attribute that connects a material to its balance-sheet 
+account and its offset accounts. Defaults derive from material type + group and are confirmed in the MCR Accounting task. Valuation Class Default For Inventory Account (event key 
+STOCK) VC-3000 Raw Materials RAW (all groups except OIL if Controller elects split) 1310 Raw Materials VC-3010 Raw Materials — Fluids RAW group OIL (optional split, Controller 
+decision at config) 1310 (or split account if remapped) VC-7900 Semi-Finished SEMI 1310 per current policy (INV valuation) with WIP flow via 1320 during orders VC-7920 Finished 
+Goods FIN 1330 Finished Goods VC-3100 Trading Goods TRADE 1330 (or 1310 per Controller mapping) VC-3060 Packaging PACK 1360 Packaging Materials on Hand VC-3040 Spares SPARE 1340 
+Spare Parts (or 1310 if not split) VC-3080 Consumables CONS (when inventory-managed) 1310 or direct expense per config 
+5.2	Event	Keys	and	the	Determination	Matrix Every posting the Posting Service creates resolves accounts by (event key, valuation class) and, where noted, 
+transaction qualifiers. Event keys are closed-list system constants; new business behavior means a new row in the matrix, never code that names an account. Event Key Fires On 
+Resolves To (default mapping) STOCK Any valuated stock increase/decrease at inventory account level 13xx per valuation class (§5.1) 
+GRIR Goods receipt / invoice receipt clearing 2110 GR/IR PPV Purchase price variance at GRN (standard-cost materials) and IPV at match 5210 
+USAGE Production issue offset (component to WIP) 1320 WIP (order) ABSORB Labor/overhead absorption credit 7500 series per MFG Part H 
+
+=== PAGE 154 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 154 of 312 
+Event Key Fires On Resolves To (default mapping) VARSET Settlement variance split 5220/5230/5240/5250 by variance type (MFG Part A §8) SUBCON Subcontract provision and receipt legs 
+1315 / 5260 per MFG Part G §6 SCRAP Scrap and waste disposals 5320 ADJ Count and stock adjustments 5310 REVAL Standard cost release revaluation 5330 COGS PGI and COGS recognition 
+5110/5120/5130 per order/item context RETQ RMA quarantine stock 1335 CONSIG Consignment withdrawal liability 2120 Consignment Payable Clearing (§14.2) CONSPV Consignment settlement 
+price variance 5215 EORES Excess & obsolete reserve 5340 / 6320 pair (§17.3) INTRANS Stock in transit between own locations 1350 In-Transit Build Note: Implementation contract: the 
+matrix is a configuration table (event_key, valuation_class nullable, qualifier nullable, dr_account_key, cr_account_key, effective dates, approval trail). Resolution order: exact 
+(key+class+qualifier) → (key+class) → (key). The Controller edits it through a governed screen MM-VAL-001 with simulation before release (same two-step mark/release pattern as 
+costing runs). Every journal line stores the matrix row ID that resolved it, giving finance a complete lineage from posting back to configuration. 5.3	Screen	MM-VAL-001	
+—	Account	Determination	Workbench Screen ID MM-VAL-001 URL Pattern /materials/account-determination Purpose Controller-governed maintenance and simulation of the 
+determination matrix Element Specification Matrix grid Rows per §5.2 with filter by event key / valuation class; effective-dated versions; diff view between versions Simulation 
+panel Pick material + transaction (GRN, issue, PGI, settlement, adjustment…) + qty/value → full journal preview with dimensions (derivation per MFG Part H §3) before saving any 
+change Release workflow Draft rows → Mark → Controller Release with effective date; postings always use the version valid at posting date; historical postings never restate (same 
+retroactivity doctrine as MFG Part A §11.5) Completeness check Validation: every (event key × valuation class in use) resolves; gaps listed with the materials affected; release 
+blocked while gaps exist (E-MM-21) 5.4	Price	Control	Rules	and	Change	Procedures 
+
+=== PAGE 155 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 155 of 312 
+Rule Specification Method by type Make items (SEMI, FIN): Standard, mandatory. Buy items: Moving Average default; Standard allowed for high-volume raws (CRGO, copper) where PPV 
+visibility is wanted — Controller decision per material group MAV mechanics Receipt at PO price re-averages; issues at current MAV; invoice price differences post to stock when 
+coverage exists, else to 5210 (matches INV Section 12 logic; restated as the single rule) Standard mechanics Receipts at standard with PPV to 5210; revaluation only at costing-run 
+release (REVAL); no mid-period manual standard edits ever Method change (MAV → Standard) Allowed at period boundary only: requires released standard, zero open GRN-without-invoice 
+on the material (warning list), Controller approval; conversion posts REVAL for on-hand delta between MAV and new standard Method change (Standard → MAV) Controller approval; 
+on-hand revalues to current standard as opening MAV; PPV baseline note recorded Price unit changes Allowed with automatic factor-consistent recompute preview; blocked mid 
+costing-run mark window (E-MM-22)  
+
+=== PAGE 156 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 156 of 312 
+PART	C CROSS-MODULE	LINKAGE	CONTRACTS This Part is the answer to the question the review raised about material management linkages: for each neighboring module, exactly which 
+material data it reads, which events flow in each direction, which validations bind the two sides, and which failure behaviors apply. Each contract is written so a developer can 
+implement either side against it without reading the other module’s code. Events named here join the integration matrix in Section 19. 
+6.	Linkage:	Material	↔	Engineering 6.1	Data	Contract Direction Data Rule MM → ENG Material number, description, group, UoM, make/buy, lifecycle status, 
+characteristics EBOM editor lookups (MFG Part C §3.2) may select only materials whose status permits new BOM usage: Active, or Data Completion for placeholder lines. 
+Restricted/Blocked/Obsolete are excluded from component search (E-ENG-08) ENG → MM Placeholder creation (description, group, UoM, est. cost, target vendor) Creates Draft material + 
+MCR per §4.3; number reserved immediately ENG → MM Drawing links per material Document links (MFG Part C §5.1 Linked Objects) render on the material Documents tab; fabricated/made 
+parts require a released drawing before MCR activation of a SEMI (task-level check in the Quality/Production tasks) ENG → MM ECO effects ECO tasks may raise MCH rows (governed 
+field changes, e.g. new revision-relevant characteristics), supersessions (§4.6) and status changes (Production Block during Immediate effectivity). ECO release applies them 
+atomically with the BOM/routing cutover (MFG Part C §4.2) MM → ENG Where-used and stock/impact data for ECR impact analysis The ECR Impact Analysis Panel (MFG Part C §4.1) reads 
+on-hand, on-order and open-document data through the same where-used sweep as §4.4 — one implementation, two consumers 6.2	Events Event Producer → Consumer Payload / Effect 
+MaterialPlaceholderCreated ENG → MM Draft material + MCR; EBOM line reference MaterialActivated MM → ENG Clears placeholder flags on EBOM lines; revalidates affected EBOMs 
+(V-ENG-03) MaterialSuperseded MM → ENG Raises ECO task proposals for BOMs using the predecessor ECOReleased ENG → MM Applies linked MCH/supersession/status changes at effectivity 
+7.	Linkage:	Material	↔	Purchasing 
+
+=== PAGE 157 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 157 of 312 
+7.1	Data	Contract Direction Data Rule MM → PUR Purchasing view (§3.7), quality clause defaults, tax category, tolerances, Buy America flag PR/PO line entry reads these at 
+document creation; changes never restate open documents 
+MM → PUR Info records and source list (below) Source determination order per §7.5 PUR → MM Info record updates from RFQ awards and PO history Award writes price basis + lead time to 
+the info record (was “AVL price basis” in MFG Part G §4; the info record is the formal container, AVL keeps qualification data) PUR → MM Vendor qualification state AVL status 
+transitions (Qualified/Conditional/Suspended) gate source determination; driven by Quality per MFG Part E §6 7.2	Purchasing	Info	Records	—	NEW Screen ID MM-IR-001 
+(list), MM-IR-002 (detail) URL Pattern /purchasing/info-records Purpose The vendor-material contract of record: prices, lead times, order data per vendor per material. Complements 
+the AVL (which owns qualification); replaces the loose “price basis” fields Field Type Req Specification Info Record # Auto Auto IR-{SEQ:6}; one active IR per (material, vendor, 
+entity) — V-MM-30 Material / Vendor Lookups Yes Vendor must be Active (onboarding complete, MFG Part G §2.1) Vendor Part # / Vendor Description Text No Prints on PO; feeds 
+order-entry cross-reference Purchase UoM Override Dropdown No Overrides material default for this vendor; conversion path required Price Basis Currency + unit Yes Net price per 
+price unit in vendor currency; source badge: RFQ Award / Contract / Manual (Manual requires Purchasing Manager approval above 5% delta vs last basis) Price Validity From / To 
+Dates Yes/No Effective-dated rows; history immutable; overlapping validity blocked (V-MM-31) Scale Prices Sub-table No Qty-break rows (From Qty → Price); deepest satisfied break 
+applies at PO pricing Surcharge Linkage Lookup No Commodity index rule (MFG Part I §6.4) applied on the purchase side: PO price = basis ± index delta × content; printed as separate 
+PO condition line Planned Delivery Time (days) Number Yes Vendor-specific; overrides material Planning view default in MRP offsetting Min Order Qty / Rounding Numbers No 
+Vendor-specific constraints; MRP lot rounding uses the winning source’s values 
+
+=== PAGE 158 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 158 of 312 
+Screen ID MM-IR-001 (list), MM-IR-002 (detail) Incoterms / Freight Estimate % Mixed No Landed-cost estimation inputs (INV 5.6.1 true-up unchanged) Tax Code Default Dropdown No Per 
+MFG Part A §11.3 vendor logic Last PO / Last GRN / Last Invoice Price Read-only — Rolling actuals with document links; deviation of invoice vs IR basis > 5% raises buyer alert 
+Status Badge Auto Active / Expired / Blocked (vendor blocked or AVL Suspended cascades here) 7.3	PO	Price	Determination	(Purchase	Side) Mirror of the sales 
+Pricing Service, implemented once as the Purchase Pricing Service and called by PR valuation, PO creation and MRP planned-cost estimation: • Manual price on the PO line within 
+buyer authority (deviation > 5% from IR basis flags approval note per MFG Part G §5.2) — stamped Price Source = Manual. • Contract / scheduling agreement price when one exists (Phase 
+2 object; field reserved). • Active info record price for (material, vendor) valid on the PO date, scales applied — Price Source = Info Record. • Last PO price for the pair, flagged 
+“basis stale” if older than 12 months — Price Source = Last PO. • No basis → line enters at zero with hard task: buyer must price manually; PO cannot be Sent with zero-price valuated 
+lines (E-MM-32). 7.4	Source	List	—	NEW Screen ID MM-SL-001 URL Pattern /purchasing/source-lists Purpose Period-based declaration of valid supply sources per material; 
+the governance layer MRP and buyers obey Field Type Req Specification Material Lookup Yes Grid per material; rows below Row: Vendor (or Subcontractor) Lookup Yes Must hold an 
+Active info record (V-MM-33) and AVL row where qualification is required Valid From / To Dates Yes Non-overlapping Fixed rows per period (V-MM-34) Fixed Toggle No Exactly one 
+Fixed source per period allowed; MRP assigns PRs to it without buyer touch when Source Determination Policy = Source List Fixed (§3.7) Blocked Toggle No Explicit negative: this 
+vendor may not supply this material in the period regardless of AVL (commercial embargo); hard block at PO entry (E-MM-35) MRP Relevant Toggle Yes OFF rows are for spot buys only; 
+MRP ignores them 7.5	Source	Determination	Order	(binding) • Source list Fixed vendor for the period, when policy = Source List Fixed and the row is MRP Relevant. 
+
+=== PAGE 159 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 159 of 312 
+• AVL rank 1 with Active info record (policy = AVL Rank, the default) — qualification state per MFG Part G §2.2 gates eligibility. • Any AVL vendor with Active info record, by rank. • 
+No eligible source: PR flagged EX-09 “no valid source of supply”; QI-critical materials hard-block per E-PUR-02; buyer starts RFQ or AVL qualification. Build Note: The AVL (MFG Part 
+G §2.2) keeps: rank, qualification status, FAI, quality rating. The info record keeps: commercial terms. The source list keeps: period governance. These three tables are joined by 
+(material, vendor); do not duplicate fields across them — the MFG Part G AVL columns “Price Basis / Lead Time” become read-through views onto the info record after this volume. 
+8.	Linkage:	Material	↔	Production	and	MRP Direction Data Rule MM → PP Planning view fields (§3.6) MRP engine inputs; the workbench never reads 
+planning data from anywhere else MM → PP Production view fields (§3.8) WO creation defaults: issue warehouse, tolerances, serialization/batch timing MM → PP Batch/serial profile (§15) 
+Determines scan behavior at SP-08/SP-12 and genealogy granularity MM → PP Lifecycle status + Production Block WO create/release validations (E-PP-01 family extends with E-PP-08 
+“material blocked for production”) PP → MM Consumption actuals ADU (trailing 90-day) recompute for reorder arithmetic; ABC/XYZ classification job inputs PP → MM WO receipt/settlement 
+events MAV updates (buy items consumed), standard-cost variance data to CVA; no direct field writes on the material Availability semantics (single definition, used by ATP, MRP, 
+reservations and release checks): Available = On-hand Unrestricted − Reserved − QI Hold − Blocked − Customer Property; On-Order = open PO + open WO + in-transit receipts, dated. 
+Special stock buckets (§14.1) are excluded from anonymous availability except SO-pegged stock, which is available only to its pegged SO line. 
+9.	Linkage:	Material	↔	Inventory	and	Warehouse Direction Data Rule MM → INV Warehouse view (§3.9): strategies, storage conditions, shelf-life 
+rules Putaway proposals (INV 15.6), pick strategy enforcement (FEFO/FIFO/serial-directed at SP-15), GR shelf-life validation (E-MM-14) MM → INV Tracking config (batch/serial flags) 
+Movement screens render batch/serial capture accordingly; immutability per V-MM-03 MM → INV Lifecycle status + Posting Block All movement types validate; block error names the 
+block reason and owner INV → MM Stock, valuation and movement history Stock Overview tab, MAV, count classification inputs, E&O aging inputs (§17.3) INV → MM Count results No 
+master-data writes; counting never mutates the material record 
+
+=== PAGE 160 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 160 of 312 
+10.	Linkage:	Material	↔	Sales The Sales view contract is fully specified in MFG Part A §4 (fields, price determination waterfall, repricing, surcharges) and 
+Part B (document usage). Deltas from this volume: lifecycle gating (Sales Block and Restricted stop new quote/SO lines with E-SAL-03 naming the block), supersession 
+cross-reference printing (§4.6), and the completeness gate for sellable activation (§3.12). No other change. 
+11.	Linkage:	Material	↔	Quality Direction Data Rule MM → QM Quality view (§3.10): QI flags, certificate requirements, batch record requirements GRN routing 
+to QI Hold, certificate enforcement (E-QM-06), field-level GRN requirements 
+QM → MM Inspection plan resolution Runtime resolution per MFG Part A §6.2 remains in QM; the material’s Quality view only previews it. Plans are never stored on the material 
+(assignment scope lives on the plan) QM → MM Vendor quality outcomes IQC results roll vendor quality rating (AVL) and can trigger Purchasing Block proposals on the material 
+(steward task, not automatic) QM → MM Holds Batch/serial-level holds stay in INV 6.2; material-level Shipping/Posting blocks per §4.5 when the whole material is suspect 
+12.	Linkage:	Material	↔	Costing	and	Controlling Direction Data Rule MM → CST Accounting & Costing view (§3.11): valuation class, method, price unit, 
+costing lot size, overhead group, Do Not Cost 
+Costing run scoping and rollup inputs (MFG Part I §3.2) 
+CST → MM Released standard cost + effective date Written by costing-run release only; REVAL posting per §5.2; “never manual edit” restated MM → CO Profit center per material Derivation 
+rule 3 (MFG Part H §3) source field; mandatory for valuated materials (V-MM-01) CST → MM Estimate bases Placeholder est. cost (§4.3) and info-record prices feed estimates with source 
+badges (MFG Part I §3.1 component price sources) 
+13.	Linkage:	Material	↔	Accounting • All GL effects route through the account determination matrix (Section 5) inside the shared Posting Service; the 
+material contributes valuation class, method, PC and price data, never account numbers. • Period control: material master edits are never period-blocked (masters are not postings, 
+MFG Part A §9.2); valuation-relevant changes (method, class) are restricted to period boundaries per §5.4. 
+
+=== PAGE 161 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 161 of 312 
+• Reconciliation: the inventory subledger by valuation class must tie to the 13xx accounts at every close; the close checklist step 6 report gains a by-valuation-class breakdown so 
+a mapping error surfaces as a class-level difference, not a plug. • Audit: every journal line stores material, valuation class version, matrix row ID and price source, closing the 
+lineage loop demanded by review item T-10.  
+
+=== PAGE 162 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 162 of 312 
+PART	D SPECIAL	STOCK	AND	OWNERSHIP	TYPES Standard stock is PE-owned, anonymous and warehouse-located. Real operations add stock that is somewhere else, owned 
+by someone else, or dedicated to something. This Part gives each special stock type a defined bucket, availability rule and posting treatment. Buckets are visible on the material 
+Stock Overview (§3.13) and the Real-Time Stock Ledger (INV 15.12). 
+14.	Special	Stock	Types 14.1	Bucket	Overview Bucket Owner Valuated by PE In Anonymous ATP Established By Unrestricted / QI Hold / Blocked (standard) PE Yes 
+Unrestricted only INV as built At Subcontractor (1315) PE Yes No (visible to the owning WO/PO) MFG Part D §10 / G §6 Vendor Consignment Vendor until withdrawal No (memo qty; §14.2) 
+Configurable: counts as supply with flag “consignment” in MRP 
+This volume 
+Customer Property Customer No (non-valuated qty) No MFG Part A §3.5 (RMA repair path); generalized here for customer-supplied material in ETO jobs SO-Pegged Stock PE Yes Only for 
+its SO line WO receipt of pegged orders (MFG Part B §4.3); formalized here In-Transit (1350) PE Yes No until receipt Transfers (INV 5.3) 14.2	Vendor	Consignment Consignment 
+lets a vendor stock material in PE’s warehouse that remains vendor property until PE withdraws it. Target use: high-volume hardware and selected insulation from partner vendors. 
+Activation is per (material, vendor): Special Procurement = Consignment on the Planning view plus a consignment-flagged info record. • Fill-up: consignment PO type (no commitment 
+value) → GRN books quantity into the Consignment bucket for that vendor. No value posting; the statistical memo (1311) carries quantity × IR basis for insurance and disclosure 
+reporting only. • Withdrawal: any consuming movement (issue to WO, transfer to own stock, sale) automatically converts ownership at the moment of consumption. The withdrawal posts 
+the value entry below and writes a consignment settlement line for the vendor/period. • Settlement: monthly run per vendor aggregates withdrawals into a self-billing settlement 
+document to AP (ACC 6 invoice created from settlement, no vendor invoice matching); price = IR basis valid at each withdrawal date; deviations at true-up post to 5215. 
+
+=== PAGE 163 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 163 of 312 
+• Counting: consignment stock counts like own stock (it is in PE custody); variances adjust the memo quantity and raise vendor reconciliation lines, never 5310. • Returns to vendor 
+from consignment reverse quantity only. MRP treats consignment on-hand as supply with source tag so planners see the ownership difference. Accounting Entry — Consignment withdrawal 
+(to production order) Debit Credit Amount Basis Notes 1320 WIP (order) 2120 Consignment Payable Clearing Withdrawn qty × IR basis at withdrawal date Event keys USAGE + CONSIG; CC 
+from WC, PC parent item Accounting Entry — Consignment settlement (monthly, per vendor) Debit Credit Amount Basis Notes 2120 Consignment Payable Clearing 2100 AP (vendor) Sum of 
+period withdrawals at IR basis Self-billing document; tax per vendor profile 5215 Consignment Price Variance 2120 (or reverse) True-up delta when a retroactive price correction 
+applies Requires Controller approval; rare by design 
+14.3	Customer	Property	(generalized) • Beyond RMA repair units (MFG Part A §3.5), ETO contracts sometimes include customer-supplied components (e.g. 
+customer-specified relays). These receive as Customer Property: quantity tracked with full batch/serial and genealogy, zero value, never in ATP, never counted in E&O. • Consumption 
+into a WO posts no material value; genealogy records the consumption normally so the as-built record is complete. The cost estimate flags customer-supplied lines at zero material 
+cost with a note on the quote (MFG Part I §3.1). • Return of unused customer property ships on a zero-value delivery with a property return note; the SO closure checklist includes 
+“customer property reconciled” when any was received. 14.4	SO-Pegged	Stock • FG receipt from a pegged WO lands in the SO-Pegged bucket keyed to the SO line (already the 
+behavior in MFG Part B §4.3; the bucket makes it explicit and auditable). Pegged stock is invisible to anonymous ATP and cannot be picked for another order without a formal De-Peg 
+action (Sales Director approval + reason; logged on both SO lines). • Valuation is standard, same as FG; the bucket is a stock dimension, not a valuation change.  
+
+=== PAGE 164 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 164 of 312 
+PART	E BATCH	AND	SERIAL	PROFILES 15.	Batch	and	Serial	Management	(Master-Data	Layer) Execution behavior (scans, genealogy, statuses) is specified in INV 
+and MFG Part F and unchanged. This Part specifies the master-data layer: what a batch record is, which profile drives serialization, and the immutability rules that keep 
+traceability trustworthy. 15.1	Batch	Master	(DELTA	to	INV	batch	records) Field Type Req Specification Batch # Auto Auto BAT- series per INV; label per MFG Part F §1 
+Vendor Batch / Heat # Text Cond. Mandatory per material Batch Record Requirements (§3.10); heat # is the traceability key for CRGO and copper Manufacture / Receipt / Expiry Dates 
+Dates Cond. Expiry mandatory for shelf-life materials; FEFO reads expiry Country of Origin (actual) Dropdown Cond. Captured at GRN; overrides material default; feeds Buy America 
+accumulation per shipment Certificates Attachments Cond. Mill cert / CoA per §3.10; enforced at GRN accept Vendor / PO / GRN References Links Auto Provenance chain for the 
+traceability tree Batch Status Badge Auto Unrestricted / QI Hold / Blocked / Consumed / Expired (job flips at expiry date; expired stock auto-moves to Blocked with alert) 
+Characteristics (measured) Panel No Actuals from incoming inspection (core loss W/kg, conductivity) copied from inspection results for batch search (“find all CRGO batches with 
+loss ≤ X”) 15.2	Serial	Number	Profiles Profile Applies To Behavior SN-FIN Transformer FIN transformers Serial at WO release; nameplate format PE-{TYPE}-{YYYY}-{SEQ:4}; full 
+genealogy; warranty tracking; customer/site on shipment (all per MFG Part D/F, restated as profile) SN-COMP Serialized Component TRADE/SPARE serialized (bushings, tap changers, 
+relays) Serial at GRN (vendor serial captured or PE label printed); parent-child install links (SP-12); RMA-traceable SN-SEMI Optional SEMI where engineering elects Serial at WO 
+release or FG receipt per §3.8 field SN-NONE Everything else No serialization Build Note: Profiles are configuration rows (profile, serial timing, format, warranty relevance, 
+install-link allowed). The material references a profile; documents read the profile, never per-material bespoke logic. Changing a material’s profile follows V-MM-03 immutability 
+once records exist. 
+
+=== PAGE 165 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 165 of 312 
+ 
+
+=== PAGE 166 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 166 of 312 
+PART	F MASS	MAINTENANCE,	MIGRATION	AND	DATA	QUALITY 16.	Stewardship	Toolset 16.1	Mass	Maintenance Screen ID MM-MCH-001 URL Pattern 
+/materials/change-requests Purpose Governed mass changes across materials (the MCH object from §4.4) • Selection: filter set (type, group, status, buyer, planner, free field 
+predicates) or uploaded material list; preview grid shows current values of the target fields. • Change definition: target field(s) + new value or expression (set, adjust %, 
+find/replace within text); Class rules per §4.4 decide the approval chain; Class 3 fields are not selectable. • Simulation: full before/after grid, validation results per row (rows 
+failing validations are excluded and listed), effect summary (e.g. “124 materials, 3 will lose active source”), export. • Apply: immediate or effective-dated; transactional per row 
+with error isolation; result log downloadable; every row writes the standard field-level audit with the MCH reference. 16.2	Import	Templates XLSX templates per view (columns 
+= fields with data dictionary validation on upload) support both migration and ongoing bulk creation. Uploads create MCRs/MCHs rather than writing directly, so governance is 
+identical regardless of entry channel. Template versioning follows the field dictionary; an outdated template upload is rejected with a per-column diff. 16.3	Migration	
+Specification	(answers	review	D-04	for	MM	scope) Step Specification Source inventory Legacy item list extract with: code, description, type mapping 
+candidate, UoM, on-hand by location, last costs, vendor/price data, open PO/SO/WO references. Extract format fixed in the template set (§16.2) Mapping & cleansing Type mapping 
+table (legacy category → material type §2.1) approved by Materials Manager; UoM normalization; duplicate resolution run (§4.4 checks against the whole load); description 
+standardization rules (noun-modifier format) applied and exceptions listed Mock loads Minimum two full mock conversions in the test environment; completeness KPIs (§16.4) computed 
+on each; error budget for go-live: zero Class A errors (unloadable rows), < 0.5% Class B (loaded with warnings) Valuation cutover Opening stock loads at legacy value as opening 
+MAV, or at released standard where costing runs completed pre-cutover; count-based verification per INV 7 before value release; opening JE ties subledger to GL by valuation class 
+Batch / serial history Active batches and serials load with provenance fields; historical genealogy beyond active stock loads into the archive store (read-only traceability), not 
+the operational tables Info records / source lists Last-price and lead-time history converts to IR rows (source badge Migration); AVL qualification states carry with evidence 
+links 
+
+=== PAGE 167 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 167 of 312 
+Step Specification Freeze & reconciliation Legacy master-data freeze at T-5 days; delta capture list for manual re-key; post-load reconciliation reports: counts by type/status, 
+value by valuation class vs legacy trial balance, open-document reference resolution 100% 16.4	Data	Quality	Dashboard	and	KPIs KPI Definition Target Completeness 
+Mandatory-for-use fields populated ÷ required, per material, rolled up by type and owner 100% for Active (structural); ≥ 95% including Data Completion WIP MCR cycle time Creation → 
+Active, percentiles by type P80 ≤ 5 business days Duplicate rate Confirmed duplicates found per 1,000 active materials per quarter < 2 Stale sourcing Buy materials whose only IR 
+basis is older than 12 months < 5% Governance exceptions Class 2 changes applied without linked approval (structurally zero; audit query) 0 PC-900 materials Valuated materials on 
+fallback profit center 0 (weekly exception per MFG Part H §1.2)  
+
+=== PAGE 168 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 168 of 312 
+PART	G REPORTS	AND	ANALYTICS 17.	Material	Management	Reports Report Content MM-R1 Master Data Completeness KPI drill per §16.4: by type, owner, view; 
+row-level missing-field list; export MM-R2 Where-Used Explosion Multi-level where-used for any material across BOMs, plans, price rows, IRs, source lists (extends MFG Part C §7) 
+MM-R3 Sourcing Coverage Buy materials × (AVL rows, active IR, source list state, lead time); gaps highlighted: no source, single source on A-class, stale basis MM-R4 Slow-Moving & 
+Dead Stock No consumption in 6/12/24 months with on-hand value, last movement, disposition suggestion; feeds E&O run MM-R5 Supersession Status Open supersessions with run-out 
+progress, remaining predecessor stock and blocked documents MM-R6 Consignment Position By vendor: on-hand consignment qty, memo value, period withdrawals, unsettled balance vs 
+2120 MM-R7 Special Stock Overview All §14.1 buckets by material/warehouse with document references MM-R8 Lifecycle Funnel Materials by status with aging; Restricted/Blocked with 
+reason codes and owner 
+17.3	Excess	&	Obsolete	Reserve	Run Screen ID MM-EOR-001 URL Pattern /materials/eo-reserve Purpose Quarterly (config) computation and posting of the E&O inventory 
+reserve — Controller-owned • Policy table: aging buckets (no consumption 6/12/24+ months) × reserve % per material type; overrides per material with reason (e.g. insurance spares 
+exempt). • Run: compute per material (on-hand value × bucket %), compare to existing reserve, propose delta; review grid with drill to MM-R4 evidence; Controller posts. • Posting: DR 
+6320 E&O Expense / CR 5340 Inventory Reserve for builds; reverse for releases (consumption resumed or stock scrapped — scrap first relieves the reserve, then 5320 takes only the 
+unreserved remainder). • The reserve is a valuation adjustment account, never a quantity change; traceability and availability are unaffected.  
+
+=== PAGE 169 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 169 of 312 
+PART	H DATA	MODEL,	INTEGRATION	MATRIX	AND	ROADMAP 18.	Data	Model 18.1	Core	Entities Entity Key Fields / Constraints Relationships material material_id 
+(PK), material_no (unique), type, group_l1/l2/l3, base_uom, status, batch_flag, serial_profile_id, hazmat_json, created/updated audit. Type and material_no immutable (DB trigger + 
+app rule) 
+→ every module 
+material_text material_id, lang, short_desc, long_desc, purchasing_text, work_notes → material material_uom material_id, uom, numerator, denominator, usage_tag; unique 
+(material_id, uom) → material material_plant_data material_id, plant_id (composite unique), all §3.3 plant-level groups as typed columns, status per plant. Exists from day one even 
+with one plant → material, plant 
+material_valuation material_id, plant_id, entity_id, valuation_class, method, price_unit, std_cost, std_effective, mav, effective-dated history rows (no updates in place) → account 
+determination 
+material_characteristic material_id, class_id, attr_key, typed value columns; class per group → material, characteristic_class mcr / mcr_task mcr_id, material_id, origin_ref, 
+status; task: view, owner_role, sla_due, status → material, users mch / mch_row mch_id, status, approval refs; row: material_id, field, old, new, applied_at, error → materials, ECO 
+supersession sup_id, predecessor_id, successor_id, policy, effective, status → materials, ECO info_record ir_id, material_id, vendor_id, entity_id (unique active), price rows child 
+table effective-dated, scales child table → material, vendor, PO pricing source_list_row material_id, vendor_id, valid_from/to, fixed, blocked, mrp_relevant; overlap constraints 
+per V-MM-34 → material, vendor 
+acct_determination_row event_key, valuation_class NULLABLE, qualifier NULLABLE, dr_key, cr_key, valid_from/to, version, approval ref → Posting Service 
+special_stock_bucket stock rows gain owner_type (OWN/VENDOR/CUSTOMER), owner_ref, peg_type (NONE/SO/WO), peg_ref — extends INV stock tables, no parallel table → INV stock 
+batch (extended) adds vendor_batch, heat_no, coo, expiry, measured characteristics json → INV batch serial_profile profile_id, timing, format, warranty_flag, install_link_flag → 
+material 
+
+=== PAGE 170 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 170 of 312 
+Entity Key Fields / Constraints Relationships eo_reserve_run / row run_id, period, policy version; row: material_id, bucket, value, reserve_delta, je_ref → GL 
+18.2	Physical	Rules	(applies	to	every	MM	entity) • Surrogate integer/UUID PKs; business keys unique-indexed; foreign keys enforced in the database, 
+not only the app. • Effective-dated tables never update rows in place: new row + closed predecessor, both retained (valuation, IR prices, account determination, source list). • 
+Field-level audit via the shared audit stream (screen, MCH, migration, API as sources); audit rows are append-only and excluded from purge. • Concurrency: optimistic locking 
+(version column) on the material and children; the MCR/MCH apply steps take row locks per material to prevent cross-workflow races. • Archive/purge: Obsolete materials archive 
+after the retention period (default 10 years, aligned to genealogy retention) into the read-only store; material numbers are never reused. 18.3	API	and	Event	Surface 
+Interface Specification REST: /api/v1/materials GET (filter set of §3.1), GET by id (view-shaped payloads), POST creates MCR (never a direct Active material), PATCH creates MCH 
+rows for governed fields / direct write for Class 1 with audit; all responses carry the field dictionary version REST: /api/v1/info-records, /source-lists, /supersessions CRUD 
+with the same governance semantics as the screens; idempotency keys on POST Events (outbox pattern) MaterialCreated, MaterialActivated, MaterialChanged (field list), 
+MaterialStatusChanged, MaterialSuperseded, InfoRecordPriceChanged, SourceListChanged, StdCostReleased — versioned payloads, ordered per material, consumed by MRP cache, pricing, 
+search index and any future PLM/CAD connector (review F-03 lands on this surface) 
+19.	Integration	Matrix	(New	Flows) Source Target Trigger Payload / Effect EBOM editor MCR Placeholder creation Draft material + tasks; number reserved MCR activation 
+EBOM / PR / Quote All tasks complete Unblocks originating documents RFQ award (MFG G §4) Info Record Award action Price basis + lead time rows Info Record / Source List MRP Nightly 
++ on change Source of supply and lead times per §7.5 MRP PR with source Proposal creation EX-09 when no source resolves Costing run release Material valuation Release New standard 
++ REVAL posting ECO release MCH / Supersession / Blocks Effectivity Atomic apply with BOM cutover 
+
+=== PAGE 171 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 171 of 312 
+Source Target Trigger Payload / Effect Consignment withdrawal Settlement store + GL Consuming movement CONSIG posting + settlement line Monthly settlement run AP (ACC 6) Period 
+end Self-billing invoice per vendor E&O run GL Quarterly Reserve build/release JE ABC/XYZ job Material plant data Monthly Class badges; count frequency feed Expiry job Batch 
+status Daily Expired → Blocked + alert 
+20.	Roadmap	Insertion	and	Non-Functional	Requirements 20.1	Build	Sequencing	(extends	MFG	Part	K	§3	phases	M1–M7) Phase MM 
+Scope Added Rationale M1 (wks 1–4) Material type model, numbering, field dictionary with change classes, plant-data split, valuation classes and account determination matrix + 
+MM-VAL-001, GL preview Everything downstream posts through the matrix; it must precede any posting-bearing module M2 (wks 3–8) MCR workflow + placeholder path, 
+Planning/Purchasing/Production/Warehouse/Quality/Accounting views, duplicate check, function blocks Sales core and gap items in M2 need governed materials to exist M3–M4 (wks 6–18) 
+Info records, source lists, purchase price determination, serial profiles, batch master extensions, special stock buckets incl. SO-pegged and customer property Production and 
+procurement loops consume them M5–M6 (wks 14–22) Consignment end-to-end, supersession, mass maintenance, E&O run, MM reports Requires stable GRN/AP and costing foundations M7 (wks 
+20–26) Migration execution per §16.3, data quality dashboard live, completeness gates enforced, UAT scripts for every linkage contract in Part C Go-live readiness 
+20.2	Non-Functional	Requirements	(MM	additions) Area Requirement Volumes 50k materials at go-live growing 5k/year; 8k info records; 120k batches/year; 1.5k serials/year 
+(FIN) plus component serials; dictionary of ~450 material fields Performance Material detail load < 1.5 s P95 with all views; listing filter response < 2 s at 50k rows; duplicate 
+check inline < 500 ms; account determination resolution < 10 ms in-posting (cached matrix); MCH apply ≥ 50 rows/s Integrity Zero postings without a resolvable matrix row (E-MM-21 
+enforced at release, monitored in production); subledger-by-valuation-class tie-out at every close Auditability Any field value answerable “who set this, when, from where, under 
+which approval” in ≤ 3 clicks; matrix row lineage on every journal line Security Field-group edit rights per §3.2 enforced server-side; SOD: MCR task completion vs activation; matrix 
+edit vs release; MCH request vs approve 
+21.	Document	Sign-Off 
+
+=== PAGE 172 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 172 of 312 
+Metric Count Parts 8 (A–H) Review items closed or advanced 6 (F-04 partial, F-11 partial, T-01 partial, T-10, D-01, D-04 partial) New screens specified 12 (MM-MAT delta, MCR ×2, 
+MCH, SUP, IR ×2, SL, VAL, EOR, plus view-level deltas to INV 2.2/2.3) Field-level tables 30+ New GL accounts / posting rules 6 accounts; consignment, E&O and determination-matrix 
+posting rules Linkage contracts 8 (Engineering, Purchasing, Production/MRP, Inventory, Sales, Quality, Costing, Accounting) Validation register entries V-MM-01…V-MM-34, 
+E-MM-02…E-MM-35 as specified per section This Book, together with the Inventory & Warehouse and Accounting specifications and Book I, constitutes the material-management-complete 
+build package. Any deviation during development must be documented and approved by the PE ERP project lead before implementation. Role Name Signature Date Project Sponsor    
+Product Owner    Materials Manager / Master Data Steward    Technical Lead (PE)    Development Partner Lead    Engineering Manager    Purchasing Manager    Quality Manager    
+Controller    CFO    
+BOOK	III ENTERPRISE	COMPLETENESS Cross-Volume Flow Closure  •  Integration & Transaction Architecture  •  Security & IAM  •  Resilience & Operations Finite Scheduling & CTP  •  
+Multi-Plant & Global Model  •  CAD/PDM/PLM  •  Test, Migration, Cutover & Acceptance 
+
+=== PAGE 173 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 173 of 312 
+ 
+

@@ -1,0 +1,297 @@
+<h1 class="part" id="s-part6"><span class="num">Part 6</span>Commands</h1>
+<div class="part-intro">
+  Nine slash commands. Everything else is conversation with the orchestrator, which routes to agents
+  by matching the task to the routing table.
+</div>
+
+<table>
+  <tr><th style="width:24%">Command</th><th>Does</th><th style="width:20%">When</th></tr>
+  <tr>
+    <td><code>/new-project {name}</code></td>
+    <td>Copies the workspace template in full, collects the five adaptation variables plus the
+    accessibility obligation and the device-and-environment table, walks the derived obligations
+    checklist, creates risk rows, seeds the conformance scaffolding, then routes into intake.</td>
+    <td>Day one</td>
+  </tr>
+  <tr>
+    <td><code>/intake-spec</code></td>
+    <td>Classifies what arrived, audits fourteen dimensions, fills the spec slot, opens the assumption
+    register, starts the substitute path, and discloses a missing spec in STATE. Accepts an argument to
+    re-run on a late-arriving document.</td>
+    <td>Day one, and whenever a new client document lands</td>
+  </tr>
+  <tr>
+    <td><code>/phase-status</code></td>
+    <td>Standup: phase and mode, next gate with its unmet exit criteria, blockers, owner-less
+    contradictions, rework-log count by Phase 1 topic, stale artifacts with the dependency that staled
+    them, the conformance headline and its age, and the next three actions with owners.</td>
+    <td>Any time; start of every session</td>
+  </tr>
+  <tr>
+    <td><code>/verify [scope]</code></td>
+    <td>Conformance snapshot. Scope is <code>full</code> (default), or one of <code>trace</code>,
+    <code>stale</code>, <code>provenance</code>, <code>drift</code>, or a REQ-ID or artifact path.
+    Updates the traceability matrix, files the snapshot, routes findings with owners, updates STATE.</td>
+    <td>Weekly in 2B/3, before gates, after corrections, on demand</td>
+  </tr>
+  <tr>
+    <td><code>/design-qa [scope]</code></td>
+    <td>The seven-lens critique at the lens set the named gate requires. Runs after <code>/verify</code>,
+    not before. Scores and classifies every finding, routes Type B before any fix, runs the perceptual
+    and accessibility tests, files the report.</td>
+    <td>Before every gate; when a screen feels wrong</td>
+  </tr>
+  <tr>
+    <td><code>/gate-1</code></td>
+    <td>Attendance and pre-checks, the set reviewed together, the six questions, quiet-review handling,
+    archive, report.</td>
+    <td>End of Phase 2A</td>
+  </tr>
+  <tr>
+    <td><code>/gate-2</code></td>
+    <td>Attendance including a developer, model-first review order, ERD acceptance, the signed
+    prioritized list, pain-index deltas presented.</td>
+    <td>End of Phase 2B</td>
+  </tr>
+  <tr>
+    <td><code>/gate-3</code></td>
+    <td>Line-by-line against REQ-IDs, independent reconciliation re-run, independent re-run of critique
+    lenses 3, 4 and 7.</td>
+    <td>End of Phase 3</td>
+  </tr>
+  <tr>
+    <td><code>/rework "{correction}"</code></td>
+    <td>Classifies Type A or B, routes it, walks dependency links, marks dependents stale, runs the
+    staleness sweep, writes the rework-log row, checks the three-per-topic escalation, and reports the
+    regeneration order.</td>
+    <td>Whenever feedback arrives outside a gate</td>
+  </tr>
+</table>
+
+<h1 class="part" id="s-part7"><span class="num">Part 7</span>Artifacts and templates</h1>
+<div class="part-intro">
+  Sixteen templates in <code>templates/</code>. Skills reference them by name, so a template change
+  propagates without touching a skill.
+</div>
+
+<table class="tight">
+  <tr><th style="width:30%">Template</th><th>Used by</th><th>Carries</th></tr>
+  <tr><td><code>prd-placeholder.md</code></td><td>spec-intake</td><td>The spec slot: header block, the client spec verbatim, or the placeholder record with the fourteen dimensions scored</td></tr>
+  <tr><td><code>assumption-register.md</code></td><td>spec-intake, everyone</td><td>Assumption, why needed, origin, provenance, blast radius, cheapest test, owner, decision date, status, resolution</td></tr>
+  <tr><td><code>open-question.md</code></td><td>discovery, research</td><td>ID, question, raised by, what it blocks, route (RESEARCH / DA-ONLY / PO), status, answer provenance</td></tr>
+  <tr><td><code>problem-statement.md</code></td><td>contradiction-mining</td><td>Problem, source, current workaround, downstream consequence, confidence, confirmation, linked flow rows</td></tr>
+  <tr><td><code>solution-hypothesis.md</code></td><td>interview-facilitation</td><td>Hypothesis, offerer, problems it responds to, status (adopted into REQ / parked / rejected) with reason</td></tr>
+  <tr><td><code>incumbent-product-note.md</code></td><td>incumbent-research</td><td>Source grades, four extraction targets, task walk, refusals, severity-rated heuristic findings, state harvest, implied ERD</td></tr>
+  <tr><td><code>prompt-spec.md</code></td><td>prompt-authoring</td><td>The six parts, the carry checklist, the probe record, and the version delta log</td></tr>
+  <tr><td><code>refined-requirement-entry.md</code></td><td>requirements-reconciliation</td><td>ID, original, correction, resolved, rationale, sources, dependent rule, depends-on/feeds, status, plus the five quality rules</td></tr>
+  <tr><td><code>erd-entity.md</code></td><td>erd-modeling</td><td>Identity, attributes with sources, relationships with counterexamples, status list with transitions and terminal check, permissions, lifecycle, temporal decisions, consequences, open items</td></tr>
+  <tr><td><code>process-step.md</code></td><td>process-breakdown</td><td>Step, actor, system, input, output, rule with REQ-ID, exception with handler, downstream</td></tr>
+  <tr><td><code>ia-map.md</code></td><td>information-architecture</td><td>Structural inventory, navigation model with rejected alternatives, depth map, labelling table, wayfinding, cross-cutting placement, routes</td></tr>
+  <tr><td><code>screen-spec.md</code></td><td>hifi-spec</td><td>The nine blocks, with the state enumeration table first</td></tr>
+  <tr><td><code>design-critique-report.md</code></td><td>design-critique</td><td>Lens set run, findings with location and severity and type and owner, tests run with methods, recurring findings as proposed rule changes</td></tr>
+  <tr><td><code>traceability-matrix.md</code></td><td>process-evaluation</td><td>REQ-ID to artifact-layer mapping, verification method, flags, ghost register, snapshot history</td></tr>
+  <tr><td><code>gate-report.md</code></td><td>gate-review</td><td>Attendance, readiness pre-checks, disclosures, exit criteria, corrections classified, per-gate sections, post-gate verification</td></tr>
+  <tr><td><code>handoff-manifest.md</code></td><td>handoff-package</td><td>Package contents with versions and gaps, the what-if sweep, walkthrough record with the question split, descope pre-answers, the loop review and its three metrics</td></tr>
+</table>
+
+<h1 class="part" id="s-part8"><span class="num">Part 8</span>Reference</h1>
+<div class="part-intro">
+  The dependency order, the guardrails in summary, troubleshooting, extension rules, and a glossary of
+  the system's own vocabulary.
+</div>
+
+<h2 id="s-8-1">8.1 Artifact dependency order</h2>
+<p>
+  Used for staleness checks and rework regeneration. <code>A -&gt; B</code> means B reads from A, so a
+  change to A stales B.
+</p>
+<div class="flow">spec-intake → {anchor-doc | derived-brief} → problem-statements → refined-requirements
+                                                        → {to-be, erd, breakdown}
+spec-intake → assumptions (live; every artifact resting on one names its ASM-ID)
+transcripts → problem-statements
+problem-statements + open-questions → research-plan → kb
+kb → {prd-draft, prompts, style-guide, dummy-content}
+prompts + style-guide → prototype
+as-is → to-be → flow-optimization → ia → {userflows, sitemap}
+erd → {ia, userflows, status-mapping, component state matrices}
+erd (statuses) + incumbents (density) → style-guide → skills-md → {prompts, hifi}
+refined-requirements + prioritized-list → hifi
+hifi → design-critique → gate
+shared-specs (.md loop) → prompts + style-guide (next project)</div>
+<div class="box warn">
+  <span class="lbl">Two staleness paths that are easy to miss</span>
+  <p>A change to the <strong>ERD's status list</strong> stales the style guide's status encoding map,
+  every component state matrix that displays it, and every hi-fi screen state derived from it.</p>
+  <p>A change to the <strong>IA</strong> stales every userflow, the sitemap, and usually the route
+  scheme.</p>
+</div>
+
+<h2 id="s-8-2">8.2 Guardrails in summary</h2>
+<p>
+  <code>GUARDRAILS.md</code> is loaded by the orchestrator and every subagent, and overrides any
+  conflicting instruction anywhere else. Twelve sections:
+</p>
+<table class="tight">
+  <tr><th style="width:8%">§</th><th style="width:30%">Section</th><th>Core rule</th></tr>
+  <tr><td>1</td><td>Provenance</td><td>Every claim carries a source tag and confidence marker; untaggable claims do not go in</td></tr>
+  <tr><td>2</td><td>The verification ladder</td><td>Behaviour-constraining claims require (confirmed) before they can be built against</td></tr>
+  <tr><td>3</td><td>Contradiction handling</td><td>Contradictions are deliverables; never silently resolved; unowned ones block gates</td></tr>
+  <tr><td>4</td><td>Prototype containment</td><td>Archived after Gate 1; hi-fi never starts from its screens; timebox exceeded is a stop signal</td></tr>
+  <tr><td>5</td><td>Gate integrity</td><td>No attendance means NOT HELD; a quiet gate is a warning; sign-off is written</td></tr>
+  <tr><td>6</td><td>Scope discipline</td><td>Phase 3 designs only the prioritized list; mandatory items are never deprioritization candidates</td></tr>
+  <tr><td>7</td><td>Model-use discipline</td><td>Models draft, humans rule; never present fluency as domain certainty; dummy content is never real</td></tr>
+  <tr><td>8</td><td>Data and confidentiality</td><td>Client material stays in the workspace and never enters a web query</td></tr>
+  <tr><td>9</td><td>Escalation triggers</td><td>Fourteen named conditions where an agent stops and asks a human</td></tr>
+  <tr><td>10a</td><td>Assumptions and the missing spec</td><td>The spec slot always exists; assumptions enter only through the register; absence is disclosed</td></tr>
+  <tr><td>11</td><td>Design floor</td><td>The eleven non-negotiables in section 2.9 of this guide</td></tr>
+  <tr><td>12</td><td>Tone of outputs</td><td>Artifacts are plain and undecorated; tentative work stays visibly rough; probing questions are asked one at a time</td></tr>
+</table>
+
+<h3>The fourteen escalation triggers</h3>
+<p class="small">
+  An agent stops and asks a human when: (1) no domain authority is identified and Phase 1 work is
+  requested; (2) an <code>[LLM]</code>-only rule is about to enter a design artifact; (3) a gate would
+  be held without required attendance; (4) three or more Type Bs trace to one Phase 1 topic; (5) the
+  prototype timebox is exceeded or hi-fi from the prototype is proposed; (6) a fixed-bid list change is
+  requested after Gate 2; (7) the document and the authority disagree on something a current task
+  depends on, with no owner; (8) shared-specs are more than one project old and unreviewed and a prompt
+  is about to consume them; (9) a behaviour-constraining assumption is about to pass Gate 2 unresolved;
+  (10) a design floor item would be violated or traded away; (11) a design needs a status the ERD lacks
+  or an affordance the lifecycle forbids; (12) Phase 0 is being skipped; (13) the assumption register
+  has not shrunk between two consecutive gates; (14) a gate would be held on a stale conformance
+  snapshot, unresolved blocking findings, or ghost behaviour inside a signed artifact.
+</p>
+
+<h2 id="s-8-3">8.3 Troubleshooting</h2>
+<table>
+  <tr><th style="width:38%">Symptom</th><th>What it usually means, and what to do</th></tr>
+  <tr>
+    <td>Gate 1 produced almost no corrections</td>
+    <td>Not a pass. Either the set was too safe or the reviewer was polite. Run the three probes before
+    accepting it, and record that you did. If the set genuinely was too safe, the tentative artifacts
+    were probably too polished.</td>
+  </tr>
+  <tr>
+    <td>The same correction keeps coming back at successive gates</td>
+    <td>The correction was classified Type A when it was Type B, so it was patched in one artifact
+    while the requirement stayed wrong. Re-classify and route through the reconciler; then check
+    whether post-gate verification is being run at all.</td>
+  </tr>
+  <tr>
+    <td>Developers ask questions the artifacts already answer</td>
+    <td>The walkthrough was a survey rather than a depth walk, or the routing rule was stated but not
+    demonstrated. Track the question split; it will show which. Feed the clusters into the loop review
+    as candidate rules.</td>
+  </tr>
+  <tr>
+    <td>New statuses keep appearing in Phase 3</td>
+    <td>The exhaustion protocol was not run with the DA, or was run from memory. Each new status is a
+    Type B and a missing screen. Re-run the status pass on the affected entities before speccing more
+    features.</td>
+  </tr>
+  <tr>
+    <td>The assumption register never shrinks</td>
+    <td>Nobody is chasing answers. This is an escalation trigger in its own right (GUARDRAILS 9.13).
+    Take the overdue entries to the DA as a batch with their blast radii attached.</td>
+  </tr>
+  <tr>
+    <td>Every design discussion is about taste</td>
+    <td>The style guide has aspirations rather than rules. Apply the violation-checkable test to each
+    line and rewrite or delete. A critique with no rules to cite produces only opinions.</td>
+  </tr>
+  <tr>
+    <td>The prioritized list has become all Must</td>
+    <td>The mandatory partition was not audited against authority classes. Only law and contract are
+    automatically mandatory; policy and preference compete. Re-run the audit and re-trade.</td>
+  </tr>
+  <tr>
+    <td>The team is answering domain questions from memory</td>
+    <td>The KB is being bypassed. kb-curator names the pattern; the fix is to route the questions
+    through the KB and let it say "cannot answer", which sends them to open-questions where they
+    belong.</td>
+  </tr>
+  <tr>
+    <td>Conformance snapshots keep coming back clean, which feels wrong</td>
+    <td>Sample an artifact that has not appeared in a finding for two snapshots. Either it is genuinely
+    clean or the sweeps are not really reading it; the sample tells you which.</td>
+  </tr>
+  <tr>
+    <td>A client wants to skip Phase 1 because "we know what we want"</td>
+    <td>Run intake anyway; it takes an hour. The audit scorecard is the conversation: it shows, dimension
+    by dimension, what is actually specified. Four or more ABSENTs is not an argument, it is a
+    measurement.</td>
+  </tr>
+</table>
+
+<h2 id="s-8-4">8.4 Adapting the process to the project</h2>
+<table class="tight">
+  <tr><th style="width:30%">Situation</th><th>Adaptation</th></tr>
+  <tr><td>Small or fast project</td><td><code>minimum_set: true</code>. Seven mandatory artifacts; the rest optional but their skills still apply when invoked</td></tr>
+  <tr><td>Low rule density</td><td>ERD collapses to attributes plus relationships; process breakdown optional. Reallocate to UI exploration. But a status machine appearing anywhere makes that entity rule-bearing regardless</td></tr>
+  <tr><td>Demo engagement</td><td>The prototype IS the deliverable: throwaway framing and archive rule off, fidelity table inverts, visual-design and content-design and accessibility apply in full</td></tr>
+  <tr><td>Modernize engagement</td><td>As-is work becomes a product audit; the build gives steps and systems but never waits, workarounds or the spreadsheet beside the keyboard, so observation is still required</td></tr>
+  <tr><td>Fixed-bid</td><td>The list locks at Gate 2; later changes are scope changes requiring escalation before any work</td></tr>
+  <tr><td>Ready-to-code</td><td>The full shared-specs set is a mandatory handoff item; its absence blocks close</td></tr>
+  <tr><td>Users reachable</td><td>Adds user interviews in Phase 1 (separate file, <code>[USER:role]</code> tags) and usability testing in Phase 3; contextual observation wherever access allows</td></tr>
+</table>
+
+<h2 id="s-8-5">8.5 Extending the system</h2>
+<h3>Adding a skill</h3>
+<ol>
+  <li>Create <code>.claude/skills/{name}/SKILL.md</code> with frontmatter carrying a
+  <code>description</code> that states what it does <em>and when to use it</em>; that sentence is what
+  triggers it.</li>
+  <li>Follow the standard anatomy (5.1). Keep it under about 300 lines; put reusable banks, tables and
+  numbers in <code>references/</code>.</li>
+  <li>Add it to an agent's <code>skills:</code> list.</li>
+  <li>If it changes who does what, add a routing row to <code>CLAUDE.md</code> section 4.</li>
+  <li>If it produces an artifact, add it to the dependency order (section 5) and to the workspace
+  placeholder for its folder.</li>
+  <li>Add a row to <code>docs/SKILL-INDEX.md</code>.</li>
+</ol>
+<h3>Adding an agent</h3>
+<ol>
+  <li>Create <code>.claude/agents/{name}.md</code> with <code>name</code>,
+  <code>description</code> (including when to use it proactively), <code>tools</code>, and
+  <code>skills</code>.</li>
+  <li>Include all six body sections: goal, operating rules, <strong>handoff contract table</strong>,
+  quality bar, conformance participation, escalations. The handoff table is what keeps the chain
+  working without the orchestrator remembering.</li>
+  <li>Add routing rows to <code>CLAUDE.md</code>, and name the seams: what must be settled before this
+  agent starts, and what it must not do that belongs to a neighbour.</li>
+</ol>
+<h3>Changing a guardrail</h3>
+<p>
+  Guardrails live in one file, referenced everywhere, so a rule change happens once. Do not copy a
+  guardrail into a skill; cite it by number. If a guardrail needs an exception for a project, that is a
+  <code>PROJECT_CONFIG</code> variable with a routing effect, not a local override.
+</p>
+
+<h2 id="s-8-6">8.6 Glossary of system terms</h2>
+<table class="tight">
+  <tr><th style="width:24%">Term</th><th>Meaning</th></tr>
+  <tr><td>Anchor document</td><td>The document the project treats as its starting statement of requirements. Superseded, never edited, by the refined requirement document at Phase 2B</td></tr>
+  <tr><td>Assumption register</td><td>The live list of what the project is assuming, each with blast radius, cheapest test, owner and decision date</td></tr>
+  <tr><td>Blast radius</td><td>What becomes wrong if an assumption is false: which artifacts, which screens, and which rework class</td></tr>
+  <tr><td>Consequences note</td><td>The ERD's one-line-per-rule translation of lifecycle and permission constraints into interface obligations</td></tr>
+  <tr><td>Derived brief</td><td>The reconstructed specification produced when no spec was supplied. Signed, it becomes the anchor document</td></tr>
+  <tr><td>Domain authority (DA)</td><td>The person who can rule on domain correctness. Without one, Phase 1 cannot converge</td></tr>
+  <tr><td>Ghost</td><td>Artifact behaviour citing no requirement. Either a missing requirement or invention</td></tr>
+  <tr><td>Orphan</td><td>A requirement no artifact implements. Either awaiting its phase, descoped, or forgotten</td></tr>
+  <tr><td>Pain index</td><td>The per-flow rollup (manual movements, uncaught errors, waits, uncommunicated crossings, systems touched) that a to-be must beat</td></tr>
+  <tr><td>Rule-bearing term</td><td>A glossary term whose definition constrains behaviour. Getting it wrong is expensive and silent</td></tr>
+  <tr><td>Second-job check</td><td>Asking what invisible work a step does (control, audit, training, signalling) before eliminating it</td></tr>
+  <tr><td>Silence</td><td>Something the anchor document does not cover. A finding, and the seed of the exceptions question group</td></tr>
+  <tr><td>Spec slot</td><td><code>00-inputs/PRD.md</code>: the client's spec verbatim or the completed placeholder. Never absent</td></tr>
+  <tr><td>Tentative set</td><td>The deliberately rough Phase 2A structure artifacts, built to be corrected at Gate 1</td></tr>
+  <tr><td>Type A / Type B</td><td>Surface correction (patch in place) versus structural correction (route through the reconciler first)</td></tr>
+  <tr><td>Verification agenda</td><td>The anchor analysis output ordering commitments by blast radius, which question generation prioritizes from</td></tr>
+</table>
+
+<div class="box">
+  <span class="lbl">Where to go next</span>
+  <p><code>docs/USAGE.md</code> is the fifteen-minute operational summary of this guide.
+  <code>docs/SKILL-INDEX.md</code> maps all thirty-four skills with their reference files. Every skill
+  file explains its own craft in full, and <code>GUARDRAILS.md</code> is short enough to read in one
+  sitting. Everything is plain markdown; nothing is compiled, and nothing hides.</p>
+</div>

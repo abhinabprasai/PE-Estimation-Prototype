@@ -1,0 +1,323 @@
+<h1 class="part" id="s-part4"><span class="num">Part 4</span>The agents</h1>
+<div class="part-intro">
+  Fourteen specialists. You rarely address them directly: describe what you need and the orchestrator
+  routes it. Each card below gives the role, the skills it loads, what it receives and hands over,
+  the bar it holds itself to, and when it stops and escalates.
+</div>
+
+<h2 id="s-4-0">4.1 How agents, skills and the orchestrator relate</h2>
+<div class="flow">ORCHESTRATOR (CLAUDE.md)   sequences phases, enforces gates, maintains STATE,
+                           routes work. Does no specialist work itself.
+        │
+        ├── AGENT (.claude/agents/*.md)   a role with duties, handoff contracts,
+        │      │                          a quality bar, and escalation triggers
+        │      │
+        │      └── SKILL (.claude/skills/*/SKILL.md)   the craft: procedures, decision
+        │             │                                tables, probing banks, failure modes
+        │             └── references/*.md              depth loaded on demand
+        │
+        └── GUARDRAILS.md   loaded by everyone; overrides everything on conflict</div>
+<p>
+  The division is deliberate. Skills carry depth so that craft improves in one place. Agents are thin
+  routers with role-specific duties and, critically, <strong>handoff contracts</strong>: who they
+  receive from and who they hand to. The orchestrator only sequences. A change to how ERDs are
+  modelled happens in one skill file and every agent that loads it improves.
+</p>
+
+<h2 id="s-4-1">4.2 The routing table</h2>
+<table class="tight">
+  <tr><th style="width:52%">Work</th><th>Agent</th></tr>
+  <tr><td>Spec intake, PRD placeholder, no-spec reconstruction, assumption register</td><td>discovery-lead</td></tr>
+  <tr><td>Anchor doc analysis, glossary, questions, running and consolidating the D&amp;D call</td><td>discovery-lead</td></tr>
+  <tr><td>Concept research, incumbent product study and teardowns</td><td>domain-researcher</td></tr>
+  <tr><td>Building, structuring and querying the knowledge base</td><td>kb-curator</td></tr>
+  <tr><td>PRD draft, prompt authoring, skills-md structure, content and microcopy rules</td><td>prompt-spec-writer</td></tr>
+  <tr><td>As-is flows, to-be flows, process breakdown, tentative structure</td><td>flow-modeler</td></tr>
+  <tr><td>ERD, status fields, permissions, record lifecycle</td><td>data-modeler</td></tr>
+  <tr><td>Information architecture, flow optimization, userflows, sitemap</td><td>ux-architect</td></tr>
+  <tr><td>Style guide, tokens, layout, type, colour, components, states, motion, responsive</td><td>ui-designer</td></tr>
+  <tr><td>Generating, timeboxing and archiving the throwaway prototype</td><td>prototype-engineer</td></tr>
+  <tr><td>Refined requirement document, correction reconciliation, prioritization</td><td>requirements-reconciler</td></tr>
+  <tr><td>Hi-fi specs, screen states, status mapping, dummy content</td><td>hifi-spec-designer</td></tr>
+  <tr><td>Pre-gate critique, accessibility, content quality</td><td>design-critic</td></tr>
+  <tr><td>Any gate, any review, correction classification, conformance snapshots</td><td>gate-reviewer</td></tr>
+  <tr><td>Handoff package, walkthrough, md-spec loop</td><td>handoff-manager</td></tr>
+</table>
+
+<h2 id="s-4-2">4.3 Agent cards</h2>
+
+<div class="agent-card">
+  <h3>discovery-lead <span class="tag p0">PHASE 0</span> <span class="tag p1">PHASE 1</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> spec-intake · anchor-analysis · glossary-builder · question-generation · interview-facilitation · contradiction-mining</div>
+  <p><strong>Goal.</strong> Leave Phase 1 with a problem definition the domain authority has confirmed
+  in writing, a clear separation between what is known, assumed and open, and every contradiction
+  surfaced with an owner. Everything downstream inherits the quality of that separation.</p>
+  <p><strong>Receives:</strong> whatever the client supplied, or nothing.
+  <strong>Hands over:</strong> the intake class and audit to everyone; the process inventory and actor
+  list to flow-modeler; term lists to the glossary and to data-modeler for entity seeding; solution
+  hypotheses to requirements-reconciler (reconciled in 2B, never earlier); open questions to
+  domain-researcher and kb-curator; the confirmed problem set to requirements-reconciler.</p>
+  <p><strong>Quality bar.</strong> Nothing untagged. At least one silence per described process. Every
+  commitment covered by a question or waived with a reason. Every capture line attributable without
+  guessing. Every kept contradiction with both quotes, both tags, a type, a rank, an owner and a due
+  date. Zero <code>(inferred)</code> entries in the problem set.</p>
+  <p><strong>Escalates when:</strong> no domain authority is identified; Phase 0 is being skipped; the
+  PO and DA disagree on the core problem and neither will own it; the call happened without recording
+  consent; two chases have produced no written confirmation.</p>
+</div>
+
+<div class="agent-card">
+  <h3>domain-researcher <span class="tag p2a">PHASE 2A</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> incumbent-research &nbsp;·&nbsp; <strong>Tools:</strong> adds WebSearch and WebFetch</div>
+  <p><strong>Goal.</strong> Give the team the domain's accumulated knowledge without letting any of it
+  harden into a client rule. Everything produced informs a design decision; none of it decides one.</p>
+  <p><strong>Method worth knowing.</strong> Reads the data model out of the UI: filter values are the
+  status enum, columns are the attributes, what an edit screen refuses to change after a point reveals
+  the lifecycle. Runs task walks on the project's top three tasks, scores heuristic findings 0 to 4,
+  and records every <em>refusal</em> (what a product will not let users do), because refusals encode
+  hard-won rules.</p>
+  <p><strong>Hands over:</strong> implied ERD sketches and observed status lists to data-modeler;
+  mental models and convention findings to ux-architect; density evidence and harvested edge-case
+  states to ui-designer; completed batches to kb-curator.</p>
+  <p><strong>Quality bar.</strong> Notes column-comparable across products. Every load-bearing claim
+  graded (A primary / B practitioner / C marketing / D unattributed) with an access date. Nothing in
+  the output reads as a client rule.</p>
+  <p><strong>Escalates when:</strong> only the DA can answer (tag DA-ONLY and stop researching);
+  sources conflict on something load-bearing (record both, do not pick).</p>
+</div>
+
+<div class="agent-card">
+  <h3>kb-curator <span class="tag p2a">PHASE 2A</span> <span class="tag p2b">2B</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> knowledge-base</div>
+  <p><strong>Goal.</strong> Make it possible, at any point during the project and after it, to answer
+  "where did this come from?" about any claim in any artifact. Also the mechanism that keeps a
+  model-augmented team honest: an agent that must answer "per which file?" cannot drift into fluent
+  invention.</p>
+  <p><strong>Method worth knowing.</strong> Three groups never mixed in one file (client, authority,
+  external), and they <em>rank</em>: authority beats client beats external. The
+  <strong>upgrade scan</strong> runs on every authority ingestion, looking for statements that upgrade
+  existing <code>(asserted)</code> entries elsewhere and notifying their owners. That scan is how
+  written confirmations actually propagate instead of sitting unread in a folder.</p>
+  <p><strong>Quality bar.</strong> Zero unindexed files. Every authority ingestion ran its upgrade
+  scan. Conflict marks current. Three random index rows still match their contents.</p>
+  <p><strong>Escalates when:</strong> an agent repeatedly answers from memory what the KB could answer;
+  client material is about to be mixed into a research file or sent externally; a
+  <code>(confirmed)</code> requirement cites an authority item that does not exist or does not say it.</p>
+</div>
+
+<div class="agent-card">
+  <h3>prompt-spec-writer <span class="tag p2a">PHASE 2A</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> prompt-authoring · style-guide-authoring · content-design</div>
+  <p><strong>Goal.</strong> A prompt is a design document: the artifact you keep, iterate and archive
+  with the prototype. Refining a prompt costs minutes; regenerating a prototype costs hours, and this
+  agent owns that trade.</p>
+  <p><strong>Method worth knowing.</strong> Six mandatory parts (context, job to be done, data model
+  sketch, constraints, style reference, scope boundary) plus a <strong>carry checklist</strong> that
+  lives inside those parts: every status the entities can hold, the named density mode, the
+  realistic-content instruction with volume, an explicit request for empty/loading/error states, the
+  accessibility floor, and what is deliberately stubbed. Their absence is the most common cause of a
+  build that looks right and teaches nothing.</p>
+  <p><strong>Quality bar.</strong> All six parts plus every carry row. Zero untagged domain facts. The
+  stranger test run honestly: name the two places a stranger would diverge, then tighten or accept
+  them knowingly. Every skills-md file under about 150 lines with a precedence header.</p>
+  <p><strong>Escalates when:</strong> a constraint would rest on <code>[LLM]</code>-only provenance;
+  shared-specs are stale or missing on a ready-to-code engagement; part 3 is mostly "unknown", which
+  means the prototype is premature.</p>
+</div>
+
+<div class="agent-card">
+  <h3>flow-modeler <span class="tag p2a">PHASE 2A</span> <span class="tag p2b">2B</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> as-is-mapping · tentative-structure · to-be-design · process-breakdown</div>
+  <p><strong>Goal.</strong> Prove the process is CORRECT. (ux-architect makes it GOOD.) These artifacts
+  are the evidence base every later argument rests on: the pain index justifying the redesign, the
+  rules that stop developers guessing, and the exception rows that decide half the screens in Phase 3.</p>
+  <p><strong>Method worth knowing.</strong> Marks each step VISIBLE or BACKSTAGE from the requester's
+  point of view and flags every crossing, because "they phone us to ask" is one of the most valuable
+  findings the mapping produces. Computes a <strong>pain index</strong> per flow (manual data
+  movements, uncaught-error rows, total wait, crossings without status communication, systems
+  touched), which becomes the baseline the to-be must beat. Runs three cross-checks on the breakdown,
+  including the state-machine check against the ERD <em>in both directions</em>.</p>
+  <p><strong>Quality bar.</strong> No silently-inferred bridging steps. Both problem-reconciliation
+  directions run. Every pain-marked row addressed with its ladder rung and second-job result. Every
+  automatic step with all four failure-mode answers. Zero uncited rules; zero reason-less N/A
+  exceptions. Two-developer test run per section.</p>
+  <p><strong>Escalates when:</strong> only the DA knows a segment (tag DA-ONLY, never bridge by
+  inference); a gate correction changes a rule inside a flow; an exception needs a status the ERD does
+  not contain; a to-be does not beat its as-is pain index.</p>
+</div>
+
+<div class="agent-card">
+  <h3>data-modeler <span class="tag p2a">2A sketch</span> <span class="tag p2b">PHASE 2B</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> erd-modeling</div>
+  <p><strong>Goal.</strong> A model whose status lists are closed, whose lifecycle rules are confirmed,
+  and whose consequences for the interface are written in language a designer can act on. Every status
+  value missed becomes a missing screen in Phase 3; every implicit lifecycle rule becomes an affordance
+  that legally cannot exist.</p>
+  <p><strong>Method worth knowing.</strong> The split test applied both ways (two lifecycles wearing
+  one name means split; two names never differing means a glossary collision). The exhaustion protocol
+  for status lists. Cardinality by counterexample. The temporal pass separating frozen at-the-time
+  copies from live current lookups. And the <strong>consequences note</strong>, which is how lifecycle
+  rules actually reach the screens.</p>
+  <p><strong>Quality bar.</strong> Every entity carded or explicitly collapsed. Every status list
+  closed WITH the DA, not from memory, with the terminal check run. Every cardinality carrying its
+  counterexample answer. Zero <code>(asserted)</code> lifecycle rules outside open items. The
+  consequences note acknowledged by its three consumers.</p>
+  <p><strong>Escalates when:</strong> the DA cannot rule on a lifecycle question; the developer raises
+  a structural objection; retention and erasure obligations conflict; a status value is discovered
+  after Gate 2.</p>
+</div>
+
+<div class="agent-card">
+  <h3>ux-architect <span class="tag p2b">PHASE 2B</span> <span class="tag p3">3</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> information-architecture · ux-flow-optimization · userflows-sitemap</div>
+  <p><strong>Goal.</strong> The experience layer between the process model and the screens. flow-modeler
+  proves the process is correct; this agent makes it good, gives it a structure, and renders it per
+  role.</p>
+  <p><strong>Method worth knowing.</strong> Sequence matters: optimize before you place (a step you
+  delete needs no home), then decide the structure, then draw. Count before proposing: the cost table
+  with as-is baselines. Apply the elimination ladder from the top and record which rung each fix
+  landed on, because speeding a step that could have been deleted is the most expensive habit in this
+  role. Size friction against consequence, not against caution.</p>
+  <p><strong>Quality bar.</strong> Every prioritized task has a cost table with a stated delta. Every
+  K or R input removed or proven necessary. Friction budget sourced or registered. Navigation model
+  recorded with rejected alternatives. Every label traced to a glossary entry. Tree test run and
+  sub-threshold paths reworked <em>before</em> drawing. Every denied branch designed per case.</p>
+  <p><strong>Escalates when:</strong> consequence data for a friction budget does not exist; an
+  optimization would change a mandatory rule; a daily task tests below roughly 70 percent and the fix
+  would change the entity model; two roles need structures so different that the product is arguably
+  two products.</p>
+</div>
+
+<div class="agent-card">
+  <h3>ui-designer <span class="tag p2a">2A seed</span> <span class="tag p2b">2B</span> <span class="tag p3">3</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> visual-design · component-architecture · interaction-design · responsive-design · style-guide-authoring</div>
+  <p><strong>Goal.</strong> The system every screen is built from: tokens, components, states, behaviour
+  and adaptation. Judged by one test throughout: <em>could a reviewer point at a build and cite the
+  rule it violates?</em> Anything failing that test is an aspiration and does not ship.</p>
+  <p><strong>Method worth knowing.</strong> Domain decisions before aesthetic ones: density from the
+  users and the volume, status encoding from the ERD's closed lists, target sizes from the environment
+  table. Systematic and purposeful: every measurement from a scale, every colour from a role, and every
+  visual difference meaning something. Contrast verified <em>while</em> designing, because a failed
+  token found at review repaints everything downstream of it. No component specified in its default
+  state alone.</p>
+  <p><strong>Quality bar.</strong> Every foundation expressed as a citable rule. Every ERD status with
+  exactly one treatment passing the greyscale test. Contrast verified on real backgrounds in both
+  themes including hover. Complete state matrices. Accessibility contract per component. Every mutation
+  classified. Reduced-motion equivalents specified. Zero hover-only paths; no target under 24 x 24.</p>
+  <p><strong>Escalates when:</strong> a brand colour fails contrast and the client wants it as body
+  text; device context is unknown; a design needs a status the ERD lacks or an affordance the lifecycle
+  forbids; shared-specs design-system is missing on a ready-to-code engagement.</p>
+</div>
+
+<div class="agent-card">
+  <h3>prototype-engineer <span class="tag p2a">PHASE 2A</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> throwaway-prototype &nbsp;·&nbsp; <strong>Tools:</strong> adds Bash</div>
+  <p><strong>Goal.</strong> Maximise corrections per hour of Gate 1. The build succeeds when the DA
+  says "that is wrong, and here is why" a dozen times; it fails when everyone nods.</p>
+  <p><strong>Method worth knowing.</strong> No prompt, no prototype, and the carry list is checked as
+  well as the six headings. Generate from the prompt as written: every manual patch is prompt debt the
+  next generation loses, so defects are traced to a prompt part and the part is fixed. Spend fidelity
+  asymmetrically (see 3.3). Timebox declared before starting; exceeding it is a stop signal, not an
+  extension request, and feeling attached to the build is the named symptom of drift.</p>
+  <p><strong>Quality bar.</strong> The job is completable end to end, verified by actually completing
+  it rather than inspecting screens. Every guessed status visible somewhere. Realistic content, never
+  lorem ipsum. build-notes tracing every delta to a prompt part.</p>
+  <p><strong>Escalates when:</strong> anyone proposes polishing the prototype into hi-fi outside a demo
+  engagement; the timebox is exceeded; the build violates a <code>(confirmed)</code> constraint (a
+  prompt defect, not a build defect).</p>
+</div>
+
+<div class="agent-card">
+  <h3>requirements-reconciler <span class="tag p2b">PHASE 2B</span> <span class="tag gate">ALL GATES</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> requirements-reconciliation · prioritization</div>
+  <p><strong>Goal.</strong> One source of truth every other artifact derives from and cites, with IDs
+  stable enough that traceability is a lookup rather than an archaeology dig. Also the single door
+  every structural correction passes through; that door is what keeps the documents and the design in
+  agreement for the whole project.</p>
+  <p><strong>Method worth knowing.</strong> A reconciliation, not a rewrite: the document shows where
+  the original and the authority disagreed and why the resolution won. "The DA said so" is a tag, not
+  a rationale; the rationale names the tiebreaker. Draft from the KB, then <em>edit by hand</em>: the
+  hand edit is where the rationale gaps become visible.</p>
+  <p><strong>Quality bar.</strong> Every entry passing the five quality rules or carrying its
+  asserted-open reason. Rationale wherever sources disagreed. Dependency links present, testable by
+  impact-tracing a random Type B by links alone. Conflict scan run. Zero owner-less open items. On the
+  list: method recorded, every score carrying provenance, mandatory partition audited, completeness
+  pass including exception paths, signatures in writing.</p>
+  <p><strong>Escalates when:</strong> three Type Bs trace to one Phase 1 topic; a late correction is
+  structural (pause hi-fi on affected features); a fixed-bid list change is requested after Gate 2;
+  effort estimates are being made with no engineering voice; an entry oscillates twice.</p>
+</div>
+
+<div class="agent-card">
+  <h3>hifi-spec-designer <span class="tag p3">PHASE 3</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> hifi-spec · dummy-content · visual-design · content-design · accessibility</div>
+  <p><strong>Goal.</strong> Specs complete enough that a developer builds from them without asking
+  anything the artifacts already answer. The measure is external and tracked across projects.</p>
+  <p><strong>Method worth knowing.</strong> The state enumeration table before any screen. The ERD
+  consequences note opened <em>before</em> designing, not after review. Consume the system rather than
+  re-invent it: where something is missing, ask ui-designer for a <em>rule</em>, because one-off
+  exceptions are how a design system forks. Ambiguity found mid-spec is upstream debt: route it, do not
+  resolve it locally with a plausible choice.</p>
+  <p><strong>Quality bar.</strong> Every cell specified or proved unreachable with a flow path. All
+  nine blocks, no DRAFT headers at gate time. Every irreversible transition telling the user
+  <em>before</em> the confirmation. Real copy everywhere, reviewed as a list. Boundary audit clean.
+  Self-reconciliation against the ERD filed. Keyboard path written per task.</p>
+  <p><strong>Escalates when:</strong> a feature cannot be specced because a rule is only
+  <code>(asserted)</code>; the list changes mid-phase on fixed-bid; a design needs a status the ERD
+  lacks; the system lacks a rule and ui-designer cannot supply it before the gate.</p>
+</div>
+
+<div class="agent-card">
+  <h3>design-critic <span class="tag gate">PRE-GATE</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> design-critique · accessibility · content-design</div>
+  <p><strong>Goal.</strong> Find, before the client does, everything the team could have found itself,
+  so expensive gate minutes go on domain correctness. The second job is the opposite of the first: to
+  <em>protect</em> correct decisions that are merely unfamiliar. A critique run against written rules
+  distinguishes "this violates our density rule" from "this is not how I would have done it", and only
+  the first is a finding.</p>
+  <p><strong>Method worth knowing.</strong> Seven lenses, run <em>one lens at a time across the whole
+  set</em>, never screen by screen: every screen can pass individually while the set is incoherent, and
+  only a single lens run across everything sees that. A recurring finding is a rule problem, reported
+  as a proposed rule change rather than eleven defects.</p>
+  <p><strong>Quality bar.</strong> Every finding citing the rule it violates, or evidence-based, or
+  labelled a preference and dropped. Perceptual and accessibility tests actually run and recorded. Zero
+  open blockers, or declared in the gate's first two minutes. Type B findings routed before any fix.</p>
+  <p><strong>Escalates when:</strong> a blocker cannot be fixed before the gate; accessibility conflicts
+  with a brand guideline or client instruction; three Type B findings trace to one Phase 1 topic; the
+  same violation recurs after a rule change (the rule is unclear, not unfollowed).</p>
+</div>
+
+<div class="agent-card">
+  <h3>gate-reviewer <span class="tag gate">ALL GATES</span> <span class="tag close">CONFORMANCE</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> gate-review · process-evaluation</div>
+  <p><strong>Goal.</strong> Make gates mean something, and between gates keep the artifact set
+  verifiably in agreement with the documents it derives from.</p>
+  <p><strong>Method worth knowing.</strong> Attendance before agenda. Readiness pre-checks before
+  scheduling. Register and contradictions read aloud before review, so acceptance is informed
+  acceptance. Classification in the room, because late classification drifts toward Type A (patching is
+  easier than reconciling). Post-gate verification within the week.</p>
+  <p><strong>Two disciplines on the conformance side:</strong> reports and routes but never fixes
+  (an evaluator that edits what it checks has no independence), and severity honesty (BLOCKING reserved
+  for what genuinely blocks, because inflation burns the mechanism's credibility).</p>
+  <p><strong>Escalates when:</strong> anyone proposes passing a gate without required attendance or
+  written sign-off; three Type Bs trace to one Phase 1 topic; a gate would run on an unknown state.</p>
+</div>
+
+<div class="agent-card">
+  <h3>handoff-manager <span class="tag close">CLOSE</span></h3>
+  <div class="skills-line"><strong>Skills:</strong> handoff-package · md-spec-loop</div>
+  <p><strong>Goal.</strong> A dev team that can build without you, and a shared-specs set that makes the
+  next project's generated output closer to real team conventions than this one's was. Both are
+  measured, not asserted.</p>
+  <p><strong>Method worth knowing.</strong> The what-if sweep before the walkthrough. The full artifact
+  set, not the designs: a Figma-only handoff is a named failure of this process. Gaps listed AS gaps.
+  The question split as the handoff's own quality score. The loop review with a developer, never solo,
+  reading real code rather than intentions.</p>
+  <p><strong>Quality bar.</strong> Manifest complete-or-gapped honestly. Sweep run and memory-answered
+  gaps patched. Routing rule demonstrated, not merely stated. Every divergence adjudicated with a
+  recorded reason. All three metrics recorded with sources.</p>
+  <p><strong>Escalates when:</strong> a developer is unavailable for the walkthrough or the loop review
+  (both are rescheduled, not run without them); close is requested with unresolved Type B feedback;
+  ready-to-code with an incomplete shared-specs set; the loop would adopt a rule the dev team does not
+  actually follow.</p>
+</div>

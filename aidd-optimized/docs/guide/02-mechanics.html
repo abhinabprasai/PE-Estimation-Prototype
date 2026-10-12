@@ -1,0 +1,408 @@
+<h1 class="part" id="s-part2"><span class="num">Part 2</span>Core mechanics</h1>
+<div class="part-intro">
+  Nine mechanisms do the actual work of keeping this process honest. Everything in Parts 3 through
+  7 is an application of one or more of them. This is the part worth reading closely.
+</div>
+
+<h2 id="s-2-1">2.1 Provenance: tags and confidence</h2>
+<p>
+  Any statement that describes the client's world (a problem, a rule, a process step, a status, a
+  permission, a preference) carries a source tag and a confidence marker wherever it is written
+  down. Both, always, in every artifact.
+</p>
+
+<table>
+  <tr><th style="width:22%">Source tag</th><th>Meaning</th></tr>
+  <tr><td><code>[PO]</code></td><td>The product owner said it</td></tr>
+  <tr><td><code>[DA]</code></td><td>The domain authority said it</td></tr>
+  <tr><td><code>[TEAM:name]</code></td><td>A team member raised it, named</td></tr>
+  <tr><td><code>[DOC:section]</code></td><td>The anchor document, with its section reference</td></tr>
+  <tr><td><code>[USER:role]</code></td><td>An end user, by role, from an interview or observation</td></tr>
+  <tr><td><code>[RESEARCH:source]</code></td><td>External research, with the source named</td></tr>
+  <tr><td><code>[LLM]</code></td><td>Model inference, not yet verified by any human</td></tr>
+</table>
+
+<table>
+  <tr><th style="width:22%">Confidence</th><th>Meaning</th></tr>
+  <tr><td><code>(confirmed)</code></td><td>The domain authority has confirmed it, in writing or on a recording</td></tr>
+  <tr><td><code>(asserted)</code></td><td>A human said it once, unverified by the authority</td></tr>
+  <tr><td><code>(inferred)</code></td><td>Derived by reasoning or by a model; no human has said it</td></tr>
+</table>
+
+<div class="box rule">
+  <span class="lbl">Hard rules</span>
+  <p>A domain rule with only <code>[LLM]</code> provenance never enters a design artifact; it goes
+  to <code>open-questions.md</code> for verification. <code>[RESEARCH]</code> informs design
+  decisions but never sets a client rule: industry convention is not the client's reality. When two
+  tagged statements conflict, do not pick a winner; record the conflict. If you catch yourself
+  writing an untagged claim into an artifact, stop and tag it; if you cannot tag it, it does not go
+  in.</p>
+</div>
+
+<h3>Why the distinction between (asserted) and (confirmed) is worth the friction</h3>
+<p>
+  A single human saying something once is evidence that it might be true. The domain authority
+  confirming it in writing is evidence that the project can be held to it. Those are different
+  things, and the gap between them is where most late-discovered requirement defects live. The
+  system's answer is mechanical: behaviour-constraining claims (a rule, a status, a permission, a
+  lifecycle property) must be <code>(confirmed)</code> before Gate 2. Everything still
+  <code>(asserted)</code> sits in a visible open-items list with an owner, and open items block the
+  gate. Visibility is the mechanism; nobody has to remember.
+</p>
+
+<h2 id="s-2-2">2.2 The verification ladder</h2>
+<p>Three rungs, and each artifact type is allowed only certain rungs.</p>
+<table>
+  <tr><th style="width:30%">Rung</th><th>Allowed in</th></tr>
+  <tr>
+    <td><code>[LLM] (inferred)</code></td>
+    <td>open-questions, research notes, draft prompts. Nowhere else, ever.</td>
+  </tr>
+  <tr>
+    <td><code>(asserted)</code></td>
+    <td>Problem statements, tentative artifacts, the provisional PRD draft.</td>
+  </tr>
+  <tr>
+    <td><code>(confirmed)</code></td>
+    <td>Refined requirements, ERD constraints, status mapping: anything a developer will build
+    against.</td>
+  </tr>
+</table>
+
+<h2 id="s-2-3">2.3 Contradictions are deliverables</h2>
+<p>
+  Consolidation that smooths disagreement away destroys the most valuable output of discovery. When
+  the anchor document says one thing and the domain authority says another, that gap is the finding.
+  It is surfaced, tagged on both sides, given an owner and a due date, and pushed into
+  <code>STATE.md</code>. Unowned contradictions block the Phase 1 exit.
+</p>
+<p>
+  This has a concrete consequence for how models are used. The consolidation instruction is always
+  <em>"list the contradictions between these sources"</em>. The verbs merge, reconcile and
+  harmonize are banned from the instruction, because a fluent model asked to reconcile will produce
+  a smooth, plausible, single narrative, and the disagreement it dissolved was the thing you were
+  paying to find.
+</p>
+<p>Contradictions are typed, because the type predicts who must resolve it and how urgent it is:</p>
+<table class="tight">
+  <tr><th style="width:20%">Type</th><th>Pattern</th><th>Resolution path</th></tr>
+  <tr><td>FACT</td><td>Different values (daily vs weekly, 30 vs 45 days)</td><td>Cheap; one is stale. DA rules, often same week</td></tr>
+  <tr><td>RULE</td><td>Disagreement on what is allowed or required</td><td>Expensive and load-bearing; blocks dependent ERD work</td></tr>
+  <tr><td>SCOPE</td><td>Disagreement on what the project covers</td><td>PO-owned; unresolved, it poisons prioritization</td></tr>
+  <tr><td>PROCESS</td><td>Different sequences for the same work</td><td>Often BOTH true: map the variants, do not pick</td></tr>
+  <tr><td>VOCABULARY</td><td>Same word, different meanings by faction</td><td>Glossary collision; route with an owner</td></tr>
+  <tr><td>AUTHORITY</td><td>Disagreement on who decides or overrides</td><td>Politically hot; handle in a small setting, not a gate</td></tr>
+  <tr><td>DOC-VS-REALITY</td><td>The document commits to something the room denies</td><td>The classic finding; usually "document is old", but confirm</td></tr>
+</table>
+
+<h2 id="s-2-4">2.4 Gates</h2>
+<p>A gate produces exactly three things: a held-or-not-held fact, a classified correction list, and a filed report. Nothing else counts as a gate.</p>
+
+<table>
+  <tr><th style="width:14%">Gate</th><th style="width:26%">Required attendees</th><th>What it validates</th></tr>
+  <tr>
+    <td><strong>Gate 1</strong></td><td>Domain authority + product owner</td>
+    <td>The Phase 2A set reviewed <em>together</em>: prototype, as-is flows, tentative ERD,
+    sitemap, to-be sketches. A screen can be accepted while its data model is rejected, and only a
+    joint review catches that.</td>
+  </tr>
+  <tr>
+    <td><strong>Gate 2</strong></td><td>DA + PO + at least one developer</td>
+    <td>All artifacts, model first and screens last: refined requirements, ERD, breakdown, to-be
+    pairs, flow optimization deltas, IA, userflows, sitemap. Developer acceptance of the ERD is an
+    exit criterion.</td>
+  </tr>
+  <tr>
+    <td><strong>Gate 3</strong></td><td>Internal team</td>
+    <td>Line by line: each in-list feature's spec against its REQ-IDs, plus an independent re-run of
+    the status-mapping-versus-ERD reconciliation. Passing unlocks scheduling client validation, not
+    shipping.</td>
+  </tr>
+</table>
+
+<h3>Reading a gate's outcome</h3>
+<div class="box warn">
+  <span class="lbl">The quiet gate</span>
+  <p>Heavy correction at Gate 1 is <strong>success</strong>: the instrument worked. Little
+  correction is a <strong>warning</strong>, not a pass. Either the artifact set was too safe to test
+  anything, or the reviewer is being polite. Before a quiet gate may pass, the reviewer is probed
+  ("complete the job on this build in front of me and narrate where it lies", "run month-end on this
+  flow", "what does this let you do that reality forbids?"), and the report records that the probes
+  were run.</p>
+</div>
+
+<h3>Gate integrity rules</h3>
+<ul>
+  <li><strong>Attendance before agenda.</strong> A missing required attendee means NOT HELD,
+  recorded as such, rescheduled. No authority overrides this.</li>
+  <li><strong>Readiness pre-checks.</strong> The pre-gate critique has run with zero open blockers
+  (or they are declared), the conformance snapshot is current, the assumption register is prepared
+  to be read aloud. A gate entered on unknown state reviews artifacts that may already disagree
+  with each other.</li>
+  <li><strong>Disclosure before review.</strong> Open assumptions and unresolved contradictions are
+  read aloud <em>before</em> the review starts. Acceptance is only informed acceptance if they were
+  stated first.</li>
+  <li><strong>Written exit.</strong> A verbal yes is recorded as <code>(asserted)</code> and the
+  gate stays PASSED-PENDING-WRITTEN until confirmation arrives.</li>
+  <li><strong>Post-gate verification within the week.</strong> Every routed correction is checked to
+  have actually landed. Corrections that evaporate teach everyone that gates are theatre.</li>
+</ul>
+
+<h2 id="s-2-5">2.5 Corrections: Type A, Type B, and the rework machinery</h2>
+<p>
+  Every correction, from any source (a gate, a design critique, client validation, a refuted
+  assumption, a conformance finding) is classified at the moment it arrives, in the room where
+  possible.
+</p>
+
+<table>
+  <tr><th style="width:18%">Type</th><th>Changes</th><th>Handling</th></tr>
+  <tr>
+    <td><strong>Type A</strong><br><span class="small">surface</span></td>
+    <td>A screen, a flow drawing, wording, layout</td>
+    <td>The owning agent patches in place; a note goes in <code>STATE.md</code>; work continues.</td>
+  </tr>
+  <tr>
+    <td><strong>Type B</strong><br><span class="small">structural</span></td>
+    <td>A rule, an entity, a status, a permission, or a requirement</td>
+    <td>Routes to requirements-reconciler <em>first</em>, before any artifact is touched. The
+    requirement entry is updated with a rationale, the version is bumped, dependency links are
+    walked to mark every dependent stale, owning agents re-derive, and a rework-log row is written
+    with the Phase 1 topic it traces to.</td>
+  </tr>
+</table>
+
+<div class="box rule">
+  <span class="lbl">When unsure, it is Type B</span>
+  <p>The cost asymmetry decides. A Type A misclassified as Type B costs one unnecessary trip through
+  the reconciler. A Type B misclassified as Type A means the requirement document and the shipped
+  screen now disagree, permanently, and nobody knows.</p>
+</div>
+
+<p>
+  There is a diagnostic built on top of this. <strong>Three or more Type B corrections tracing to
+  the same Phase 1 topic</strong> means discovery converged too early on that topic. The system
+  escalates with a recommendation to re-open discovery on <em>that topic specifically</em>, not the
+  whole phase.
+</p>
+
+<pre><span class="c"># any correction, from anywhere</span>
+/rework "the DA says posted invoices can be amended within the same period"
+
+<span class="c">→ classified Type B (touches a lifecycle rule)</span>
+<span class="c">→ routed to requirements-reconciler: entry updated, rationale written, version bumped</span>
+<span class="c">→ dependency links walked: erd.md, process-breakdown.md, 3 hi-fi specs marked STALE</span>
+<span class="c">→ staleness sweep run; rework-log row written</span>
+<span class="c">→ regeneration order reported, with the owning agent for each</span></pre>
+
+<h2 id="s-2-6">2.6 Continuous conformance</h2>
+<p>
+  Gates verify conformance at checkpoints, with humans in the room, at high cost. Between gates, the
+  conformance engine verifies it continuously and cheaply, so gates spend their expensive minutes on
+  domain judgment instead of on discovering that two files disagree.
+</p>
+<p>The instrument is a <strong>requirements traceability matrix</strong>: every REQ-ID mapped to
+every artifact that implements, constrains or renders it. It is an <em>index of citations that
+already exist</em> in the artifacts, not a new bureaucracy; if a link has to be hand-invented to
+fill a cell, the finding is the uncited artifact.</p>
+
+<table class="tight">
+  <tr><th style="width:16%">Column</th><th>Content</th></tr>
+  <tr><td>REQ-ID</td><td>From refined-requirements.md, the single source of IDs</td></tr>
+  <tr><td>To-be flow</td><td>Which flow step(s) implement it, or NONE</td></tr>
+  <tr><td>Breakdown</td><td>Which rule row(s) enforce it, or NONE</td></tr>
+  <tr><td>ERD</td><td>Which entity or constraint carries it, or N/A</td></tr>
+  <tr><td>Hi-fi</td><td>Which feature spec(s) render it, or NOT-YET / DESCOPED</td></tr>
+  <tr><td>Verification method</td><td>inspection / demonstration / analysis / DA confirmation</td></tr>
+  <tr><td>Flags</td><td>ORPHAN, GHOST, STALE, CONFLICT</td></tr>
+</table>
+
+<p>Two flags carry the weight:</p>
+<ul>
+  <li><strong>ORPHAN</strong>: a requirement nothing implements. Either it awaits its phase (fine,
+  marked NOT-YET), it was descoped (and must appear on the descope list; if it does not, someone
+  dropped it silently), or it was forgotten.</li>
+  <li><strong>GHOST</strong>: artifact behaviour citing no requirement. Either a missing requirement
+  to route to the reconciler, or invention to remove. Ghosts are how scope creeps in quietly and how
+  untraceable behaviour reaches production.</li>
+</ul>
+
+<h3>The four sweeps</h3>
+<table class="tight">
+  <tr><th style="width:22%">Sweep</th><th>What it checks</th></tr>
+  <tr><td><strong>Traceability</strong></td><td>Rebuilds the matrix from current citations; diffs against the previous one. New orphans, new ghosts, links that vanished.</td></tr>
+  <tr><td><strong>Staleness</strong></td><td>Walks the dependency order. Did anything an artifact depends on change after its last edit? Mechanical, not judgmental: a stale artifact may still be correct, but nobody knows until its owner re-derives or re-affirms it.</td></tr>
+  <tr><td><strong>Provenance</strong></td><td>Untagged claims, (asserted) sitting where (confirmed) is required, [LLM] content outside its quarantine zones, assumption-register integrity and overdue decisions.</td></tr>
+  <tr><td><strong>Drift</strong></td><td>Direct document-versus-artifact comparison per layer: supersessions explicit, orphan checks both ways, ERD-versus-breakdown state machine in both directions, status mapping versus ERD, copy versus glossary.</td></tr>
+</table>
+
+<h3>Cadence</h3>
+<table class="tight">
+  <tr><th style="width:38%">Trigger</th><th>Scope</th></tr>
+  <tr><td>End of each phase</td><td>Full snapshot</td></tr>
+  <tr><td>Before each gate</td><td>Full snapshot; it is a gate readiness pre-check</td></tr>
+  <tr><td>After every Type B lands</td><td>Staleness sweep plus affected matrix rows</td></tr>
+  <tr><td>Weekly during Phases 2B and 3</td><td>Traceability plus staleness</td></tr>
+  <tr><td>On demand: <code>/verify</code></td><td>Caller's choice; default full</td></tr>
+</table>
+
+<div class="box">
+  <span class="lbl">Two disciplines that protect the mechanism</span>
+  <p>The evaluator <strong>reports and routes but never fixes</strong>: an evaluator that edits the
+  artifacts it checks has no independence left. And <strong>severity honesty</strong>: BLOCKING is
+  reserved for what genuinely blocks a gate, because inflating severity burns the mechanism's
+  credibility. A snapshot older than its cadence is itself a finding.</p>
+</div>
+
+<h2 id="s-2-7">2.7 Working without a spec</h2>
+<p>
+  The most common real starting condition. Projects arrive with a slide deck, a two-page gap note, a
+  Jira export, a login to an existing system, or a person saying "we will send it next week". The
+  system makes that normal instead of blocking.
+</p>
+
+<h3>The spec slot</h3>
+<p>
+  <code>00-inputs/PRD.md</code> exists in every project from the moment <code>/new-project</code>
+  runs. It is one of exactly two things and never a third: the client's spec filed verbatim and
+  read-only, or the completed placeholder record declaring the intake class and which substitute
+  path is running. It is never absent, and never left as an unedited template. An unedited
+  placeholder past Phase 0 is a process defect: it means nobody decided how this project would learn
+  what it is building.
+</p>
+
+<h3>Six intake classes</h3>
+<table class="tight">
+  <tr><th style="width:8%">Class</th><th style="width:26%">What arrived</th><th>Substitute path</th></tr>
+  <tr><td><strong>A</strong></td><td>A full spec</td><td>None. Audit it, then anchor-analysis normally</td></tr>
+  <tr><td><strong>B</strong></td><td>A partial spec</td><td>Audit marks thin areas; question generation weights them</td></tr>
+  <tr><td><strong>C</strong></td><td>A gap document</td><td>As-is reconstruction; gaps are problems, never requirements</td></tr>
+  <tr><td><strong>D</strong></td><td>Deck, notes, Jira export</td><td>Consolidate into a derived brief, then get it signed</td></tr>
+  <tr><td><strong>E</strong></td><td>An existing product</td><td>Product audit as the anchor; the build shows what it DOES, never what it should</td></tr>
+  <tr><td><strong>F</strong></td><td>Nothing</td><td>Reconstruction interview producing a signed discovery brief</td></tr>
+</table>
+<p class="small">
+  Four or more ABSENT scores on the fourteen-dimension audit reclassifies a project to class D
+  regardless of how professional the document looks. A bad spec is more dangerous than no spec,
+  because it is trusted.
+</p>
+
+<h3>The reconstruction interview</h3>
+<p>
+  You cannot ask "what do you want built"; people answer with solutions shaped by whatever software
+  they last used. You ask people to narrate their world, and derive the spec from the narration. Six
+  timeboxed passes: <strong>goal</strong> (what outcome, measured how), <strong>actors</strong> (who
+  touches it, how often, who overrides whom), <strong>artifacts</strong> (what records move through
+  it, seen as real documents where possible), <strong>rules</strong> (what must always be true, and
+  which are legal rather than preference), <strong>exceptions</strong> (when it breaks, who fixes
+  it, at what cost), <strong>consequences</strong> (if this were wrong for a month, what damage,
+  discovered by whom, when).
+</p>
+<p>
+  The output is a derived brief, structured like a spec so the same fourteen-dimension audit can
+  score it. Signed, it becomes the anchor document. Unsigned, it caps everything downstream at
+  <code>(asserted)</code>, and every gate is told so in its first sentence.
+</p>
+
+<h3>The five-rung ladder</h3>
+<p>Any agent hitting a missing answer follows this, stops at the first rung that produces something honest, and marks which rung it used:</p>
+<table class="tight">
+  <tr><th style="width:8%">Rung</th><th style="width:26%">Source</th><th>Rule</th></tr>
+  <tr><td>1</td><td>Knowledge base</td><td>Answered with a citation, or it says it cannot answer</td></tr>
+  <tr><td>2</td><td>Client evidence</td><td>Existing build, exports, real documents. <code>[DOC:source] (asserted)</code></td></tr>
+  <tr><td>3</td><td>Domain authority</td><td>Queue it; escalate DA-ONLY if it blocks today</td></tr>
+  <tr><td>4</td><td>Research</td><td>Informs a design decision; never sets a client rule</td></tr>
+  <tr><td>5</td><td>Assumption register</td><td>With blast radius, cheapest test, named owner, decision date</td></tr>
+</table>
+
+<div class="box rule">
+  <span class="lbl">Rung 5 is legitimate. Silence is not.</span>
+  <p>What is never allowed is skipping silently to rung 5, or producing an artifact whose reader
+  cannot tell which parts rest on rung 1 and which on rung 5. Every artifact built on assumptions
+  carries an ASSUMPTIONS box near its top listing the register IDs. Assumptions constraining
+  behaviour may not pass Gate 2. A refuted assumption is a Type B correction by default.</p>
+</div>
+
+<h2 id="s-2-8">2.8 The five adaptation variables</h2>
+<p>
+  Read from <code>PROJECT_CONFIG.md</code>. They change routing; they are never guessed. If unset,
+  the orchestrator asks and records the answers before Phase 1 work starts.
+</p>
+<table class="tight">
+  <tr><th style="width:20%">Variable</th><th style="width:24%">Values</th><th>Routing effect</th></tr>
+  <tr>
+    <td><code>anchor_document</code></td><td>supplied / none / existing-product</td>
+    <td><em>none</em>: a signed discovery brief must be produced first. <em>existing-product</em>:
+    as-is work becomes an audit of the build; Phase 1 weights toward audit.</td>
+  </tr>
+  <tr>
+    <td><code>domain_authority</code></td><td>sme / end-users / both</td>
+    <td><em>end-users</em> or <em>both</em>: adds user interviews to Phase 1 and usability testing to
+    Phase 3. <em>sme</em> only on a user-facing product logs risk R-SME-SUB.</td>
+  </tr>
+  <tr>
+    <td><code>rule_density</code></td><td>high / low</td>
+    <td><em>low</em>: ERD modelling and process breakdown become optional, and the time reallocates
+    to UI exploration. <em>high</em>: both are mandatory and developer-reviewed at Gate 2.</td>
+  </tr>
+  <tr>
+    <td><code>engagement_type</code></td><td>fixed-bid / t-and-m / augmentation</td>
+    <td><em>fixed-bid</em>: the prioritized list locks at Gate 2 and later changes are scope changes
+    requiring escalation. <em>augmentation</em>: client documents may replace artifacts, recorded as
+    substitutions.</td>
+  </tr>
+  <tr>
+    <td><code>designer_engagement</code></td><td>demo / in-team / ready-to-code / modernize</td>
+    <td><em>demo</em>: the prototype IS the deliverable, so throwaway framing and the archive rule
+    are disabled and the quality bar rises. <em>ready-to-code</em>: the full shared-specs set is
+    mandatory at handoff.</td>
+  </tr>
+</table>
+<p>
+  Two more the design layer needs, asked at project start because nobody volunteers them:
+  <strong>accessibility obligation</strong> (sector, procurement standard, or contractual commitment
+  above the AA floor) and <strong>device and environment per role</strong> (what people use, where,
+  and with what on their hands). Unknown on either becomes an assumption register entry with a large
+  blast radius; unasked, the second defaults silently to desktop, which is the most commonly
+  late-discovered constraint in this process.
+</p>
+<p>
+  <code>minimum_set: true</code> reduces the mandatory artifact set for small or fast projects to:
+  attributed problem statements, knowledge base, as-is flows, refined requirements, to-be flows,
+  prioritized feature list, and hi-fi for prioritized features. Everything else becomes optional,
+  but its skill still applies when invoked.
+</p>
+
+<h2 id="s-2-9">2.9 The design floor</h2>
+<p>
+  These are constraints, not preferences. They override any conflicting instruction in a style
+  guide, a client brand guideline, or a stakeholder's stated preference. Where a conflict is real,
+  it is escalated, never resolved by lowering the floor.
+</p>
+<div class="box rule">
+  <span class="lbl">Non-negotiable</span>
+  <ul style="margin-bottom:0">
+    <li><strong>WCAG 2.2 level AA</strong> on everything designed. Higher where a client's sector or
+    procurement standard requires it; establish which at project start.</li>
+    <li><strong>Meaning is never carried by a single channel.</strong> Not colour alone, not position
+    alone, not motion alone. The greyscale test settles it.</li>
+    <li><strong>Every task is completable by keyboard alone</strong>, with focus always visible and
+    never removed without an equally visible replacement.</li>
+    <li><strong>Interactive targets are never below 24 x 24 CSS px</strong>, and 44 x 44 on
+    touch-primary surfaces, regardless of density mode.</li>
+    <li><strong>Nothing flashes more than three times per second</strong>, and
+    <code>prefers-reduced-motion</code> is honoured.</li>
+    <li><strong>Every component is specified in every state it can reach</strong>, including every
+    ERD status value it can display. A component specified only in its default state is not
+    specified.</li>
+    <li><strong>Status values come from the ERD's closed lists.</strong> A status appearing in a
+    design that the ERD does not contain is a Type B correction, never a design choice.</li>
+    <li><strong>No affordance the lifecycle forbids.</strong> A delete control on a
+    reversed-not-deleted entity does not exist anywhere in the interface.</li>
+    <li><strong>Every style guide rule is violation-checkable.</strong> If a reviewer could not point
+    at a build and cite it, it is an aspiration and does not ship.</li>
+    <li><strong>Real copy in every state before Gate 3.</strong> Placeholders are incomplete specs.</li>
+    <li><strong>An accessibility claim states its method.</strong> An automated scan is never
+    reported as an accessibility assessment.</li>
+  </ul>
+</div>

@@ -1,0 +1,579 @@
+=== PAGE 244 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 244 of 312 
+Book VI is the build plan at screen level. Every screen named anywhere in this document appears below with one implementation entry. Each entry states the route, the layout to 
+build, the actions, where the user arrives from, what the screen creates, which postings and scans it triggers, its build wave and the section that carries its complete field 
+rules. The linkage question is answered inside every entry. The rows named Arrives from and Creates or updates are the linkage, screen by screen, with the journal template numbers 
+and scan points beside them. Nothing earlier in the document is changed by this Book. 
+1.	Method • Entries are grouped by module in build order. List and detail pairs share one entry when they ship together. • Build waves follow the roadmap in Book I Part K. Wave 
+1 runs weeks 1 to 4, wave 2 weeks 3 to 8, wave 3 weeks 6 to 12, wave 4 weeks 10 to 18, wave 5 weeks 14 to 20, wave 6 weeks 16 to 22, wave 7 weeks 20 to 26. • Every entry reuses the 
+component inventory of Book V section 10.2. A layout cell names components, not pixels. The Figma frame set per screen follows the nine states of Book V section 10.3. • Posting 
+references use the journal template numbers of the unified map. Scan references use the SP numbers of Book I Part F. • A developer finishing an entry has one definition of done. 
+The screen passes gate DG-3 of Book IV section 9.3 with its field rules from the referenced section. 
+2.	Build	Sequence	at	a	Glance Wave Screens Delivered Why This Order 1 (wks 1–4) Controlling masters, account determination workbench, number series, period 
+control, tax config, workflow definitions, alert rules, job console Everything downstream posts through these. Nothing financially relevant ships before wave 1 is green 2 (wks 3–8) 
+Material listing and detail views, MCR, MCH, duplicate check, leads and opportunities, customer master, quotations, sales orders with schedule lines, pricing service surfaces, 
+packing, count documents, safety stock The commercial spine. Order to cash for stocked goods becomes demonstrable 3 (wks 6–12) Engineering workspace, requests, EBOM editor, 
+documents and transmittals, ECR and ECO, MBOM transform, production versions, CAD import Design cycle before production. Placeholder path live so materials are born governed 4 
+(wks 10–18) Work centers, routings, MRP workbench, planned orders, production orders, dispatch, shop floor terminal, WIP, schedule board, CTP dialog, trace explorer The factory 
+goes live in the system with scans SP-07 to SP-13 5 (wks 14–20) Quality dashboard, plans, executions, final test, CAPA, SCAR, deviations, calibration, RMA end to end, installed 
+base, spares finder, recall campaigns Gates and returns on top of a working floor 6 (wks 16–22) Vendor and AVL, PR, RFQ, PO, LLR, expedite board, info records, source lists, cost 
+estimates, costing runs, rates, price lists, agreements, surcharges, CVA, margin analysis, allocations, E&O Procurement and the money layer complete 
+
+=== PAGE 245 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 245 of 312 
+Wave Screens Delivered Why This Order 7 (wks 20–26) Backorder workbench, delivery cockpit, POD and claims, completeness dashboards, integration console hardening, close 
+orchestration additions Flow closure, reconciliation and go live readiness 
+3.	Materials	Module	Screens MM-MAT-001		•		Material	Listing Aspect Implementation Route, type, users /inventory/items  •  List  •  
+Steward, buyers, planners, all read Build the layout Standard data grid plus type badges, lifecycle badges, completeness bars, plant chips, quick stat pills Primary actions Open 
+detail. Bulk assign owners. Set block. Add to change request. Export. New material starts an MCR, never a bare record Arrives from Sidebar Materials. Search everywhere resolves 
+here Creates or updates MCR documents from the New action. MCH rows from bulk actions Postings and scans None Build wave and field spec Wave 2  •  Fields and rules in Book II §3.1 
+INV	2.3	+	MM	views		•		Material	Detail	(ten	views) Aspect Implementation Route, type, users /inventory/items/{id}  •  Detail, 
+tabbed  •  View owners edit their view, all read Build the layout Tab bar with General, Units, Planning, Purchasing, Production, Warehouse, Quality, Accounting and Costing, Sales, 
+references. Field group edit rights render per role. GL preview panel on the accounting view Primary actions Save per view. Activate. Set block. Supersede. Extend to plant. Copy 
+from. Simulate GL. Print label Arrives from MM-MAT-001, any material link anywhere in the system Creates or updates Governed field changes raise MCH rows. Activation completes the 
+MCR Postings and scans None directly. Valuation fields drive every later posting Build wave and field spec Wave 2  •  Fields and rules in Book II §3.4 to §3.13 
+MM-MCR-001/2		•		Material	Creation	Requests Aspect Implementation Route, type, users /materials/creation-requests  •  Workbench + detail  •  All 
+departments, Materials Manager activates 
+
+=== PAGE 246 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 246 of 312 
+Aspect Implementation Build the layout Queue with SLA aging colors. Detail shows the task checklist per department with per task status and owner Primary actions Complete my task. 
+Reassign. Activate. Reject to task with comments Arrives from EBOM placeholder creation, buyer initiation, sales initiation, imports Creates or updates Active materials. Unblocks 
+the originating EBOM line, PR or quote on activation Postings and scans None Build wave and field spec Wave 2  •  Fields and rules in Book II §4.2, §4.3 
+MM-MCH-001		•		Material	Change	Requests Aspect Implementation Route, type, users /materials/change-requests  •  Wizard  •  Owners request, class 
+rules approve Build the layout Selection step, change definition step, simulation grid with per row validation results, apply step with result log Primary actions Simulate. Submit 
+for approval. Apply now or effective dated. Download log Arrives from Material detail, listing bulk bar, ECO tasks Creates or updates Applied field changes with full audit. Linked 
+ECO task completion Postings and scans None Build wave and field spec Wave 2  •  Fields and rules in Book II §4.4, §16.1 
+MM-SUP-001		•		Supersessions Aspect Implementation Route, type, users /materials/supersessions  •  Detail  •  Materials Manager Build the layout Predecessor 
+and successor cards, run out policy selector, affected document worklist, progress bar on remaining stock Primary actions Approve. Watch run out. Close Arrives from Material 
+detail Supersede button, ECO tasks, duplicate merges Creates or updates Predecessor moves to Restricted then Obsolete. Buyer tasks on open POs. MRP flip to successor Postings and 
+scans None Build wave and field spec Wave 6  •  Fields and rules in Book II §4.6, Book IV §7.1 
+MM-IR-001/2		•		Purchasing	Info	Records 
+
+=== PAGE 247 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 247 of 312 
+Aspect Implementation Route, type, users /purchasing/info-records  •  List + detail  •  Buyers, Purchasing Manager approves manual prices Build the layout Grid by material and 
+vendor. Detail with price rows, scales, surcharge link, rolling actuals panel Primary actions New row from RFQ award or manual with approval. Expire. Export Arrives from Material 
+purchasing view, vendor detail, RFQ award writeback Creates or updates The price and lead time basis MRP and PO pricing consume Postings and scans None. Invoice deviation over 
+five percent raises a buyer alert Build wave and field spec Wave 6  •  Fields and rules in Book II §7.2 
+MM-SL-001		•		Source	Lists Aspect Implementation Route, type, users /purchasing/source-lists  •  Detail grid  •  Purchasing Manager Build the layout Per 
+material grid of vendor rows with validity, fixed flag, blocked flag, MRP relevance Primary actions Add row. Fix source for period. Block source Arrives from Material purchasing 
+view, vendor detail Creates or updates The source determination input of Book II §7.5 Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book II §7.4 
+MM-VAL-001		•		Account	Determination	Workbench Aspect Implementation Route, type, users /materials/account-determination  •  Config  •  Controller, step 
+up MFA on release Build the layout Matrix grid by event key and valuation class, version diff view, simulation panel with full journal preview, completeness check results Primary 
+actions Draft rows. Mark. Release with effective date. Simulate Arrives from Configuration area. GL preview panels link here read only Creates or updates The account resolution 
+every posting uses. Journal lines store the matrix row that resolved them Postings and scans None itself. Everything else posts through it Build wave and field spec Wave 1  •  
+Fields and rules in Book II §5.2, §5.3 
+MM-EOR-001		•		Excess	and	Obsolete	Reserve	Run 
+
+=== PAGE 248 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 248 of 312 
+Aspect Implementation Route, type, users /materials/eo-reserve  •  Wizard  •  Controller Build the layout Policy table, run preview grid with per material reserve deltas and drill 
+to slow moving evidence Primary actions Compute. Review. Post Arrives from Period close calendar, quarterly Creates or updates Reserve build or release journal Postings and scans 
+DR 6320 CR 5340 on build, reverse on release Build wave and field spec Wave 6  •  Fields and rules in Book II §17.3 
+MM-DQ-001		•		Data	Quality	Dashboard Aspect Implementation Route, type, users /materials/data-quality  •  Dashboard  •  Materials Manager, stewards 
+Build the layout KPI tiles for completeness, MCR cycle time, duplicates, stale sourcing, governance exceptions, PC-900 count, each with drill lists Primary actions Open exception 
+lists. Assign owners Arrives from Materials sidebar, monthly review ritual Creates or updates Worklist assignments Postings and scans None Build wave and field spec Wave 7  •  
+Fields and rules in Book II §16.4 
+4.	Sales	Module	Screens OM-LEAD-001/2		•		Leads	and	Opportunities Aspect Implementation Route, type, users /sales/leads  •  List + detail  •  
+Sales reps own their records, Sales Director reads all Build the layout Pipeline board grouped by stage with value and age on every card, plus a register view with the standard 
+filter bar. Detail with a contact block, a requirement capture panel using the same configuration attributes as the quotation (kVA rating, primary and secondary voltage, vector 
+group, cooling class, impedance, applicable standards), a prior build lookup panel that searches the design library on those attributes, a qualification checklist and an activity 
+timeline Primary actions Qualify to opportunity. Run the prior build search. Convert to quotation, which creates the prospect customer when none exists and carries every captured 
+attribute forward. Disqualify with a mandatory reason Arrives from Sales sidebar, inbound web and email capture, trade contact import 
+
+=== PAGE 249 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 249 of 312 
+Aspect Implementation Creates or updates Opportunities. Prospect customers on conversion. Quotations pre filled with the captured attributes and the prior build reference so 
+nothing is retyped Postings and scans None. No credit exposure exists before a quotation Build wave and field spec Wave 2  •  Fields and rules in This Book §4.1 
+4.1	Lead	and	Opportunity	Object,	Field	Rules The lead is the first formal record of demand and precedes the customer master. It must let sales answer the repeat 
+build question before engineering spends a single hour. The field rules below are the complete authority for this object. Field Group Fields and Rules Identity lead_id auto 
+assigned from the LD number series. Source dropdown with the values Referral, Trade Show, Website, Direct, Agent, Other. Owner defaults to the creator and reassigns only by the 
+Sales Director. Region from the shared region table Contact Company name mandatory, contact name, title, email, phone, address block. Duplicate check on save against company name 
+and email domain across leads and customers, same dialog pattern as the material duplicate check Requirement The quotation configuration attribute set, every field optional at 
+this stage: kVA rating, primary voltage, secondary voltage, phases, frequency, vector group, cooling class, impedance percent, tap arrangement, applicable standards, special 
+requirements text. Values entered here flow to the quotation unchanged Prior build Read only panel populated by the prior build search. Stores the matched design reference, match 
+score and the decision New Design, Variant of Existing or Repeat Build. The decision copies to the engineering request when the order later confirms Commercial Estimated value, 
+estimated award date, competitor field, win probability percent defaulted by stage and manually adjustable, currency from the entity Stage Open, Qualified, Quoting, Won, Lost, 
+Disqualified. Open to Qualified requires the qualification checklist complete. Qualified to Quoting happens automatically at quotation creation. Won and Lost set only by the win 
+or loss recording on the linked quotation and never by hand. Disqualified requires a reason code • Conversion must create the customer with status Prospect, no credit limit and no 
+financial views until Finance activates it through the normal customer master path. A prospect customer must not be selectable on a sales order. • The pipeline report must show 
+count and value by stage, conversion rate stage to stage, win rate by source and by product class, and average age per stage. The existing Quote Funnel report gains the lead 
+stages ahead of its first column and reads from this object. • Validation register. V-OM-40 duplicate warning on company and domain. V-OM-41 stage transitions only along the 
+defined path. V-OM-42 conversion blocked while mandatory contact fields are empty. E-OM-43 hard stop on deleting a lead that owns a quotation, disqualify instead. Build Note: 
+Linkage. The quotation created from a lead carries the lead reference for funnel reporting. The prior build panel reads the same design library index that ENG-REQ-001 uses, so 
+sales and engineering answer the repeat question from one source. Installed base records surface in the prior build search when the searching attribute set matches a shipped unit. 
+OM-CUST-001/2		•		Customer	Master 
+
+=== PAGE 250 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 250 of 312 
+Aspect Implementation Route, type, users /sales/customers  •  List + detail  •  Sales edits commercial, Finance edits credit Build the layout Detail tabs for general, addresses, 
+contacts, commercial, credit, tax, history, documents. Credit tab renders read only for sales roles Primary actions Create. Activate with address validation. Credit hold toggle 
+for Finance Arrives from Sales sidebar, quote and order headers Creates or updates The customer every sales document requires Postings and scans None Build wave and field spec 
+Wave 2  •  Fields and rules in Book I B §2 
+OM-QT-001/2		•		Quotations Aspect Implementation Route, type, users /sales/quotations  •  List + detail  •  Sales reps, estimators on ETO Build the layout 
+Line grid with price elements, ETO configuration panel that reads like a datasheet, margin panel against the linked estimate, version chain Primary actions Issue PDF. Revise to 
+new version. Convert to order. Record win or loss with reason Arrives from Customer detail, pipeline lists Creates or updates Sales orders on conversion with frozen prices. 
+Engineering estimates linked on ETO Postings and scans None. Tax estimate on save Build wave and field spec Wave 2  •  Fields and rules in Book I B §3, Book IV §5 
+OM-SO-001/2		•		Sales	Orders	with	Schedule	Lines Aspect Implementation Route, type, users /sales/orders  •  List + detail  •  Sales admin, CS, 
+Finance for credit actions Build the layout Header, line grid, expandable schedule lines per line, readiness chips for supply, credit, quality and documents, milestone strip on 
+ETO, price waterfall per line, pegging panel Primary actions Submit runs credit and price checks. Confirm runs ATP or CTP per branch. Change order dialog after confirm. Cancel 
+with fee logic Arrives from Quotation conversion, customer detail, direct entry Creates or updates Reservations for MTS. Engineering requests for ETO. Planned demand for MTO. 
+Invoice requests per billing plan. Revenue contract on milestone plans Postings and scans None directly. Everything downstream pegs here Build wave and field spec Wave 2  •  Fields 
+and rules in Book I B §4, Book IV §2.1 
+
+=== PAGE 251 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 251 of 312 
+OM-BO-001		•		Backorder	Workbench Aspect Implementation Route, type, users /sales/backorders  •  Workbench  •  Planners, sales admin, Sales Director 
+approves reallocations Build the layout Exception cards per shortage with supply options, priority class columns, mass re promise run panel after MRP Primary actions Reallocate 
+with dual audit. Re promise. Split. Substitute per approved alternates Arrives from Schedule line backorder flags, MRP run completion Creates or updates Updated confirmations and 
+promises on schedule lines Postings and scans None Build wave and field spec Wave 7  •  Fields and rules in Book IV §2.2 
+OM-DLV-001		•		Delivery	Cockpit Aspect Implementation Route, type, users /sales/deliveries  •  Workbench  •  Shipping office Build the layout Status 
+pipeline columns from Planned to Closed, readiness flags per delivery, split and merge rule explanations on grouping, load planning side panel Primary actions Run delivery 
+creation. Release to warehouse. Assign carrier and equipment. Print documents. Post goods issue when green Arrives from Confirmed schedule lines due inside the horizon Creates or 
+updates Deliveries, picklists, packing orders, shipment documents, invoice requests at PGI Postings and scans PGI posts templates #25, #26, #27. Loading scans SP-18 Build wave and 
+field spec Wave 7  •  Fields and rules in Book I B §5, Book IV §2.3, §2.4 
+OM-PACK-*		•		Packing	Queue	and	Pack	Station Aspect Implementation Route, type, users /sales/packing  •  Queue + kiosk  •  Packers Build the 
+layout Kiosk with left panel of items to pack, right panel HU tree, center scan input with focus lock, scale readout Primary actions Create HU. Scan items in. Close HU with weight 
+sanity. Complete pack order. Reopen with reason Arrives from Completed picklists Creates or updates Handling units with labels, packing list, shipment assignment Postings and 
+scans Packaging backflush #27 at HU close. Scans SP-16, SP-17 
+
+=== PAGE 252 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 252 of 312 
+Aspect Implementation Build wave and field spec Wave 2  •  Fields and rules in Book I A §5 
+OM-POD-001		•		POD	and	Claims Aspect Implementation Route, type, users /sales/pod  •  List + detail  •  Shipping office, CS on claims Build the 
+layout Expected POD queue with aging, claim detail with type, value, carrier reference and resolution path Primary actions Record POD. Open claim. Resolve through credit memo 
+request, redelivery or repair paths Arrives from PGI creates the expected POD row Creates or updates Delivery closure. Final milestone trigger. Claim resolutions through existing 
+credit and RMA paths Postings and scans Freight claim recovery per Book I A §3.9 when applicable Build wave and field spec Wave 7  •  Fields and rules in Book IV §2.4 
+5.	Returns,	Warranty	and	Service	Screens RMA-LIST/CREATE		•		RMA	Register	and	Authorization Aspect Implementation Route, 
+type, users /sales/rma  •  List + detail  •  CS creates, managers approve per matrix Build the layout Register with class badges and SLA aging. Create form pulls the reference 
+document and fills lines with shipped serials and prices. Class RC3 exposes oil and transport fields Primary actions Submit for approval. Print return instructions with barcode. 
+Email customer. Cancel before receipt Arrives from Customer detail, invoice or serial lookup, POD claims Creates or updates Authorized RMA with barcode. Warranty adjudication task 
+downstream Postings and scans None until receipt Build wave and field spec Wave 5  •  Fields and rules in Book I A §3.3, §3.4 
+RMA-RECEIPT		•		Return	Receipt Aspect Implementation Route, type, users scan driven  •  Kiosk  •  Receiving Build the layout Scan RMA barcode to open. Lines 
+prefilled. Condition dropdown with mandatory photos when damaged 
+
+=== PAGE 253 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 253 of 312 
+Aspect Implementation Primary actions Receive full or partial. Book unauthorized extras with supervisor override Arrives from Arriving crate with the RMA label. Scan SP-19 Creates 
+or updates Quarantine stock, return inspections, serial status Returned Postings and scans Template #17 when ownership returns, none for customer property Build wave and field 
+spec Wave 5  •  Fields and rules in Book I A §3.5 
+RMA-DISP		•		Inspection	and	Disposition Aspect Implementation Route, type, users /sales/rma/{id}/disposition  •  Detail  •  Inspectors propose, 
+Quality Manager approves Build the layout Findings with teardown checklist for RC3, entitlement service verdict displayed with its rule trail, per line disposition selector with 
+outcome preview Primary actions Adjudicate warranty. Approve dispositions. Convert denial to billable Arrives from Completed return inspections Creates or updates Credit memo 
+requests, rework orders, replacement orders, scrap postings, NCR and SCAR when attributable Postings and scans Templates #18 to #23 per outcome Build wave and field spec Wave 5  •  
+Fields and rules in Book I A §3.6, Book IV §7.4 
+IB-001		•		Installed	Base Aspect Implementation Route, type, users /service/installed-base  •  List + detail  •  CS maintains, all read Build the layout 
+One record per shipped serial with customer, site, dates, warranty state from the entitlement service, service history timeline Primary actions Record ownership transfer. Capture 
+commissioning date. Extend warranty with approval Arrives from Created automatically at PGI. RMA screens read it Creates or updates The entitlement basis for every warranty 
+decision Postings and scans None Build wave and field spec Wave 5  •  Fields and rules in Book IV §7.4 
+SVC-SPF-001		•		Spares	Finder Aspect Implementation Route, type, users /service/spares-finder  •  Workbench  •  Customer service, service desk, spare parts 
+sales 
+
+=== PAGE 254 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 254 of 312 
+Aspect Implementation Build the layout One search input accepting a transformer serial number, a customer name or a sales order number. Result header shows the unit from the 
+installed base with site, commissioning date and warranty state. Below it the as built structure from the trace record rendered as an indented parts list, each line carrying 
+current stock availability, the active spares price, the lead time from the info record when not stocked, and a supersession chip wherever the built part has since been replaced 
+Primary actions Select lines and create a spares quotation in one step. Open the full trace record. Print the parts list with the serial in the footer. Filter to wear parts and 
+safety critical items per the engineering marking Arrives from Customer detail, installed base record, RMA screens, direct search from the service sidebar Creates or updates 
+Spares quotations through the standard OM-QT path with the transformer serial carried on every line Postings and scans None. The downstream quotation, order and delivery carry the 
+money Build wave and field spec Wave 5  •  Fields and rules in This Book §5.1 
+5.1	Spares	Finder,	Resolution	Rules • Resolution order. The serial resolves to the installed base record, the installed base record resolves to the as built genealogy, 
+and each genealogy line resolves to the current material master state. The screen therefore shows what is inside that specific unit, not what the current BOM revision says. • 
+Supersession. Where a built part has a successor in the supersession register, both appear, the built part grayed with its identity intact and the successor as the default 
+orderable line. The user may force the original where stock remains and policy allows. • Pricing and entitlement. Prices come from the spares price list through the condition model 
+of Book IV §5. Before quoting, the entitlement service runs. When the unit is under warranty and the requested part relates to an open or attributable failure, the screen must warn 
+and offer the RMA path instead of a sale. • Availability. Stocked SPARE materials show ATP. Non stocked lines show the info record lead time. Lines with neither must route to an 
+engineering review task before the quotation can issue, so no promise is invented. • Compliance. Lines flagged export controlled or hazardous carry their badges and block quotation 
+release until the compliance checklist on the quotation is complete. • Traceability forward. Every spares quotation line stores the serial reference, so the trace explorer later 
+answers which spares were supplied to which unit, in both directions. Build Note: Linkage. This screen composes three existing authorities and adds none. The installed base of 
+Book IV §7.4, the trace record of Book IV §4.4 and the material, pricing and info record masters of Books II and IV. The field service module of Book IX consumes the same resolution 
+rules for van stock and service order parts, so the logic must be built once as a service and called from both places. 6.	Engineering	Module	Screens ENG-HOME-001	
+	•		Engineering	Workspace 
+
+=== PAGE 255 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 255 of 312 
+Aspect Implementation Route, type, users /engineering  •  Workbench  •  Engineers, Engineering Manager Build the layout Panels for my design queue, open changes, awaiting my 
+approval, recent releases, exceptions such as placeholder aging and EBOM ahead banners Primary actions Open any queued object. Approve from the list Arrives from Engineering 
+sidebar landing Creates or updates Navigation only Postings and scans None Build wave and field spec Wave 3  •  Fields and rules in Book I C §1 
+ENG-REQ-001		•		Engineering	Request Aspect Implementation Route, type, users /engineering/requests  •  Detail  •  Engineering Manager assigns, engineers 
+execute Build the layout Configuration attributes read only from the order, deliverables checklist with per row status and links, release level indicator, due date back scheduled 
+from the promise Primary actions Assign engineers. Toggle customer approval loop. Complete when the checklist is done Arrives from Created automatically when an ETO order confirms 
+Creates or updates The design job container linking EBOM, drawings, MBOM, estimate and the sales milestone Postings and scans None Build wave and field spec Wave 3  •  Fields and 
+rules in Book I C §2, Book IV §3.1 
+ENG-BOM-002		•		EBOM	Editor Aspect Implementation Route, type, users /engineering/boms/{id}  •  Detail, three panes  •  Assigned engineers, manager 
+releases Build the layout Left structure tree with level badges, center line grid keyboard first, right context panel with item card, drawing thumbnail, where used and alternates. 
+Header bar with validate, compare, import, release Primary actions Add component or create placeholder inline. Map consume at operation. Validate. Release package Arrives from 
+Engineering request checklist, CAD import proposals Creates or updates Released EBOM revisions. Placeholder MCRs. The basis for MBOM transform Postings and scans None 
+
+=== PAGE 256 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 256 of 312 
+Aspect Implementation Build wave and field spec Wave 3  •  Fields and rules in Book I C §3 
+ENG-ECR/ECO		•		Change	Requests	and	Change	Orders Aspect Implementation Route, type, users /engineering/change-*  •  Detail pair  •  Anyone 
+raises ECR, CCB decides, Engineering Manager releases ECO Build the layout ECR shows the computed impact panel with open orders, stock, POs and cost delta simulation. ECO shows 
+the task checklist, effectivity selector, old stock and open order disposition grids Primary actions Submit ECR. Vote as CCB. Release ECO atomically at effectivity Arrives from 
+Any object Propose Change action, quality NCRs, supplier deviations Creates or updates New revisions across EBOM, MBOM, routings, documents and plans in one cutover. MCH rows and 
+supersessions where materials change. LLR commercial decisions when long lead items are touched Postings and scans Disposition outcomes post through their own documents Build wave 
+and field spec Wave 3  •  Fields and rules in Book I C §4, Book IV §3.2 
+MBOM-TRF		•		MBOM	Transform Aspect Implementation Route, type, users wizard from a released EBOM  •  Wizard  •  Manufacturing engineer Build the layout 
+Steps for phantom resolution preview, operation mapping validation, manufacturing additions, scrap review, release Primary actions Resolve unmapped lines. Release which sets the 
+costing invalidation flag Arrives from Released EBOM revisions Creates or updates Active MBOM revisions feeding production versions Postings and scans None Build wave and field 
+spec Wave 3  •  Fields and rules in Book I C §6 
+PV-001		•		Production	Versions Aspect Implementation Route, type, users /engineering/production-versions  •  List + detail  •  Engineering Manager releases 
+Build the layout Grid per material and plant with MBOM revision, routing revision, lot range, validity and overlap validation Primary actions Pair and release. Supersede through 
+ECO cutover Arrives from MBOM and routing releases 
+
+=== PAGE 257 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 257 of 312 
+Aspect Implementation Creates or updates The selectable build definition every WO and MRP explosion uses Postings and scans None Build wave and field spec Wave 3  •  Fields and 
+rules in Book IV §6.1 
+6.1	Sales	Kit	BOM Accessory kits sold as one catalog line, commissioning kits, installation hardware sets, recommended spares packages, must be formal BOM objects, not 
+order notes. The rules below are the complete authority for the sales kit and they reuse the existing editors and postings without exception. Aspect Rule Kit header A material of 
+type KIT. Non stocked and non valuated by default, so the header is a commercial wrapper. A stocked variant is permitted for prepacked kits, in which case the header behaves as a 
+normal finished material and the rules below do not apply Kit structure A BOM with usage Sales, single level, components only, no phantoms and no nested kits. Maintained in the 
+EBOM editor with the usage selector set to Sales and released through the same review path as any BOM revision Order entry Entering the kit on a quotation or order explodes it 
+into component sub lines under the kit line. Pricing defaults to the header through the condition model, with a component priced option per price list where the commercial team 
+wants itemized kits. The margin panel evaluates the kit as one unit either way Availability ATP runs on the components, never on the non stocked header. The kit line confirms at 
+the date the last component confirms Delivery and packing Components pick individually. The pack station groups them under one handling unit and the packing list prints the kit 
+header with its components indented. Serialized components scan at SP-16 against the kit line so genealogy holds Postings Cost of goods posts per component at PGI through template 
+#25. The non stocked header never carries value, so no kit level valuation, variance or count exists Returns RMA lines are raised at component level and carry the kit and order 
+reference, so a partial kit return is normal processing Costing view A report only rollup shows the kit standard as the sum of component standards for margin analysis. No cost 
+estimate object is created for a non stocked header Build Note: Linkage. Where used from any component lists its kit memberships. The recommended spares package for a transformer 
+design is itself a sales kit referenced from the engineering request deliverables checklist, which connects this object to the Spares Finder in §5.1 of this Book. 7.	CAD	
+and	Document	Control	Screens ENG-DOC-001/2		•		Controlled	Documents Aspect Implementation Route, type, users /engineering/documents  •  List + 
+detail  •  Engineers author, manager releases 
+
+=== PAGE 258 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 258 of 312 
+Aspect Implementation Build the layout Register with type and security class filters. Detail with revision history, native and rendition files, title block metadata, linked 
+objects, check out state Primary actions Check out and in. Submit for review with redlines. Release which stamps the rendition. Obsolete with where used warning Arrives from 
+Engineering sidebar, material documents tab, BOM line drawing links Creates or updates Released renditions the floor and customers consume Postings and scans None Build wave and 
+field spec Wave 3  •  Fields and rules in Book I C §5 
+TR-001		•		Transmittals Aspect Implementation Route, type, users /engineering/transmittals  •  Wizard + register  •  Engineers, document control Build the 
+layout Document picker restricted to released revisions, recipient and purpose fields, response capture with the three customer outcomes Primary actions Send package. Record 
+response which drives the design approval milestone Arrives from Engineering request checklist, document register Creates or updates Customer approval evidence on the ETO order 
+Postings and scans None Build wave and field spec Wave 3  •  Fields and rules in Book I C §5.2 
+CAD-SYNC		•		CAD	Sync	Monitor	and	Conflict	Queue Aspect Implementation Route, type, users /engineering/cad-sync  •  Workbench  •  
+Engineering IT, engineers resolve conflicts Build the layout Vault event stream with retry states, conflict cards showing both values side by side with the owning role 
+highlighted, publish failure queue Primary actions Resolve conflict per field ownership. Replay failed events. Open the linked object Arrives from Connector events per IF-17 
+Creates or updates Synchronized attributes, published renditions, EBOM proposals in the import wizard Postings and scans None Build wave and field spec Wave 3 with the connector  • 
+ Fields and rules in Book III G §3 
+CAD-IMP		•		CAD	BOM	Import 
+
+=== PAGE 259 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 259 of 312 
+Aspect Implementation Route, type, users wizard inside the EBOM editor  •  Wizard  •  Engineers Build the layout Mapped proposal grid with match states per line, unmatched rows 
+offered as placeholder proposals, transactional commit with error log Primary actions Map columns. Accept matches. Commit all or nothing Arrives from Vault assembly extraction or 
+CSV upload Creates or updates EBOM lines and placeholder MCRs Postings and scans None Build wave and field spec Wave 3  •  Fields and rules in Book I C §3.3, Book III G §3 
+8.	Planning	Module	Screens PP-MRP-001		•		MRP	Workbench Aspect Implementation Route, type, users /production/mrp  •  Workbench  •  
+Planners, buyers see their exceptions Build the layout Exception cards EX-01 to EX-09 grouped by type with counts and aging, proposal grid with pegging drill, run history with 
+input snapshot IDs Primary actions One click actions per exception type. Firm proposals. Mass convert with preview Arrives from Nightly run completion, planning sidebar Creates or 
+updates Production order drafts and purchase requisitions with pegs preserved Postings and scans None Build wave and field spec Wave 4  •  Fields and rules in Book I D §3, Book IV 
+§6.2 
+PLO-001		•		Planned	Orders Aspect Implementation Route, type, users /production/planned-orders  •  List  •  Planners Build the layout Grid with firmed flag, 
+pegs, conversion state Primary actions Firm. Convert. Cancel proposals Arrives from MRP workbench Creates or updates Production orders and PRs on conversion Postings and scans 
+None 
+
+=== PAGE 260 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 260 of 312 
+Aspect Implementation Build wave and field spec Wave 4  •  Fields and rules in Book I D §3.3 
+SCH-BOARD		•		Schedule	Board Aspect Implementation Route, type, users /production/schedule  •  Workbench  •  Master scheduler Build the layout 
+Finite buckets per work center with load bars, freeze horizon shading, sandbox mode banner, publish diff dialog Primary actions Reschedule inside guardrails. Open what if sandbox. 
+Publish with diff preview Arrives from Planning sidebar, at risk records Creates or updates Published schedules with snapshot IDs that promises reference Postings and scans None 
+Build wave and field spec Wave 4  •  Fields and rules in Book III E §3 
+CTP-DLG		•		Promise	Dialog Aspect Implementation Route, type, users dialog on quotes and orders  •  Dialog  •  Sales with planner visibility Build the layout 
+Feasible date result with the binding constraint named in words, alternative options, soft reservation countdown Primary actions Accept which reserves capacity. Decline. Request 
+planner review Arrives from Quote lines and order confirmation for MTO and ETO Creates or updates Soft capacity reservations converting to firm load at confirmation Postings and 
+scans None Build wave and field spec Wave 4  •  Fields and rules in Book III E §4 
+AT-RISK		•		At	Risk	Promises Aspect Implementation Route, type, users /production/at-risk  •  Workbench  •  Scheduler and sales owner jointly Build the 
+layout Cards per endangered promise with recovery options and decision log Primary actions Choose recovery. Trigger the sales change order path when a re promise is unavoidable 
+Arrives from Automatic revalidation events Creates or updates Recovery decisions logged on the order 
+
+=== PAGE 261 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 261 of 312 
+Aspect Implementation Postings and scans None Build wave and field spec Wave 4  •  Fields and rules in Book III E §5 
+9.	Production	Module	Screens PP-WC-001/2		•		Work	Centers Aspect Implementation Route, type, users /production/work-centers  •  List + detail  
+•  Manufacturing engineering, Controlling links rates Build the layout Capacity model fields, cost center link, batch resource settings, alternate work center Primary actions 
+Maintain capacity. Set maintenance status which warns the scheduler Arrives from Production sidebar, routing rows Creates or updates The capacity and rate basis for scheduling and 
+costing Postings and scans None Build wave and field spec Wave 4  •  Fields and rules in Book I D §2 
+PP-RTG-001/2		•		Routings Aspect Implementation Route, type, users /production/routings  •  List + detail  •  Manufacturing engineering Build the layout 
+Operation grid with times, QC checkpoint toggles, work instruction links, component mapping view Primary actions Author. Release through the review lifecycle. Change through ECO 
+Arrives from Engineering releases, production versions Creates or updates Standard times feeding costing and the schedule Postings and scans None Build wave and field spec Wave 4  
+•  Fields and rules in Book I D §4 
+PP-WO-001/2		•		Production	Orders Aspect Implementation Route, type, users /production/orders  •  List + detail  •  Scheduler, supervisors, cost 
+accounting reads Build the layout Header with frozen revisions and serial, release gate checklist with red and green rows, operations tab, materials tab, cost tab with live WIP, 
+genealogy tab 
+
+=== PAGE 262 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 262 of 312 
+Aspect Implementation Primary actions Release when gates pass or short with the shortage flag. Print traveler. Hold. Close which runs settlement checks Arrives from Planned order 
+conversion, ETO design release Creates or updates Dispatch entries, reservations firmed, serial records, traveler documents Postings and scans Postings happen through terminal 
+confirmations and receipt, not here Build wave and field spec Wave 4  •  Fields and rules in Book I D §5 
+PP-DSP-001		•		Dispatch	List Aspect Implementation Route, type, users /production/dispatch  •  Workbench  •  Supervisors Build the layout Per work 
+center queue in priority order with material ready flags and hold markers Primary actions Resequence within guardrails. Assign crew. Open terminal view Arrives from Released 
+orders, schedule publishes Creates or updates The operator queue the kiosk shows Postings and scans None Build wave and field spec Wave 4  •  Fields and rules in Book I D §6 
+PP-SFT-001		•		Shop	Floor	Terminal Aspect Implementation Route, type, users /production/terminal  •  Kiosk  •  Operators by badge, supervisors override 
+Build the layout Full screen queue, big start and complete buttons, per operation component list with scan states, capture template fields, QC gate button, hold and andon, offline 
+banner with queue depth Primary actions Badge in SP-07. Start SP-10. Scan materials SP-08. Install child serials SP-12. Complete with quantities SP-11. Request inspection. Hold 
+Arrives from Dispatch queue at the station Creates or updates Confirmations, genealogy events, rework orders on rework quantities Postings and scans Templates #28, #29, #30 per 
+confirmation events Build wave and field spec Wave 4  •  Fields and rules in Book I D §6 
+PP-WIP-001		•		WIP	Board	and	Valuation 
+
+=== PAGE 263 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 263 of 312 
+Aspect Implementation Route, type, users /production/wip  •  Board + report  •  Supervisors, cost accounting Build the layout Kanban mirror by work center plus the valuation report 
+reconciling to the GL balance Primary actions Drill to orders. Export the reconciliation for close step 6c Arrives from Production sidebar, close checklist Creates or updates 
+Reconciliation evidence Postings and scans None Build wave and field spec Wave 4  •  Fields and rules in Book I D §7 
+RWO-001		•		Rework	Orders Aspect Implementation Route, type, users /production/rework  •  List + detail  •  Supervisors, quality on retest gates Build the 
+layout Free form operation list, ad hoc materials, settlement receiver banner naming where costs will land Primary actions Add operations. Complete with mandatory re inspection 
+when the origin demands it Arrives from Terminal rework quantities, test failures, NCR dispositions, RMA repairs Creates or updates Repair cost collection in 1325 flowing to the 
+receiver on close Postings and scans Templates #21, #22, #33 per origin at settlement Build wave and field spec Wave 4  •  Fields and rules in Book I D §9 
+PP-SETTLE-001		•		Settlement	Run Aspect Implementation Route, type, users /production/settlement  •  Wizard  •  Cost accountant, Controller reopens Build 
+the layout Eligible order list, per order variance preview split by cause, post step with journal links Primary actions Preview. Post which drives every order WIP balance to zero 
+Arrives from Close calendar, order close actions Creates or updates Variance journals and closed orders Postings and scans Template #32 with the split of Book I A §8 Build wave and 
+field spec Wave 4  •  Fields and rules in Book I D §8, Book I I §4 
+10.	Quality	Module	Screens 
+
+=== PAGE 264 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 264 of 312 
+QM-DASH-001		•		Quality	Dashboard Aspect Implementation Route, type, users /quality/dashboard  •  Dashboard  •  Quality team Build the layout Widgets for 
+open inspections by gate, first pass yield, NCR funnel, vendor quality, cost of quality, hold inventory Primary actions Drill to each queue Arrives from Quality sidebar landing 
+Creates or updates Navigation only Postings and scans None Build wave and field spec Wave 5  •  Fields and rules in Book I E §2 
+QM-PLAN-001/2		•		Inspection	Plans Aspect Implementation Route, type, users /quality/inspection-plans  •  List + detail  •  Quality engineers author, 
+manager approves Build the layout Header with type, scope and sampling settings, ordered characteristics grid, revision compare view Primary actions Author. Approve to Active. New 
+revision. Copy plan. Where used Arrives from Quality sidebar, material quality view preview Creates or updates The test rows every inspection materializes Postings and scans None 
+Build wave and field spec Wave 2 config, Wave 5 full  •  Fields and rules in Book I A §6 
+QM-EXEC		•		Inspection	Execution Aspect Implementation Route, type, users per gate queues  •  Detail  •  Inspectors Build the layout Characteristics from 
+the plan with pass and fail coloring, instrument fields validated against calibration, sample instructions, attachment drop Primary actions Record results. Accept or reject with 
+disposition routing. Create NCR Arrives from GRN QI rows, routing checkpoints, shipment gates, RMA receipts Creates or updates Permanent results on the batch or serial, stock 
+status changes, NCRs Postings and scans Stock status moves per gate. Scans SP-05, SP-14 Build wave and field spec Wave 5  •  Fields and rules in INV 6.1 pattern, Book I E §1 
+
+=== PAGE 265 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 265 of 312 
+QM-FIN-001		•		Final	Test	and	FTR Aspect Implementation Route, type, users /quality/final-test  •  Detail  •  Test technicians, Quality Manager 
+countersigns Build the layout Transformer test catalog with capture templates per test, run history preserved, certified report generator Primary actions Record runs across 
+sessions. Pass generates the FTR and fires the milestone. Fail routes to rework with retest scope Arrives from Orders at the Testing status Creates or updates FTR documents 
+attached to serial, order and shipment set Postings and scans Milestone trigger. Scan SP-14 instrument binding Build wave and field spec Wave 5  •  Fields and rules in Book I E §3, 
+§4 
+QM-CAPA/SCAR		•		CAPA	and	SCAR Aspect Implementation Route, type, users /quality/capa and /scar  •  List + detail  •  Quality engineers, manager closes 
+Build the layout CAPA with sources, root cause method, action table, effectiveness gate. SCAR in 8D structure with vendor response tracking Primary actions Progress the lifecycle. 
+Enforce AVL restriction on overdue SCARs Arrives from NCRs, RMA failure analysis, audits Creates or updates Corrective actions with evidence, vendor status changes Postings and 
+scans None Build wave and field spec Wave 5  •  Fields and rules in Book I E §5, §6 
+QM-DEV-001		•		Deviations	and	Waivers Aspect Implementation Route, type, users /quality/deviations  •  List + detail  •  Quality and Engineering 
+managers approve Build the layout Scope selector, specification versus accepted values, validity by date or quantity, customer evidence slot, affected serial links Primary actions 
+Approve with expiry. Auto expiry blocks further use Arrives from Inspection failures worth accepting, supplier deviation requests Creates or updates Traceable acceptances 
+disclosed on as built records Postings and scans None 
+
+=== PAGE 266 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 266 of 312 
+Aspect Implementation Build wave and field spec Wave 5  •  Fields and rules in Book IV §7.3 
+QM-CAL-001		•		Calibration	Register Aspect Implementation Route, type, users /quality/calibration  •  List  •  Calibration owner Build the layout 
+Instrument grid with due date colors, certificate uploads, measurements at risk report Primary actions Record calibrations. Out of service toggle which interlocks tests Arrives 
+from Quality sidebar, test screens validate against it Creates or updates The interlock every instrument scan checks Postings and scans None Build wave and field spec Wave 5  •  
+Fields and rules in Book I E §7 
+RCL-001		•		Recall	Campaigns Aspect Implementation Route, type, users /quality/recalls  •  Workbench  •  Quality Manager, executive approves notifications Build 
+the layout Population panel from forward trace with version history, containment status, notification list export, recovery tracker, effectiveness gate Primary actions Derive 
+population. Mass hold. Approve notifications dual. Track recovery to one hundred percent accounted Arrives from Suspect batches, field failures, supplier notices Creates or 
+updates Mass holds, recall class RMAs, evidence dossier Postings and scans Through the RMAs it creates Build wave and field spec Wave 5  •  Fields and rules in Book III A FL-08, 
+Book IV §4 
+11.	Purchasing	Module	Screens PUR-WB-001		•		Buyer	Workbench Aspect Implementation Route, type, users /purchasing/workbench  •  Workbench  •  
+Buyers Build the layout PR queue by buyer code, MRP exceptions for buy items, unconfirmed PO list, source gaps Primary actions Source and group PRs into POs. Jump to RFQ where 
+policy demands 
+
+=== PAGE 267 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 267 of 312 
+Aspect Implementation Arrives from Purchasing landing, MRP outputs Creates or updates POs from grouped PRs Postings and scans None Build wave and field spec Wave 6  •  Fields and 
+rules in Book I G §1 
+PUR-VEND-001/2		•		Vendors	and	AVL Aspect Implementation Route, type, users /purchasing/vendors  •  List + detail  •  Buyers, Quality on qualification Build 
+the layout Operational tabs with compliance panel, AVL grid with rank, qualification, FAI and quality rating Primary actions Onboard through the workflow. Restrict or disqualify 
+with cascade to sources Arrives from Purchasing sidebar, PO headers Creates or updates The vendor eligibility every source decision reads Postings and scans None Build wave and 
+field spec Wave 6  •  Fields and rules in Book I G §2 
+PUR-PR/RFQ		•		Requisitions	and	RFQs Aspect Implementation Route, type, users /purchasing/requisitions and /rfqs  •  List + detail  •  Buyers, 
+Engineering on technical scoring Build the layout PR grid with pegs and budget results. RFQ with sealed responses, technical pass fail before commercial opening, landed cost 
+comparison grid Primary actions Approve expense PRs. Issue RFQ with STP attachments. Award which writes info records Arrives from MRP, manual demand, FL-10 stage 8 Creates or 
+updates Awarded price bases, POs on award Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book I G §3, §4, Book IV §3.4 
+PUR-PO-001/2		•		Purchase	Orders Aspect Implementation Route, type, users /purchasing/orders  •  List + detail  •  Buyers within limits, ladder 
+approves 
+
+=== PAGE 268 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 268 of 312 
+Aspect Implementation Build the layout Header with quality clauses and Buy America state, line grid with delivery schedules, STP version chip, LLR flag, revision history Primary 
+actions Approve per ladder. Send. Capture confirmation and STP acknowledgement. Revise with change summary Arrives from PR grouping, RFQ award, LLR releases Creates or updates The 
+commitment receiving and matching work against Postings and scans None at creation. GRN and match post downstream Build wave and field spec Wave 6  •  Fields and rules in Book I G 
+§5, Book IV §3.3 
+LLR-001		•		Long	Lead	Releases Aspect Implementation Route, type, users /purchasing/long-lead  •  Detail  •  Engineering and Purchasing managers, 
+Controller above threshold Build the layout Item list with caps, risk class, exposure tracker bar, linked POs, ECO impact panel Primary actions Approve with exposure acceptance. 
+Close on final release or full disposition Arrives from FL-10 stage 5 decisions on ETO orders Creates or updates Authority for early POs with the preliminary revision flag 
+Postings and scans Exposure feeds ETO committed cost Build wave and field spec Wave 6  •  Fields and rules in Book IV §3.2 
+PUR-EXP-001		•		Expedite	Board Aspect Implementation Route, type, users /purchasing/expedite  •  Workbench  •  Buyers Build the layout Cards for 
+reschedule and past due exceptions with pegged order exposure, action log per vendor contact Primary actions Record promises. Push and pull dates. Escalate Arrives from MRP 
+exceptions, shortage released orders Creates or updates Updated supply dates feeding promise revalidation Postings and scans None Build wave and field spec Wave 6  •  Fields and 
+rules in Book I G §7 
+12.	Costing	and	Pricing	Module 
+
+=== PAGE 269 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 269 of 312 
+This section carries the module in one place, as a designer and builder would consume it. The picture shows how the two halves connect. Costing produces the standard that 
+valuation and variances measure against. Pricing produces the selling price through fixed condition steps. Margin floors sit between them and margin analysis closes the loop after 
+settlement. 
+ Figure V-18. The costing and pricing engine room. Left builds cost truth, right builds price truth, the floor gate and margin analysis connect them. 12.1	The	
+Calculation	Contracts	in	Brief Calculation Rule in One Line Full Spec Work center rates Planned cost center money divided by planned productive hours, released 
+yearly with the budget Book I I §2 Standard cost rollup Material per the MBOM with scrap, labor and overhead per the routing at released rates, rolled bottom up by low level code 
+Book I I §1, §3.2 
+ETO estimate Driver quantities such as core and copper weight times maintained driver rates when no design exists yet Book I I §3.1 Price determination Condition steps 10 to 50. 
+Base price by precedence, one discount, surcharge, freight treatment, tax. Elements persist on the document Book I A §4.4, Book IV §5 Commodity surcharge Index at pricing date minus 
+base index, times content per unit, times pass through percent Book I I §6.4 Margin floor Product line floor percent with an escalation chain on any breach Book I I §6.3 
+
+
+=== PAGE 270 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 270 of 312 
+Calculation Rule in One Line Full Spec Variance split Actuals against standard split into purchase price, usage, labor rate, efficiency and overhead causes with signs defined Book 
+I A §8 
+Order margin three ways Quoted against estimate, standard at PGI, actual at settlement Book I B §6, Book IV §7.6 CST-RATE-001		•		Work	Center	Rates 
+Aspect Implementation Route, type, users /costing/work-center-rates  •  Config grid  •  Cost accountant drafts, Controller releases Build the layout Grid per work center with 
+planned costs pulled from the budget, planned hours from capacity, computed rates, prior year and delta columns, simulation column Primary actions Compute. Simulate. Release with 
+effective date Arrives from Annual budget cycle, Controlling reports Creates or updates The rates every rollup, confirmation and estimate uses Postings and scans None. 
+Confirmations absorb at these rates Build wave and field spec Wave 6  •  Fields and rules in Book I I §2 
+CST-CE-001		•		Cost	Estimates Aspect Implementation Route, type, users /costing/estimates  •  Detail  •  Estimators, cost accountant Build the layout 
+Basis selector for released structures, draft structures or the parametric model, itemized cost tree with source badges, comparison view against standard and last actuals Primary 
+actions Estimate. Release which makes it quotable. Supersede Arrives from Quote lines demand them, costing sidebar Creates or updates The cost basis under every firm ETO price 
+Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book I I §3.1 
+CST-RUN-001		•		Costing	Runs Aspect Implementation Route, type, users /costing/runs  •  Wizard  •  Cost accountant marks, Controller releases Build the 
+layout Scope step, rollup with error list, review grid sorted by value impact with drill to itemization, two step mark and release Primary actions Roll. Review. Mark. Release 
+which revalues stock 
+
+=== PAGE 271 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 271 of 312 
+Aspect Implementation Arrives from Annual cycle, weekly new item runs, MBOM invalidation flags Creates or updates Released standards stamped on materials Postings and scans 
+Revaluation through the REVAL event key at release Build wave and field spec Wave 6  •  Fields and rules in Book I I §3.2, Book II §5 
+PRC-PL-001		•		Price	Lists	and	Agreements Aspect Implementation Route, type, users /pricing/price-lists  •  List + detail  •  Pricing Manager, 
+Controller on floor breaches Build the layout List headers with basis and rounding rules, rate rows with validity and margin columns, agreement container with scope and rebate 
+terms Primary actions Maintain rates through dated rows. Mass update creating new rows. Approve Arrives from Pricing sidebar, material sales view grids Creates or updates The 
+rates the pricing service resolves Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book I I §6.1, §6.2 
+PRC-SUR-001		•		Surcharge	Rules	and	Index	Values Aspect Implementation Route, type, users /pricing/surcharges  •  Config  •  Costing maintains 
+indexes, Pricing Manager rules Build the layout Index series with immutable monthly values, rule rows per family with base index, content and pass through Primary actions Post 
+monthly values. Maintain rules Arrives from Pricing sidebar, monthly commodity ritual Creates or updates Surcharge elements on documents and purchase side per info records 
+Postings and scans Ship date adjusted contracts true up at PGI through template #38 Build wave and field spec Wave 6  •  Fields and rules in Book I I §6.4, Book IV §5 
+PRC-SIM		•		Price	Simulation Aspect Implementation Route, type, users dialog and /api/v1/pricing/simulate  •  Dialog  •  Sales, pricing, audit read 
+
+=== PAGE 272 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 272 of 312 
+Aspect Implementation Build the layout Inputs for customer, item, quantity and date. Output waterfall listing every access tried, the winning rows and the floor verdict Primary 
+actions Simulate. Copy result reference Arrives from Material sales view, quote lines, pricing arguments Creates or updates Explanations. The same service documents call, so 
+simulation equals reality Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book IV §5.2 
+INV-CVA-001		•		Cost	Variance	Workbench Aspect Implementation Route, type, users /inventory/valuation/cost-variance  •  Workbench  •  Cost 
+accountant, Controller Build the layout Summary tiles per variance type with trends, grouped grid with drill to transaction and journal in three clicks, pareto and trend charts 
+Primary actions Filter. Drill. Export the four report layouts Arrives from Costing sidebar, close rituals, PPV questions Creates or updates Explanations and the exception list for 
+missing standards Postings and scans None. It reads what others posted Build wave and field spec Wave 6  •  Fields and rules in Book I A §8 
+PRC-MARG		•		Margin	Analysis Aspect Implementation Route, type, users /pricing/margin  •  Report set  •  Pricing, sales leadership, Controller Build the 
+layout Quote margin register, three view order margin, price realization decomposition, floor breach register with aging Primary actions Drill to documents. Export Arrives from 
+Pricing sidebar, monthly reviews Creates or updates The closed loop from quote to actual Postings and scans None Build wave and field spec Wave 6  •  Fields and rules in Book I I §7 
+13.	Controlling	Screens 
+
+=== PAGE 273 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 273 of 312 
+CO-CC/PC-001/2		•		Cost	and	Profit	Center	Masters Aspect Implementation Route, type, users /controlling/*  •  List + detail + tree  •  Controlling 
+analyst drafts, Controller approves Build the layout Hierarchy tree editor with effective dated moves, master fields with owner and validity, where used check before deactivation 
+Primary actions Maintain. Move with history. Block for posting Arrives from Controlling sidebar, wave 1 seed load Creates or updates The dimensions every posting derives Postings 
+and scans None. Rule 7 fallbacks land on the exception report Build wave and field spec Wave 1  •  Fields and rules in Book I H §1, §2 
+CO-ALC-001/2		•		Allocation	Cycles Aspect Implementation Route, type, users /controlling/allocations  •  Config + wizard  •  Analyst defines, Controller 
+posts Build the layout Ordered segments with senders, receivers and drivers, statistical key figure grid, run preview with the rounding rule visible Primary actions Define. 
+Preview. Post. Rerun replaces with both retained Arrives from Close checklist step 5b Creates or updates Distributed shared costs Postings and scans Template #36, net zero at 
+entity level Build wave and field spec Wave 6  •  Fields and rules in Book I H §5 
+CO-R1..R4		•		Controlling	Reports Aspect Implementation Route, type, users /controlling/reports  •  Report set  •  Managers see their centers, 
+Controller sees all Build the layout Cost center report with rollups, profit center P and L with the reconciliation column, rate review, exception report Primary actions Drill to 
+journal items. Export Arrives from Controlling sidebar, monthly reviews Creates or updates The spend and margin accountability views Postings and scans None Build wave and field 
+spec Wave 6  •  Fields and rules in Book I H §6 
+
+=== PAGE 274 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 274 of 312 
+14.	Traceability	and	Barcode	Administration	Screens TRC-EXPL		•		Trace	Explorer Aspect Implementation Route, type, users 
+/traceability/explorer  •  Tree explorer  •  Quality, engineering, service, audit read Build the layout Input accepts a serial or a batch or a heat number. Tree renders both 
+directions with evidence drill per node. Export produces the certificate dossier Primary actions Trace forward. Trace backward. Export dossier. Feed a recall population Arrives 
+from Serial and batch links everywhere, recall campaigns Creates or updates Evidence packages Postings and scans None. Reads the append only event store Build wave and field spec 
+Wave 4  •  Fields and rules in Book I F §5, Book IV §4.4 
+TRC-DASH		•		Traceability	Completeness	Dashboard Aspect Implementation Route, type, users /traceability/completeness  •  Dashboard  •  Quality IT, 
+quality manager Build the layout Coverage percent, orphan and missing event counts, delayed offline events, unresolved corrections, each with assigned owner lists Primary actions 
+Assign. Resolve through the correction pair flow Arrives from Daily control jobs Creates or updates Worklists keeping the chain trustworthy Postings and scans None Build wave and 
+field spec Wave 7  •  Fields and rules in Book IV §4.3 
+BC-ADMIN		•		Label	and	Scan	Administration Aspect Implementation Route, type, users /configuration/barcode  •  Config  •  Plant IT Build the 
+layout Printer registry per station, label template versions, scan point policy toggles, reprint audit log, scan exception queue for offline conflicts Primary actions Register 
+devices. Publish templates. Resolve scan exceptions Arrives from Configuration area Creates or updates The print and scan infrastructure state Postings and scans None 
+
+=== PAGE 275 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 275 of 312 
+Aspect Implementation Build wave and field spec Wave 4  •  Fields and rules in Book I F §2, §4, Book V §8 
+15.	Workflow	and	Administration	Screens WF-INBOX		•		Approvals	Inbox Aspect Implementation Route, type, users /approvals  •  
+Workbench  •  Everyone with pending steps Build the layout Unified queue with SLA clocks, document context cards, act buttons inline, delegation banner when active Primary actions 
+Approve. Reject with comments. Delegate. Recall own submissions Arrives from Every W.4 workflow routes here plus email actions Creates or updates Approval records on the immutable 
+trail Postings and scans Terminal actions release the gated postings Build wave and field spec Wave 1  •  Fields and rules in Section W, Book IV §7.7 
+WF-DEF		•		Workflow	Definitions Aspect Implementation Route, type, users /configuration/workflows  •  Config  •  Process owners, Controller on posting 
+gates Build the layout Catalog grid of the twenty seven workflows, versioned definition editor with condition builder and chain designer Primary actions Version definitions. 
+Effective date them Arrives from Configuration area Creates or updates The rules the engine runs Postings and scans None Build wave and field spec Wave 1  •  Fields and rules in 
+Book IV §7.7 
+OPS-JOBS/INT		•		Job	and	Integration	Consoles Aspect Implementation Route, type, users /operations/*  •  Workbench pair  •  Operations, on call 
+Build the layout Job runs with SLA timers and dependency chains. Message monitor with lag, DLQ depth, correlation search, replay tools Primary actions Retry. Replay after fix. 
+Escalate per severity 
+
+=== PAGE 276 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 276 of 312 
+Aspect Implementation Arrives from Alerts, on call rotation Creates or updates Operational recovery actions with audit Postings and scans None Build wave and field spec Wave 1 
+skeleton, Wave 7 hardened  •  Fields and rules in Book III B §4, D §5 
+CFG-CORE		•		Core	Configuration	Set Aspect Implementation Route, type, users /configuration/*  •  Config screens  •  Per owner column of each 
+register Build the layout Number series, fiscal periods, tax determination, RMA policies, sales and production and engineering and quality settings, each per its specification 
+Primary actions Maintain under change control Arrives from Configuration area Creates or updates The seed data catalog of the configuration workbook Postings and scans Period 
+control gates every posting date Build wave and field spec Wave 1  •  Fields and rules in Book I A §9, §11, INV 11.x, Book IV A-12 
+16.	The	Linkage	Spine	in	One	Table Reading the entries above end to end shows the same chain from every angle. This table states it once, forward. Any screen 
+not advancing this spine is either master data feeding it or a report reading it. This Document Creates This Next Money and Identity Effects Lead Opportunity, then quotation on 
+qualification No money. Prospect customer born without credit exposure. Prior build decision attached Quotation Sales order on win Prices frozen as elements. Estimate linked on 
+ETO Sales order schedule line Reservation, engineering request, planned order or PR per branch Credit exposure. Peg identity everything downstream carries Engineering request 
+EBOM, drawings, transmittals Design approval milestone money on ETO Released EBOM MBOM through transform, production version Costing invalidation flag MCR Active material 
+Valuation class and profit center set before first use PR RFQ or PO per source policy Budget check on expense demand 
+
+=== PAGE 277 ===
+ENTERPRISE ERP — UNIFIED BUILD SPECIFICATION  |  V1.0 CONFIDENTIAL 
+CONFIDENTIAL Page 277 of 312 
+This Document Creates This Next Money and Identity Effects PO Vendor confirmation, GRN Commitment. LLR exposure when preliminary GRN QI inspection, stock, match basis Templates 
+for stock and GR/IR. Batch and heat identity born. Scans SP-01 to 03 Production order Confirmations, genealogy, FG receipt WIP charges #28 #29, scrap #30, receipt #31, settlement 
+#32. Serial born at release Delivery Pick, pack, PSI, PGI COGS #25, freight #26, packaging #27. Serial to customer at SP-18 Invoice request Invoice, cash application Revenue and 
+tax per the external accounting volume RMA Receipt, inspection, disposition documents Templates #17 to #24. Serial history continues, never restarts Recall campaign Holds, 
+notifications, recall RMAs Population accounted to one hundred percent before closure Build Note: Build discipline for this Book. Each entry becomes one epic in the backlog with 
+its wave as the target increment. The Arrives from and Creates rows become the integration test list for that epic. The referenced section is the acceptance authority. When an 
+entry and its referenced section ever disagree, the referenced section wins and the entry is corrected through change control. 
+BOOK VII GO-LIVE READINESS SUPPLEMENT Gap Register Closure Crosswalk  •  Supplemental Screen Entries  •  Multi Plant Planning Setup  •  Build Package Manifest Data Migration Package  
+•  Complete Barcode Sample Book  •  Go Live Readiness Statement and Execution Directive  
+

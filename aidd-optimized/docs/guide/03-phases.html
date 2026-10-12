@@ -1,0 +1,507 @@
+<h1 class="part" id="s-part3"><span class="num">Part 3</span>The phases, step by step</h1>
+<div class="part-intro">
+  What actually happens in each phase: the sequence, who owns what, what is produced, and what has
+  to be true before the next thing starts. Read the phase you are in; skim the rest.
+</div>
+
+<h2 id="s-3-0">3.1 Phase 0: Intake <span class="tag p0">PHASE 0</span></h2>
+<p><strong>Owner:</strong> discovery-lead &nbsp;·&nbsp; <strong>Command:</strong> <code>/new-project</code> then <code>/intake-spec</code></p>
+<p>
+  A real phase, not a formality, and the only step that is never skipped, including when a spec is
+  promised for next week. It decides what this project actually received and therefore how it will
+  learn what it is building.
+</p>
+<h3>Sequence</h3>
+<ol>
+  <li><strong>Inventory</strong> every file, link, login and named conversation offered as input:
+  what it is, who gave it, date.</li>
+  <li><strong>Classify</strong> the set (A through F) and record it in <code>PROJECT_CONFIG.md</code>
+  and <code>STATE.md</code>.</li>
+  <li><strong>File and freeze</strong> everything into <code>00-inputs/</code>, read-only, with
+  origin-and-date filenames. Client documents are never edited; corrections happen downstream.</li>
+  <li><strong>Fill the header block</strong> on <code>00-inputs/PRD.md</code>.</li>
+  <li><strong>Audit</strong> against the fourteen dimensions, scored PRESENT / PARTIAL / ABSENT.
+  Resist rounding up: the audit's entire value is in its ABSENTs.</li>
+  <li><strong>Convert absences</strong> into questions (grouped by who can answer) or register
+  assumptions (where nobody can).</li>
+  <li><strong>Open the assumption register</strong> with blast radius, cheapest test, named owner and
+  decision date per entry.</li>
+  <li><strong>Start the substitute path</strong> for classes C through F.</li>
+  <li><strong>Disclose</strong> a missing spec in <code>STATE.md > blockers</code> so it appears in
+  every gate report until a signed brief exists.</li>
+</ol>
+<h3>The fourteen audit dimensions</h3>
+<div class="two-col small">
+  1. Business goal and measure<br>
+  2. Users and roles<br>
+  3. Entities and vocabulary<br>
+  4. Rules and constraints<br>
+  5. States and lifecycle<br>
+  6. Permissions<br>
+  7. The current process<br>
+  8. Exceptions and failure handling<br>
+  9. Integrations and data boundaries<br>
+  10. Non-functional expectations<br>
+  11. Platform and environment<br>
+  12. Success and failure scenarios<br>
+  13. Out of scope<br>
+  14. The client's own open questions
+</div>
+<p class="small">
+  Dimension 14 is the strongest single quality signal a spec can carry: a document admitting no
+  unknowns was written to persuade, not to specify. Dimension 2 is the highest-leverage absence,
+  because role count drives artifact count for the whole project.
+</p>
+
+<h2 id="s-3-1">3.2 Phase 1: Empathize and Define <span class="tag p1">PHASE 1</span></h2>
+<p><strong>Owner:</strong> discovery-lead &nbsp;·&nbsp; <strong>Mode:</strong> divergent, then convergent</p>
+<p>
+  Phase 1 is one activity, the discovery and definition call, and everything before and after it
+  serves that call. The phase exits on a problem definition the domain authority has confirmed
+  <em>in writing</em>.
+</p>
+
+<div class="flow">spec-intake  →  anchor-analysis  →  glossary-builder  →  question-generation
+                                                              ↓
+                                                      [ the D&amp;D call ]
+                                                              ↓
+    written confirmation  ←  contradiction-mining  ←  interview-facilitation capture</div>
+
+<h3>Before the call</h3>
+<p>
+  <strong>Anchor analysis</strong> reads the document forensically in three passes: as the intended
+  reader (absorb what it wants you to conclude), as an extractor (the full claim typology, every
+  item tagged <code>[DOC:section]</code>), and as a skeptic (what would a skeptical reader conclude
+  from the same facts?). Two outputs matter most. The <strong>commitment scan</strong> captures every
+  "must / shall / always / never / required by" sentence with its authority class (law, contract,
+  policy, or preference) and its blast radius; the authority class is what later stops prioritization
+  treating a 2014 policy choice as untouchable law. The <strong>silence pass</strong> asks eight
+  questions of every described process (before, after, failure, volume, exception, authority,
+  boundary, reversal) and records every unanswered one as a finding.
+</p>
+<p>
+  <strong>Glossary building</strong> classifies each term descriptive or rule-bearing using one test:
+  <em>if two people defined it differently, would the product behave differently?</em> Rule-bearing
+  terms get a dependency count, verification probes, and a place on the DA-verification list sorted
+  by how many artifacts will rest on them.
+</p>
+<p>
+  <strong>Question generation</strong> derives the set from the analysis: one process question and
+  one rules question per process, exception questions from the silences, an edge-testing question per
+  commitment, an authority question per commitment lacking one, and a verification question per
+  single-mention constant. Every primary question gets a 2 to 4 rung ladder written in advance
+  (concretize, edge, actor, stake), and every question passes a lint: no yes/no primaries, no
+  embedded answers, no hypotheticals as primaries, one question per question. Twelve well-laddered
+  questions beat thirty flat ones; if the list exceeds the slot, cut whole questions rather than
+  compressing all of them.
+</p>
+
+<h3>During the call</h3>
+<p>
+  Three-column capture, <code>[PO]</code> <code>[DA]</code> <code>[TEAM]</code>, plus side lists for
+  solutions offered, new terms, and requirement unfolding (every question a team member asks, logged
+  with whether it was answered). Separation at the moment of capture is the whole point: separation
+  after the fact is reconstruction.
+</p>
+<p>
+  Technique matters more than the script. Three to five seconds of silence after an answer, then the
+  echo probe (repeat their last few words with a question tone) before reaching for the next written
+  rung. Every abstract answer gets "walk me through the last actual time" before the conversation
+  moves on. Four tells are worth probing when they appear: a hesitation (uncertainty or politics), a
+  laugh (usually a workaround), the word "just" (compression, ladder down), and "obviously" (an
+  assumption the client cannot see).
+</p>
+<p>
+  When the conversation and the document disagree, say so out loud, neutrally, and capture both. That
+  disagreement is among the most valuable findings the call produces. When the DA and PO debate each
+  other, let it run while it stays concrete and capture both sides tagged; live disagreement is
+  high-grade evidence.
+</p>
+<p>
+  The closing summary is never cut for time. Summarize back group by group, then ask verbatim: what
+  did I get wrong, what did I not ask about, who sees this differently, what are you worried we will
+  get wrong. Mishearings caught here cost a sentence; caught at Gate 2 they cost a re-model.
+</p>
+
+<h3>After the call</h3>
+<p>
+  <strong>Contradiction mining</strong> runs in two stages. A model-assisted sweep with the exact
+  framing "list every contradiction between these sources; do not resolve, reconcile or merge
+  anything", then a human filter applying the co-satisfiability test: <em>if both statements were
+  true, could the same product satisfy both?</em> Yes means phrasing, drop it. No means real, keep
+  it. Then a deliberate under-detection pass, because models over-detect surface phrasing and
+  under-detect deep conflicts.
+</p>
+<p>
+  Problem statements carry five fields: problem, source tag, current workaround, downstream
+  consequence, confidence. A problem with no stated workaround queues the workaround question (people
+  always cope somehow; an unknown coping mechanism means the problem is not yet understood). A
+  problem with no downstream consequence is suspect and queues the stake question.
+</p>
+
+<div class="box warn">
+  <span class="lbl">Exit criteria, enforced</span>
+  <p>Written confirmation of the problem set from the DA (a verbal yes upgrades nothing), zero
+  owner-less contradictions, and <code>open-questions.md</code> converted into the Phase 2A research
+  plan. The phase can close on an explicit, recorded risk acceptance, but never on silence.</p>
+</div>
+
+<h2 id="s-3-2">3.3 Phase 2A: Initial Design <span class="tag p2a">PHASE 2A</span></h2>
+<p><strong>Mode:</strong> divergent, parallel workstreams</p>
+<p>Six workstreams, with real dependencies between them:</p>
+<div class="flow">domain-researcher ─┐
+kb-curator ────────┼─→ prompt-spec-writer ─→ prototype-engineer
+flow-modeler ──────┘         (needs kb-index)      (needs a complete prompt)
+  (as-is)
+
+ui-designer  ── density decision + status encoding sketch ONLY
+data-modeler ── tentative ERD sketch
+flow-modeler ── tentative structure set</div>
+<p>
+  Research, knowledge base and as-is mapping start immediately and in parallel. Prompt writing needs
+  the KB index to exist. Prototype generation needs a complete prompt: no prompt, no prototype, no
+  exceptions.
+</p>
+<p>
+  The ui-designer deliberately does <em>not</em> build a system here. In 2A they settle the density
+  decision and a status encoding sketch and nothing else, because a full visual system authored
+  against an uncorrected entity model is half thrown away at Gate 1.
+</p>
+
+<h3>Controlled roughness</h3>
+<p>
+  The tentative set (sitemap, to-be sketches, userflow sketches, ERD sketch) exists so Gate 1 has
+  structure to reject, not just a prototype to react to. An authority who accepts a screen will often
+  reject the data model behind it once both are visible. Three disciplines keep it useful:
+</p>
+<ul>
+  <li><strong>Timeboxed</strong>, declared in <code>STATE.md</code>. Roughness is enforced by the
+  clock. If a diagram is taking long enough to look finished, it has exceeded its purpose.</li>
+  <li><strong>Derived, not invented.</strong> Every element carries a sources line ("derived from:
+  as-is/invoicing rows 4-11, problem P-07"). Free-floating structure is decoration, and it survives
+  unexamined precisely because nobody owns the claim behind it.</li>
+  <li><strong>Uncertainty marked on the artifact</strong>: <code>(inferred)</code> labels, "?" edges,
+  and an open-questions box in the corner of each sketch listing the two or three things the team
+  most wants ruled on. Reviewers correct what is visibly uncertain and politely ignore what looks
+  decided.</li>
+</ul>
+
+<h3>The prototype's fidelity asymmetry</h3>
+<table class="tight">
+  <tr><th style="width:50%">Build properly</th><th>Leave obviously rough</th></tr>
+  <tr>
+    <td>Realistic content at realistic volume, including one negative, one zero and the longest
+    plausible name</td>
+    <td>Visual polish: colour, typography, shadows, icon craft</td>
+  </tr>
+  <tr><td>Every status the sketch entities can hold, visible somewhere</td><td>Anything the scope boundary excluded</td></tr>
+  <tr><td>The empty state and at least one error state</td><td>Animation and transitions</td></tr>
+  <tr><td>The complete happy path of the job, end to end</td><td>Auth, settings, exports</td></tr>
+  <tr><td>Native, keyboard-operable controls with visible focus</td><td>Responsive behaviour, unless a role genuinely works on a tablet</td></tr>
+  <tr><td>The table at the client's real row count</td><td>Perfect alignment and off-scale nudging</td></tr>
+</table>
+<p class="small">
+  The reason is asymmetric. A domain authority looking at five status badges will name the sixth,
+  which is a Type B correction worth days. A domain authority looking at slightly wrong spacing will
+  comment on the spacing, which is worth nothing at this gate. Visible roughness in the visual layer
+  actively protects the gate's attention.
+</p>
+
+<h2 id="s-3-3">3.4 Gate 1 <span class="tag gate">GATE</span></h2>
+<p><strong>Attendees:</strong> domain authority + product owner &nbsp;·&nbsp; <strong>Command:</strong> <code>/gate-1</code></p>
+<p>
+  The set is reviewed <em>together</em>, never artifact by artifact. The prototype is introduced with
+  its framing script out loud: disposable, built to be wrong in a useful way, tell me where it is
+  wrong. Then the six questions, in order:
+</p>
+<ol>
+  <li>Where is the as-is process factually wrong or incomplete?</li>
+  <li>Which steps are missing?</li>
+  <li>Which entities or relationships are wrong?</li>
+  <li>Which edge cases would break this?</li>
+  <li>Which terminology is wrong for this domain?</li>
+  <li>What must be true that is not shown here?</li>
+</ol>
+<p>
+  The second half of the agenda is the tentative set's open-questions boxes: the team asked for
+  specific rulings, and this is where they get ruled.
+</p>
+<p>
+  <strong>On pass:</strong> corrections classified and routed, the prototype and its prompt archived
+  to <code>50-prototype/ARCHIVED/</code>, the report filed, phase set to 2B, and reconciliation
+  announced as the next action.
+</p>
+
+<h2 id="s-3-4">3.5 Phase 2B: Further Design <span class="tag p2b">PHASE 2B</span></h2>
+<p><strong>Mode:</strong> convergent. <strong>The chain is strictly ordered and the order is enforced.</strong></p>
+<div class="flow">data-modeler          permission matrix, closed status lists, lifecycle, consequences note
+      ↓
+flow-modeler          to-be flows that are CORRECT, process breakdown with its cross-checks
+      ↓
+ux-architect          optimize (cost tables) → structure (IA) → draw (userflows, sitemap)
+      ↓
+ui-designer           the visual and interaction system
+      ↓
+hifi-spec-designer    Phase 3 screens
+      ↓
+design-critic         before each gate</div>
+<p>Each arrow is a seam with a reason:</p>
+<ul>
+  <li>Optimizing before the process is correct optimizes the wrong process.</li>
+  <li>Drawing userflows before the structure is chosen means redrawing them.</li>
+  <li>Building screens before the system exists produces one-off exceptions that fork the system.</li>
+</ul>
+
+<h3>Requirements reconciliation runs first and continuously</h3>
+<p>
+  The refined requirement document is seeded from anchor-analysis commitments, problem statements,
+  the PRD draft, promoted register assumptions, and every Gate 1 Type B correction. Every Resolved
+  statement passes five quality rules: <strong>testable</strong> (a reader can construct the passing
+  and failing case), <strong>atomic</strong> (an "and" joining two obligations is two entries),
+  <strong>solution-free</strong> (what must be true, not which widget), <strong>vocabulary-bound</strong>
+  (every term in the glossary), and <strong>quantified where quantifiable</strong>.
+</p>
+<p>
+  Dependency links (depends-on, feeds) are wired per entry. They are what turn Type B impact analysis
+  into a lookup instead of an archaeology dig.
+</p>
+
+<h3>The ERD is where the expensive mistakes live</h3>
+<p>
+  <strong>The exhaustion protocol:</strong> collect candidate status values from every source (flows,
+  the document, incumbent filter dropdowns, the current build's badges), read the list to the DA, and
+  ask "and what else can it be?" until the answer is nothing. Then probe the gaps: what is it between
+  X and Y, what is it while it waits, what if the user abandons it, has one ever been in two at once
+  (if yes, there are two status fields wearing one name). Finish with the terminal check.
+</p>
+<p>
+  <strong>Cardinality by counterexample</strong>, never by rule: "has there ever been an X with two
+  Ys?" The dangerous answers are "normally one" (model n, display for one) and "it depends" (chase
+  the condition; it is a rule).
+</p>
+<p>
+  <strong>The temporal pass:</strong> per attribute referencing another entity's data, is the value
+  frozen at-the-time or a live current lookup? The probe is "if the price changes tomorrow, should
+  last month's invoice change with it?" The answer is almost always no, and getting this wrong
+  corrupts history silently.
+</p>
+<p>
+  <strong>The consequences note</strong> is the deliverable that carries all of this to the
+  designers, one line per rule that constrains the interface: "X is reversed, never deleted: no
+  delete affordance anywhere; provide reverse with a reason field."
+</p>
+
+<h3>To-be design and the improvement ladder</h3>
+<p>Applied in order to every pain-marked as-is row:</p>
+<table class="tight">
+  <tr><th style="width:18%">Rung</th><th>Meaning</th></tr>
+  <tr><td>1. Eliminate</td><td>Remove the need. Ask why the step exists before how to speed it up</td></tr>
+  <tr><td>2. Simplify</td><td>Fewer decisions, inputs, touches; same outcome</td></tr>
+  <tr><td>3. Integrate</td><td>Kill the re-keying and the handoff seam; data moves itself</td></tr>
+  <tr><td>4. Automate</td><td>Last deliberately: automating a step that should have been eliminated fossilizes it</td></tr>
+</table>
+<p>
+  Before any elimination, the <strong>second-job check</strong>: a redundant-looking step often does
+  control, audit trail, training or handoff signalling invisibly. Ask "who would notice if this
+  stopped happening, and when?"
+</p>
+<p>
+  <strong>Automation honesty:</strong> a step is automatic only when its trigger and inputs are fully
+  specified by <code>(confirmed)</code> entries, and every automatic step specifies detection, silence
+  window, fallback and override. Automation does not remove the unhappy path, it relocates it.
+</p>
+
+<h3>Flow optimization: counting before proposing</h3>
+<p>
+  Every task gets a cost table: decisions, inputs classed K (known to the system), R (retrievable) or
+  N (genuinely new), waits, navigations, recalls, with the as-is totals beside them. Every K and R
+  input is a defect until proven otherwise: the system is asking a person for something it already
+  has. A to-be that does not reduce the totals is a re-platforming, and that is worth knowing before
+  Gate 2 rather than after launch.
+</p>
+<table class="tight">
+  <tr><th style="width:26%">Friction class</th><th>Default fix</th></tr>
+  <tr><td>Unnecessary decision</td><td>Default it, visibly and changeably</td></tr>
+  <tr><td>Unnecessary input</td><td>Prefill, derive, or look up. Show it, do not ask for it</td></tr>
+  <tr><td>Unnecessary wait</td><td>Move it off the critical path</td></tr>
+  <tr><td>Unnecessary navigation</td><td>Bring it to the point of decision</td></tr>
+  <tr><td>Unnecessary recall</td><td>Show it at the moment it is needed</td></tr>
+  <tr><td>Unnecessary rigour</td><td>Downgrade per the friction budget</td></tr>
+</table>
+<p class="small">
+  The last class is the one designers under-apply. Friction added out of caution costs the user on
+  every single pass and pays off only on the rare error, and nobody audits it because it looks
+  responsible. The friction budget sizes ceremony against the consequence data from discovery:
+  detection latency, remediation cost, reversibility.
+</p>
+
+<h3>Information architecture</h3>
+<p>
+  Structure derives from the entity model plus roles, never from the feature list; the feature list is
+  a coverage check run last. Labels come from the glossary, always: a label with no glossary entry is
+  a defect in one of the two files. The navigation model is chosen against counted inputs (primary
+  entities, roles, role overlap, daily tasks per role, rare-but-critical tasks), and the rejected
+  alternatives are recorded, because six months later someone will propose them again.
+</p>
+<p>
+  The structure is <em>validated, not asserted</em>: a tree test (eight to twelve real tasks, "where
+  would you go to...?") and a reverse card sort, an hour with the DA and two or three users. Anything
+  under roughly 70 percent direct success on a daily task gets reworked before it is drawn.
+</p>
+
+<h3>Prioritization closes the phase</h3>
+<p>
+  The mandatory partition is separated first and audited against the authority classes captured back
+  in anchor analysis: only law and contract are automatically mandatory; policy and preference
+  compete like everything else. Only the optional partition is scored, with a method chosen and
+  recorded (Impact/Effort, MoSCoW, RICE, WSJF, Kano, opportunity scoring, or P0 ranking), and every
+  estimate carrying its provenance. Then the two domain rules apply, after scoring, visibly:
+</p>
+<div class="box rule">
+  <span class="lbl">The two prioritization rules</span>
+  <p><strong>1. Mandatory is not a candidate.</strong> Anything a <code>(confirmed)</code> DA rule or
+  a <code>[DOC]</code> commitment requires is in by definition. A method that scores a legal
+  requirement low has mis-scoped its inputs, not discovered a saving.</p>
+  <p><strong>2. Process completeness over feature count.</strong> A half-supported process is worth
+  less than no support: it forces users to run two systems at once. Rank in units of complete to-be
+  flows, including their exception paths.</p>
+</div>
+
+<h2 id="s-3-5">3.6 Gate 2 <span class="tag gate">GATE</span></h2>
+<p><strong>Attendees:</strong> DA + PO + at least one developer &nbsp;·&nbsp; <strong>Command:</strong> <code>/gate-2</code></p>
+<p>
+  Review order is enforced: refined requirements, ERD, breakdown, to-be pairs with their pain-index
+  deltas, flow optimization deltas, IA, userflows, sitemap. <strong>Screens last.</strong>
+  Screen-first review hides model contradictions, reliably.
+</p>
+<p>
+  The developer's attendance is the point, not a courtesy. Their acceptance of the ERD and their read
+  of the breakdown are exit criteria; their structural objections are cheap now and multiples later.
+  Hand them the two-developer-test results as a reading guide.
+</p>
+<p>
+  <strong>On pass:</strong> the prioritized list is signed in writing (marked LOCKED on fixed-bid),
+  the prototype is confirmed archived, and Phase 3 starts from the list and the consequences note.
+</p>
+
+<h2 id="s-3-6">3.7 Phase 3: Test and Prototype <span class="tag p3">PHASE 3</span></h2>
+<p><strong>Owner:</strong> hifi-spec-designer, with ui-designer and design-critic</p>
+<p>
+  Convergent and divergent at once: each prioritized feature converges to production intent, and
+  anything discovered that changes a requirement diverges back through the reconciler.
+</p>
+<p>
+  <strong>The state enumeration table is built before any screen.</strong> Feature by entity by
+  status, from the ERD's closed lists rather than from memory. Each cell is a screen state to specify
+  or an explicit "not reachable here" proved with the flow. Unproven unreachability is a missing
+  screen. Building this table first is what stops states being discovered late and expensively.
+</p>
+<h3>Nine blocks per feature spec</h3>
+<table class="tight">
+  <tr><th style="width:6%">#</th><th style="width:24%">Block</th><th>Contents</th></tr>
+  <tr><td>1</td><td>Screen states</td><td>The generic set (empty, loading, partial, error, success, permission denied) plus one state per ERD status value the feature's entities can hold</td></tr>
+  <tr><td>2</td><td>Screen composition</td><td>The three hierarchy levels named in writing before drawing; layout, density, grouping</td></tr>
+  <tr><td>3</td><td>Dev notes</td><td>Behaviour the visual cannot carry: validation rules with REQ-IDs, calculation logic, what recalculates when, server-authoritative versus client</td></tr>
+  <tr><td>4</td><td>Interaction guides</td><td>Feedback timing, optimistic/pending/confirmed per mutation, validation timing, save model, keyboard contract, focus movement, concurrency</td></tr>
+  <tr><td>5</td><td>Status mapping</td><td>Per status: trigger, who may trigger, which transitions are irreversible, what every role sees</td></tr>
+  <tr><td>6</td><td>Screen flow</td><td>How screens connect, exception paths drawn rather than implied</td></tr>
+  <tr><td>7</td><td>Real content</td><td>Actual copy in every state, REQ-IDs beside any rule-bearing string</td></tr>
+  <tr><td>8</td><td>Accessibility contract</td><td>Element or ARIA pattern, name source, keyboard pattern, states exposed, announcements, target sizes</td></tr>
+  <tr><td>9</td><td>Responsive adaptation</td><td>Breakpoint behaviour, dense-data strategy, target sizes by environment</td></tr>
+</table>
+<p class="small">
+  Partial specs are marked DRAFT in the header. No silent partials, and no DRAFT headers left at gate
+  time.
+</p>
+<div class="box warn">
+  <span class="lbl">Prototype gravity</span>
+  <p>Sources are the refined requirements, the ERD, the flows and the IA. <strong>Never the archived
+  prototype.</strong> If you find yourself opening <code>ARCHIVED/</code>, stop and say why out loud.
+  Hi-fi that quietly refines archived screens inherits every uncorrected assumption in them.</p>
+</div>
+
+<h2 id="s-3-7">3.8 Gate 3 <span class="tag gate">GATE</span></h2>
+<p><strong>Attendees:</strong> internal team &nbsp;·&nbsp; <strong>Command:</strong> <code>/gate-3</code></p>
+<p>
+  Line by line: each in-list feature's spec against its REQ-IDs. Then an <em>independent</em> re-run
+  of the status-mapping-versus-ERD reconciliation, separate from the spec designer's own self-check,
+  because that mismatch is the most common Gate 3 defect. Critique lenses 3, 4 and 7 (state
+  completeness, accessibility, domain fidelity) are also re-run independently, because those three
+  are where a self-critique is least reliable: they require reading the ERD rather than looking at
+  the screen.
+</p>
+<p>Passing Gate 3 unlocks <em>scheduling client validation</em>, not shipping.</p>
+
+<h2 id="s-3-8">3.9 Handoff and the md-spec loop <span class="tag close">CLOSE</span></h2>
+<p><strong>Owner:</strong> handoff-manager</p>
+<p>
+  Handoff is a transfer of understanding, not a file drop. The measurable goal: build-time
+  clarification requests approach zero for anything the artifact set already answers.
+</p>
+
+<h3>The what-if sweep, before the walkthrough</h3>
+<p>
+  Per in-list feature, confirm that an <em>artifact</em> (not your memory) answers each of: every
+  mutation's optimistic/pending/confirmed decision and failure behaviour; every screen state including
+  ERD statuses; every exception path's landing state and resume point; every irreversible transition's
+  confirmation pattern; concurrency per multi-user surface; the narrow strategy per dense table.
+  Anything unanswered is patched that week or listed as a manifest gap. The sweep list itself is filed
+  so the dev team can see what was checked.
+</p>
+
+<h3>The walkthrough</h3>
+<p>
+  Live, developer present, in manifest order: requirements, ERD with the consequences note read
+  aloud, breakdown, flow pairs, userflows and sitemap, then per-feature specs. Model before screens,
+  same logic as Gate 2.
+</p>
+<p>
+  Two steps are easy to skip and worth protecting. <strong>Read the glossary's rule-bearing terms
+  aloud with their definitions</strong>: the dev team will name variables and tables after these
+  words, and those ten minutes are where the ubiquitous language either transfers or does not.
+  <strong>Walk one feature end to end at full depth</strong> before surveying the rest: it calibrates
+  how much answer the artifacts carry, which is what stops the team asking a person instead of
+  reading.
+</p>
+<p>
+  Then land the routing rule explicitly: build-time questions about rules go through the reconciler
+  path, not a designer's memory; questions about visuals go to the style guide and skills-md first.
+  Show them the rework log so they see the mechanism working.
+</p>
+<div class="box">
+  <span class="lbl">The handoff's own quality score</span>
+  <p>Split the question list into <strong>artifact-answered</strong> and
+  <strong>memory-answered</strong>. Every memory-answered question is a spec gap to patch that week,
+  not someday. A walkthrough that went well because the designer answered everything live is a
+  walkthrough whose answers leave when the designer rolls off.</p>
+</div>
+
+<h3>The md-spec loop</h3>
+<p>
+  With a developer, never solo. Gather the evidence first: this project's style guide and skills-md
+  deltas with their recorded reasons, the dev team's actual built conventions read from real code,
+  and the build-time question log. Then adjudicate every divergence with one of three outcomes:
+</p>
+<table class="tight">
+  <tr><th style="width:34%">Finding</th><th>Outcome</th></tr>
+  <tr><td>Diverged deliberately (reason recorded)</td><td>Adopt into the shared file, or keep project-local and say why</td></tr>
+  <tr><td>Diverged silently</td><td>Adopt or revert, but record either way; silent forks are the decay mechanism</td></tr>
+  <tr><td>Shared file asserts something nobody follows</td><td>Delete it. Aspirational rules rot trust in the whole file</td></tr>
+</table>
+<p class="small">
+  The adopt-versus-local test: would the rule hold on a different client with a different brand? Yes
+  means shared. Consider at least one deletion honestly at every review; a file that only grows
+  becomes a file nobody reads.
+</p>
+<h3>The three loop metrics</h3>
+<p>
+  Recorded per project and compared across projects. All three should fall as the shared files
+  mature. They are cheap (each is a count) and they are the difference between "we think the process
+  works" and evidence.
+</p>
+<table class="tight">
+  <tr><th style="width:44%">Metric</th><th>A rise means</th></tr>
+  <tr><td>Requirements changed after Gate 2 (post-G2 Type B count)</td><td>Discovery or reconciliation is converging too early</td></tr>
+  <tr><td>Build-time clarification requests</td><td>The breakdown and spec layer is under-specifying; find the cluster</td></tr>
+  <tr><td>Share of generated front end re-used rather than rewritten</td><td>The shared-specs files or the prompts are drifting from real conventions</td></tr>
+</table>

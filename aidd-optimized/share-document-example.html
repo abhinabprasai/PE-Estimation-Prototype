@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{Project} - review on {date}</title>
+<style>
+:root{
+  --ink:#14171a; --ink-2:#454c54; --ink-3:#6b747d;
+  --line:#e3e6ea; --line-2:#c9cfd6;
+  --bg:#ffffff; --bg-2:#f6f8fa; --accent:#1f5fa8; --accent-bg:#eef4fb;
+  --warn-bg:#fff8e6; --warn-line:#e8c96a;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --ink:#e8ebee; --ink-2:#b3bac2; --ink-3:#8b939c;
+    --line:#2b3138; --line-2:#3d444d;
+    --bg:#15181c; --bg-2:#1c2026; --accent:#7fb3f0; --accent-bg:#1a2430;
+    --warn-bg:#2a2312; --warn-line:#6b5a24;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-variant-numeric:tabular-nums;
+}
+.wrap{max-width:46rem;margin:0 auto;padding:3.5rem 1.5rem 6rem}
+h1{font-size:1.9rem;line-height:1.25;margin:0 0 .4rem;letter-spacing:-.02em;font-weight:650}
+h2{font-size:1.25rem;line-height:1.3;margin:2.75rem 0 .75rem;font-weight:620;
+   padding-top:1.25rem;border-top:1px solid var(--line)}
+h2:first-of-type{border-top:0;padding-top:0}
+h3{font-size:1.02rem;margin:1.75rem 0 .5rem;font-weight:620;color:var(--ink-2)}
+p{margin:0 0 1rem}
+a{color:var(--accent)}
+ul,ol{margin:0 0 1rem;padding-left:1.35rem}
+li{margin:.3rem 0}
+strong{font-weight:620}
+code{
+  font:0.86em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--bg-2);border:1px solid var(--line);border-radius:4px;padding:.1em .35em;
+}
+blockquote{
+  margin:0 0 1.75rem;padding:1.1rem 1.25rem;background:var(--accent-bg);
+  border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;
+}
+blockquote p{margin:0 0 .6rem}
+blockquote p:last-child{margin:0}
+table{border-collapse:collapse;width:100%;margin:0 0 1.5rem;font-size:.94rem}
+th,td{text-align:left;vertical-align:top;padding:.6rem .7rem;border-bottom:1px solid var(--line)}
+th{
+  font-size:.74rem;font-weight:640;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);border-bottom:1px solid var(--line-2);background:var(--bg-2);
+}
+tbody tr:last-child td{border-bottom:1px solid var(--line-2)}
+td em{color:var(--ink-3);font-style:italic}
+hr{border:0;border-top:1px solid var(--line);margin:2.5rem 0}
+.meta{color:var(--ink-3);font-size:.86rem;margin:0 0 2.5rem}
+.foot{margin-top:4rem;padding-top:1.25rem;border-top:1px solid var(--line);
+      color:var(--ink-3);font-size:.82rem}
+.tag{display:inline-block;padding:.12em .5em;border:1px solid var(--line-2);
+     border-radius:99px;font-size:.78rem;color:var(--ink-2);background:var(--bg-2)}
+@media print{
+  body{background:#fff;color:#000}
+  .wrap{max-width:none;padding:0}
+  h2{break-after:avoid} table{break-inside:auto} tr{break-inside:avoid}
+  blockquote{background:#f6f8fa;border-left:3px solid #666}
+  a{color:#000;text-decoration:underline}
+}
+@media (max-width:34rem){
+  .wrap{padding:2rem 1rem 4rem}
+  h1{font-size:1.5rem} table{font-size:.88rem} th,td{padding:.5rem .45rem}
+}
+</style>
+</head><body><main class="wrap">
+<h1>{Project} - review on {date}</h1>
+<blockquote><p><strong>What this is.</strong> A short summary of where the design has got to and what we need you to decide today. You do not need to have read anything else.</p><p><strong>How long it takes.</strong> {90 minutes}. The first half is us showing you what we understood; the second half is you telling us where we got it wrong.</p><p><strong>The most useful thing you can do.</strong> Correct us. This session is worth what it costs only if you find things that are wrong. Nodding is expensive.</p></blockquote>
+<hr>
+<h2>What we need from you today</h2>
+<p>The whole point of the session, in one short list. Name the person against each one.</p>
+<table><thead><tr><th>#</th><th>We need</th><th>From</th><th>Why it matters</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>Confirmation, in writing, that an invoice over 50,000 needs a second approver</em></td><td><em>Priya</em></td><td><em>Six screens change depending on the answer, and we cannot start them without it</em></td></tr><tr><td><em>2</em></td><td><em>A decision on whether branch staff can see the margin column</em></td><td><em>Priya and Dan</em></td><td><em>It changes what four different roles see on the same screen</em></td></tr></tbody></table>
+<hr>
+<h2>What we have understood</h2>
+<p>Plain language. This is the part you are correcting.</p>
+<h3>How the work happens today</h3>
+<p><em>Two or three short paragraphs, or a simple numbered list. No diagrams unless a diagram is genuinely clearer than a sentence.</em></p>
+<h3>What we think is going wrong</h3>
+<table><thead><tr><th>#</th><th>The problem</th><th>Who told us</th><th>How sure we are</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>Clerks re-key supplier details that already exist in the system</em></td><td><em>Sam, in the 4 March call</em></td><td><em>One person told us; nobody has confirmed it</em></td></tr></tbody></table>
+<h3>What we are proposing</h3>
+<p><em>Two or three paragraphs. What changes for the people doing the work, not what we will build.</em></p>
+<hr>
+<h2>What we are assuming</h2>
+<p>Everything below is a guess we have written down. If any of it is wrong, tell us now: they are much cheaper to fix today than after the screens are drawn.</p>
+<table><thead><tr><th>#</th><th>We are assuming</th><th>If it is wrong, this changes</th><th>Who can settle it</th><th>By when</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>Nobody uses this on a phone</em></td><td><em>Every screen layout, and the size of every button</em></td><td><em>Priya</em></td><td><em>20 March</em></td></tr></tbody></table>
+<hr>
+<h2>What we still do not know</h2>
+<p>Open questions we could not answer, and who we think can.</p>
+<table><thead><tr><th>#</th><th>Question</th><th>Who can answer</th><th>Since</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>what happens when the second approver is on leave?</em></td><td><em>Priya</em></td><td><em>4 March</em></td></tr></tbody></table>
+<hr>
+<h2>Where things disagree</h2>
+<p>Two sources told us different things. We have not picked a winner; that is a decision for this room.</p>
+<table><thead><tr><th>#</th><th>One source says</th><th>The other says</th><th>Who owns the decision</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>Reversals happen four times a month (Sam)</em></td><td><em>"Reversals are rare, maybe twice a year" (your process document, section 3.2)</em></td><td><em>Priya</em></td></tr></tbody></table>
+<hr>
+<h2>What happens after today</h2>
+<table><thead><tr><th>If</th><th>Then</th></tr></thead><tbody><tr><td><em>We get the confirmations above</em></td><td><em>We start the approval screens on Monday and you see them on 2 April</em></td></tr><tr><td><em>We do not</em></td><td><em>Those six screens wait, and we bring forward the supplier record work instead</em></td></tr></tbody></table>
+<hr>
+<h2>Anything not yet decided that we are proceeding on anyway</h2>
+<p>We do not stop work when something is unresolved, but we never hide it. This is that list.</p>
+<table><thead><tr><th>#</th><th>What we are proceeding on</th><th>Risk if we are wrong</th></tr></thead><tbody><tr><td><em>1</em></td><td><em>that nobody approves invoices on a phone</em></td><td><em>every approval screen is laid out for a desktop</em></td></tr></tbody></table>
+<hr>
+<p><em>Prepared by {name}, {date}. If anything here reads as jargon, that is our defect - tell us and we will fix the document.</em></p>
+<p class="foot">Generated 01 September 2026 from <code>demo.md</code>.
+If anything here reads as jargon, that is a defect in the document - tell us and we will fix it.</p>
+</main></body></html>

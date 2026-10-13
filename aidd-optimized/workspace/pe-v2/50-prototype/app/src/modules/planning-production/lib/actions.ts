@@ -11,6 +11,7 @@ import { gatePassed, type AtRiskRecord, type AtRiskTrigger, type CancelDispositi
 import { canRelease, closeChecks, releaseGates, shortages } from "./gates"
 import { addCalDays, addWorkdays, allWorkCenters, applySchedule, escalateLate, freezeDaysOf, freezeEnd, laborRateOf, ohRateOf, opKey, projected, round2, schedule, SHIP_PREP_DAYS, stdTotal, TRANSIT_BUFFER_DAYS, variances, woWip } from "./plan"
 import { runCtp } from "./ctp"
+import { captureBlock, needsNameplate, nameplateRemaining } from "./capture"
 
 type S = PlanningProductionState
 const A = (ctx: MutateCtx, text: string, by?: string) => ({ at: ctx.today as ISODate, by: by ?? ctx.role, text })
@@ -72,15 +73,15 @@ const isDoneOp = (o: { status: string }) => o.status === "Completed" || o.status
 export const orderTypeFor = (item: string, pegged: boolean): PPWorkOrder["orderType"] =>
   item === "FIN-TBD-20MVA" ? "ETO" : item === "FIN-TBD-7500MTO" ? "MTO" : item.startsWith("SEMI-") ? "Component" : pegged ? "MTO" : "MTS"
 
-export function runMrpNetChange(d: S, ctx: MutateCtx) {
-  return mrpRun(d, ctx, "Net change (on demand)")
+export function runMrpNetChange(d: S, ctx: MutateCtx, scope?: string) {
+  return mrpRun(d, ctx, "Net change (on demand)", scope)
 }
 /** Regenerative run on demand (the nightly run, started by hand): unfirmed proposals are re-planned
  *  from their need dates; firmed planned orders survive unchanged [DOC:p.72 §3.3] (asserted). */
-export function runMrpRegenerative(d: S, ctx: MutateCtx) {
-  return mrpRun(d, ctx, "Regenerative (nightly)")
+export function runMrpRegenerative(d: S, ctx: MutateCtx, scope?: string) {
+  return mrpRun(d, ctx, "Regenerative (nightly)", scope)
 }
-function mrpRun(d: S, ctx: MutateCtx, kind: S["mrpRuns"][number]["kind"]) {
+function mrpRun(d: S, ctx: MutateCtx, kind: S["mrpRuns"][number]["kind"], scope?: string) {
   const id = `MRP-TBD-${Math.max(1009, ...d.mrpRuns.map((r) => Number(r.id.slice(8)) || 0)) + 1}` as S["mrpRuns"][number]["id"]
   if (kind === "Regenerative (nightly)") {
     for (const p of d.plannedOrders.filter((p) => p.state === "Proposed" || p.state === "Firmed")) {
@@ -104,7 +105,7 @@ function mrpRun(d: S, ctx: MutateCtx, kind: S["mrpRuns"][number]["kind"]) {
     if (!missing && open) open.resolved = { action: "Cleared by run", by: "System", on: ctx.today as ISODate, note: `${id}: MBOM and routing now released` }
   }
   const openEx = d.exceptions.filter((x) => !x.resolved).length
-  d.mrpRuns.unshift({ id, kind, scope: kind === "Net change (on demand)" ? "Plant PL-TBD-01, changed items since last run" : "Plant PL-TBD-01, all items (started on demand)", startedAt: `${ctx.today}T${new Date().toISOString().slice(11, 19)}`, minutes: kind === "Net change (on demand)" ? 2 : 14, snapshotId: `INS-SNAP-${ctx.today.replaceAll("-", "")}-${pad(d.mrpRuns.length + 1, 2)}`, plannedOrders: d.plannedOrders.filter((p) => p.state === "Proposed" || p.state === "Firmed").length, exceptions: openEx, by: userName(ctx.userId), published: true })
+  d.mrpRuns.unshift({ id, kind, scope: scope ?? (kind === "Net change (on demand)" ? "Plant PL-TBD-01, changed items since last run" : "Plant PL-TBD-01, all items (started on demand)"), startedAt: `${ctx.today}T${new Date().toISOString().slice(11, 19)}`, minutes: kind === "Net change (on demand)" ? 2 : 14, snapshotId: `INS-SNAP-${ctx.today.replaceAll("-", "")}-${pad(d.mrpRuns.length + 1, 2)}`, plannedOrders: d.plannedOrders.filter((p) => p.state === "Proposed" || p.state === "Firmed").length, exceptions: openEx, by: userName(ctx.userId), published: true })
   return id
 }
 
@@ -237,6 +238,14 @@ export function resolveException(d: S, ctx: MutateCtx, exId: string, note = "") 
       ctx.emit("planning.sourcingRequested", { itemId: x.itemId, exceptionId: x.id })
       done("Start RFQ / AVL qualification (buyer)")
       return x
+    case "EX-10": {
+      const lane = d.lanes.find((l) => l.id === /LN-TBD-\d+/.exec(x.detail)?.[0])
+      if (lane) {
+        lane.active = true
+        done("Reactivate lane", `${lane.id} active again; the next network run proposes the transfer`)
+      } else done("Change sourcing (planner)", note || "Sourcing sequence for the item set to another plant or to purchase")
+      return x
+    }
   }
 }
 
@@ -314,7 +323,7 @@ export function moveOp(d: S, ctx: MutateCtx, woId: string, no: number, notBefore
   const key = opKey(woId, no)
   d.sandbox.moves = [...d.sandbox.moves.filter((m) => m.key !== key), { key, notBefore, reason: reason || undefined, by: userName(ctx.userId) }]
 }
-export function sandboxPlan(d: Pick<S, "productionOrders" | "workCenters" | "wc" | "sandbox">) {
+export function sandboxPlan(d: Pick<S, "productionOrders" | "workCenters" | "wc" | "sandbox" | "maintWindows">) {
   const nb: Record<string, ISODate> = {}
   for (const m of d.sandbox?.moves ?? []) nb[m.key] = m.notBefore
   return schedule(d, nb)
@@ -566,12 +575,12 @@ export function routingTransition(d: S, ctx: MutateCtx, id: string, rev: string,
 // ============================================================================ Production orders (PP-WO-001/2)
 const SERIAL_CODE: Record<string, string> = { "FIN-TBD-20MVA": "20M", "FIN-TBD-7500MTO": "7M5", "FIN-TBD-5000SS": "5M", "FIN-TBD-2500PM": "25P", "FIN-TBD-1000PM": "10P", "FIN-TBD-0167PL": "PL", "SEMI-TBD-CORE20": "C20", "SEMI-TBD-TANK20": "T20" }
 
-export function setReleaseShort(d: S, ctx: MutateCtx, woId: string, on: boolean) {
+export function setReleaseShort(d: S, ctx: MutateCtx, woId: string, on: boolean, reason = "") {
   if (ctx.role !== "Planner") throw new ProtoError("Release Short is the Planner's override flag [DOC:p.74 §5.2 check 2]. Switch Acting as to Planner.")
   const w = wo(d, woId)
   if (w.status !== "Created") throw new ProtoError(`${woId} is ${w.status}: the flag applies before release.`)
   w.releaseShortFlag = on ? { by: userName(ctx.userId), on: ctx.today as ISODate } : undefined
-  w.activity.push(A(ctx, on ? "Release Short flag set: order may release with shortages (Shortage badge; short items go to the Expedite Board)" : "Release Short flag removed"))
+  w.activity.push(A(ctx, on ? `Release Short flag set: order may release with shortages (Shortage badge; short items go to the Expedite Board)${reason.trim() ? `. Reason: ${reason.trim()}` : ""}` : "Release Short flag removed"))
 }
 
 /** Release with the six hard checks; on release reservations firm, serials generate, dispatch
@@ -1040,6 +1049,10 @@ export function completeOp(d: S, ctx: MutateCtx, woId: string, no: number, x: Co
   if (o.status !== "In Progress") throw new ProtoError(`Op ${no} is ${o.status}: start it first (SP-10).`)
   if (w.status === "On Hold") throw new ProtoError(`${w.id} is On Hold.`)
   if (o.qcGate && !gatePassed(o.inspection?.result)) throw new ProtoError(o.inspection ? `Waiting for the result of ${o.inspection.id} (${o.qcGate}).` : `QC checkpoint: request the inspection first (${o.qcGate}).`)
+  const npLeft = needsNameplate(o) ? nameplateRemaining(w, o) : []
+  if (npLeft.length) throw new ProtoError(`Nameplate verification (SP-13) pending for ${npLeft.length} of ${w.serials.length} serial(s): scan each nameplate before completing op ${no}.`, "E-BC-06")
+  const capBlock = captureBlock(d, o)
+  if (capBlock) throw new ProtoError(capBlock, "CAPTURE")
   const started = startedQty(w, no)
   for (const [k, v] of Object.entries({ good: x.good, scrap: x.scrap, rework: x.rework, hours: x.hours })) if (!Number.isFinite(v) || v < 0) throw new ProtoError(`${k} must be zero or more.`, k)
   if (x.good + x.scrap + x.rework !== started) throw new ProtoError(`Good ${x.good} + scrap ${x.scrap} + rework ${x.rework} must equal the started quantity ${started}.`, "good")
@@ -1113,8 +1126,8 @@ export function scrapValue(d: Pick<S, "journal">, w: PPWorkOrder, started: numbe
  *  confirmation is reversed with the opposite WIP effect, a reversal confirmation is written and the
  *  operation returns to In Progress. Supervisor action ("supervisors override" [DOC:p.262]). Only the
  *  latest confirmation of an order, before the next operation starts and before FG receipt. */
-export function reverseConfirmation(d: S, ctx: MutateCtx, cnfId: string, reason: string) {
-  if (ctx.role !== "Production supervisor") throw new ProtoError("A confirmation correction is a supervisor action. Switch Acting as to Production supervisor.")
+export function reverseConfirmation(d: S, ctx: MutateCtx, cnfId: string, reason: string, signoff?: { userId: string }) {
+  if (!signoff) throw new ProtoError("A confirmation reversal needs a second sign-off: request it (supervisor), then a second person signs.")
   if (!reason.trim()) throw new ProtoError("A correction needs a reason.", "reason")
   const c = d.confirmations.find((x) => x.id === cnfId)
   if (!c) throw new ProtoError(`${cnfId} not found.`)
@@ -1357,6 +1370,13 @@ export function onInspectionClosed(d: S, ctx: MutateCtx, lotId: string, subject:
     const r = d.reworkOrders.find((x) => x.id === subject.id)
     if (r && r.reinspectionRequestedOn && !r.reinspectionResult) recordReinspection(d, ctx, r.id, passed)
   }
+}
+/** quality.reworkRequested: a failed final test sent to Rework drafts the RWO here (origin = the NCR, kind "Test failure"). */
+export function onReworkRequested(d: S, ctx: MutateCtx, p: { ncrId: string; woId: string; serial: string }) {
+  if (d.reworkOrders.some((r) => r.origin.type === "ncr" && r.origin.id === p.ncrId)) return
+  const w = d.productionOrders.find((x) => x.id === p.woId)
+  if (!w) return
+  createRwo(d, ctx, { originKind: "Test failure", origin: { type: "ncr", id: p.ncrId }, parentWoId: w.id, itemId: w.itemId, serial: p.serial, qty: 1, title: `Rework after failed final test, ${p.serial} (${p.ncrId})` })
 }
 /** Containment puts open WOs consuming the recalled stock On Hold. */
 export function onRecallStage(d: S, ctx: MutateCtx, recallId: string, stage: RecallStage) {

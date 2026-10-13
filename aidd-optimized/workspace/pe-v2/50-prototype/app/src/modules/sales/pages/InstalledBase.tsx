@@ -4,6 +4,7 @@
 // date, extend warranty with approval. Created automatically at PGI (sales.pgiPosted); RMA screens
 // read it. Postings and scans: none.
 
+import { UnknownSiteWorklist, isUnknownSite } from "./fx/UnknownSites"
 import { useState } from "react"
 import { Link, useParams, useSearchParams } from "react-router"
 import { toast } from "sonner"
@@ -42,6 +43,7 @@ export function InstalledBaseList() {
   const all = sim === "empty" ? [] : db.ib
   const rows = st ? all.filter((i) => i.status === st) : all
   const header = { title: "Installed base", screenId: "IB-001", description: "Every shipped transformer, where it stands and what its warranty covers today." }
+  if (sp.get("view") === "unknown-site") return <UnknownSiteWorklist />
   if (sim === "error")
     return (
       <div className="flex flex-col gap-4">
@@ -71,6 +73,7 @@ export function InstalledBaseList() {
       above={
         <div className="flex flex-wrap gap-2" aria-label="Installed base by status">
           <StatPill label="All" value={all.length} active={!st} onClick={() => setSp({})} />
+          <StatPill label="Unknown site" value={all.filter(isUnknownSite).length} tone={all.some(isUnknownSite) ? "attention" : undefined} onClick={() => setSp({ view: "unknown-site" })} />
           {STATUS.installedBase.statuses.map((s) => (
             <StatPill key={s} label={s} value={all.filter((i) => i.status === s).length} active={st === s} onClick={() => setSp({ status: s })} />
           ))}

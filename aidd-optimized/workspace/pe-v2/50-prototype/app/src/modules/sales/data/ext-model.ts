@@ -239,6 +239,8 @@ export interface RmaLine {
   /** Customer property: repair-and-return; non-valuated receipt, no #17 [DOC:p.24 §3.5]. */
   customerProperty: boolean
   unauthorized?: boolean
+  /** Decision on an Unauthorized Return line (feature list FX-RMA-DIALOGS). */
+  unauthorizedDecision?: { decision: string; by: string; on: string; reason: string }
   unverifiedSerial?: boolean
   condition?: Condition
   photo?: string
@@ -263,6 +265,8 @@ export interface SettleStep {
   doc?: DocRef
   done: boolean
   error?: string
+  /** The Controller released this credit step despite a credit hold (E-RMA-07; feature list FX-RMA-CREDITMEMO). */
+  released?: boolean
 }
 export interface Rma {
   id: string

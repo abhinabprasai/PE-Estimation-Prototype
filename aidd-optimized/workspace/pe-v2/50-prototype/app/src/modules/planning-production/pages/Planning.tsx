@@ -28,6 +28,7 @@ import { leadTimeBand } from "../lib/ctp"
 import type { AtRiskRecord, PromiseCandidate } from "../data/types"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useRole } from "@/store"
+import { Gantt, ganttOps, workdayRange } from "../widgets/Gantt"
 
 const WEEKS = 8
 
@@ -40,6 +41,7 @@ export function ScheduleBoard() {
   const [active, setActive] = useState<string | null>(null)
   const [publish, setPublish] = useState(false)
   const [move, setMove] = useState<{ key: string; date: string; reason: string } | null>(null)
+  const [horizon, setHorizon] = useState("20")
   const plan = s.sandbox ? act.sandboxPlan(s) : schedule(s, {})
   const base = schedule(s, {})
   const wcs = allWorkCenters(s).filter((w) => w.status !== "Inactive" || Object.keys(plan.load[w.id] ?? {}).length)
@@ -126,6 +128,34 @@ export function ScheduleBoard() {
           ),
         } : undefined}
       />
+      <section aria-label="Gantt by work center" className="mt-8 flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold">Gantt by work center</h2>
+          <Select value={horizon} onValueChange={setHorizon}>
+            <SelectTrigger size="sm" className="h-8 w-40" aria-label="Gantt horizon"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="10">2 weeks</SelectItem>
+              <SelectItem value="20">4 weeks</SelectItem>
+              <SelectItem value="30">6 weeks</SelectItem>
+            </SelectContent>
+          </Select>
+          <Chip kind="design" note="Day columns are working days (Mon-Fri). A bar spans the shifts of its work center; the hours per shift are in the tooltip.">Working-day axis</Chip>
+          <span className="text-xs text-muted-foreground">{s.sandbox ? "Click a bar to move it in the sandbox." : "Click a bar to open its work center. Open the sandbox to move operations."}</span>
+        </div>
+        {st.loading || st.error ? (
+          <div className="h-40 rounded-lg border" aria-busy="true" />
+        ) : (
+          <Gantt
+            wcs={wcs}
+            ops={ganttOps(s.productionOrders, plan, new Set((s.sandbox?.moves ?? []).map((m) => m.key)), (w, f) => !!w.pegs.length && !!w.promiseDate && f > addWorkdays(w.promiseDate, -TRANSIT_BUFFER_DAYS))}
+            days={workdayRange(TODAY, Number(horizon))}
+            freezeOf={feOf}
+            windows={s.maintWindows}
+            selected={move?.key ?? null}
+            onBar={(o) => (s.sandbox && s.productionOrders.find((w) => w.id === o.woId)?.operations.find((x) => x.no === o.no)?.status === "Not Started" ? setMove({ key: o.key, date: o.start, reason: "" }) : setActive(o.wcId))}
+          />
+        )}
+      </section>
       <RulesPanel className="mt-6" rules={[
         ["E §2", "Finite buckets; operations consume capacity; maintenance blocks capacity; a reschedule sets an earliest start the engine honours", "DOC:p.192 Book III E §2"],
         ["E §3", "Freeze horizon: inside it the schedule does not auto-move; publish creates a snapshot ID that promises reference", "DOC:p.193 Book III E §3"],

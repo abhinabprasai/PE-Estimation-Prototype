@@ -4,6 +4,10 @@
 // transport fields. Actions: submit for approval (WF-INBOX), print return instructions with barcode,
 // email customer, cancel before receipt. Postings and scans: none until receipt (RMA-RECEIPT).
 
+import { RmaApprovalDialog, UnauthorizedLineDialog } from "./fx/RmaDialogs"
+import { CreditMemoPanel } from "./fx/CreditMemo"
+import { RepairQuotePanel } from "./fx/BillableRepair"
+import { useFxState } from "./fx/kit"
 import { useMemo, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import { toast } from "sonner"
@@ -531,6 +535,8 @@ export function RmaDetail() {
   const loading = useFirstVisitLoading(`rma-${id}`)
   const [err, setErr] = useState<string | null>(null)
   const [dlg, setDlg] = useState<"cancel" | "short" | "reopen" | "delete" | "recall" | null>(null)
+  const [apprDlg, setApprDlg] = useState(false)
+  const [unDlg, setUnDlg] = useState(false)
   const r = db.rmas.find((x) => x.id === id)
   const ib = useMemo(() => (r?.ibId ? db.ib.find((i) => i.id === r.ibId) : r?.lines.map((l) => db.ib.find((i) => i.serial === l.serial)).find(Boolean)), [db, r])
   if (!r) return <ErrorAlert title="RMA not found">No RMA {id} in this prototype. Open the RMA register.</ErrorAlert>
@@ -591,7 +597,10 @@ export function RmaDetail() {
           actions: (
             <>
               {r.status === "Draft" && <Button variant="ghost" onClick={() => setDlg("delete")}>Delete draft</Button>}
+              {r.status === "Pending Approval" && <Button variant="outline" onClick={() => setApprDlg(true)}>Approve or reject</Button>}
               {r.status === "Pending Approval" && <Button variant="outline" onClick={() => setDlg("recall")}>Recall to Draft</Button>}
+              {r.lines.some((l) => l.unauthorized) && <Button variant="outline" onClick={() => setUnDlg(true)}>Unauthorized-line decision</Button>}
+              <Button variant="ghost" asChild><Link to="/sales/dialogs/rma-actions">All RMA actions</Link></Button>
               {r.status === "Authorized" && (
                 <>
                   <Button variant="outline" onClick={() => run(rmaNote(r.id, `Return instructions emailed to the customer's primary contact with barcode ${r.id}`), "Customer emailed")}>Email customer</Button>
@@ -713,6 +722,8 @@ export function RmaDetail() {
         defaultTab="overview"
         aside={<RulesPanel rules={RMA_RULES} />}
       />
+      <RmaApprovalDialog rma={r} open={apprDlg} onOpenChange={setApprDlg} />
+      <UnauthorizedLineDialog rma={r} open={unDlg} onOpenChange={setUnDlg} />
       <DialogShell
         open={dlg === "cancel"}
         onOpenChange={(o) => !o && setDlg(null)}
@@ -875,6 +886,7 @@ function RmaInspection({ r }: { r: Rma }) {
 }
 
 function RmaFinancials({ r, role }: { r: Rma; role: string }) {
+  const fxst = useFxState()
   const [amt, setAmt] = useState(r.freightClaim?.amount ?? 0)
   const [err, setErr] = useState<string | null>(null)
   const gross = rmaGross(r)
@@ -912,6 +924,8 @@ function RmaFinancials({ r, role }: { r: Rma; role: string }) {
           <span className="text-xs text-muted-foreground">Recovery posts DR 1010 Bank / CR 6410 Freight Out [DOC:p.27 §3.9].</span>
         </div>
       )}
+      {r.cls !== "RC4" && !["Draft", "Pending Approval", "Rejected", "Cancelled"].includes(r.status) && <Section title="Credit memo request and Controller release (E-RMA-07)"><CreditMemoPanel rmaId={r.id} st={fxst} /></Section>}
+      {(r.cls === "RC4" || r.lines.some((l) => l.disposition === "Repair — Billable")) && <Section title="Billable repair quote and customer approval"><RepairQuotePanel rmaId={r.id} st={fxst} /></Section>}
       <PostingPreview title="Running GL entries" lines={gl.length ? gl : [{ template: 17, amount: null, notPostedReason: "Nothing posted yet: #17 posts at receipt" }]} />
       {r.settlement.length > 0 && (
         <Section title="Settlement steps">

@@ -97,7 +97,7 @@ export function TraceDashboard() {
         open={!!resolving}
         onOpenChange={(o) => !o && setResolving(null)}
         title={`Resolve ${resolving?.id}`}
-        consequence={`Closes the exception on ${resolving?.object}. The event store itself is not changed.`}
+        consequence={resolving?.kind === "Orphan event" ? `Records the missing T02 receipt for ${resolving?.object} as a late capture (append-only, with your reason) and closes the exception.` : `Closes the exception on ${resolving?.object}. The event store itself is not changed.`}
         confirmLabel="Resolve"
         requireReason
         reasonLabel="Resolution (required)"
@@ -138,12 +138,19 @@ function Worklist({ items, onResolve }: { items: TraceException[]; onResolve: (x
             </TableCell>
             <TableCell>
               {!x.resolvedOn &&
-                (x.kind === "Unresolved correction" || x.kind === "Orphan event" ? (
+                (x.kind === "Unresolved correction" ? (
                   <Button size="sm" variant="outline" asChild>
                     <Link to={`/traceability/explorer?q=${x.object}`}>Correction pair</Link>
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={() => onResolve(x)}>Resolve</Button>
+                  <span className="flex flex-wrap gap-1">
+                    {x.kind === "Orphan event" && (
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to={`/traceability/explorer?q=${x.object}`}>Correction pair</Link>
+                      </Button>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => onResolve(x)}>{x.kind === "Orphan event" ? "Record missing receipt" : "Resolve"}</Button>
+                  </span>
                 ))}
             </TableCell>
           </TableRow>

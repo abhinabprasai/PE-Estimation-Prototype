@@ -1,4 +1,4 @@
-// OM-DLV-001 Delivery cockpit. Split and merge rule IDs are not stated: rules show by name with RULE-TBD.
+// OM-DLV-001 Delivery cockpit. Split and merge rule ids are not stated in the PRD: rules show by name with a design id (DLV-SPLIT-M1 ... DLV-GROUP-0, Reading SR-26).
 // "16 stages" of Flow A: not numbered anywhere; readiness flags are "per Flow A stage 7" only.
 import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router"
@@ -13,10 +13,21 @@ import { Chip, DensityToggle, ErrorAlert, KV, LifecycleStrip, ReadinessFlags, Ru
 import { HORIZON_DAYS, failingFlags, postingPreview, reversalBlock, useStore } from "../data/store"
 import { LIFECYCLE, addDays, listDate, money, type Delivery } from "../data/model"
 import { cn } from "@/lib/utils"
+import { useSlice } from "@/store"
+import { acceptTender } from "../fx/actions"
+import { explainRule, ruleIdFor, DELIVERY_RULES } from "../fx/model"
+import { shipIdOf } from "../fx/derive"
+import { RuleChip } from "./fx/DeliveryRun"
+import { StateBar, useFxState } from "./fx/kit"
+import { ReassignDialog } from "./fx/Shipments"
+import { PgiReverseDialog } from "./fx/PgiDialogs"
+import { Badge } from "@/components/ui/badge"
 
 export function DeliveryCockpit() {
   const { db, actions } = useStore()
-  const loading = useFirstVisitLoading("deliveries")
+  const first = useFirstVisitLoading("deliveries")
+  const st = useFxState()
+  const loading = first || st.loading
   const [density, setDensity] = useState<Density>("compact")
   const [sp, setSp] = useSearchParams()
   const [err, setErr] = useState<string | null>(null)
@@ -29,9 +40,15 @@ export function DeliveryCockpit() {
         <span className="text-sm text-muted-foreground">
           {db.deliveries.length} deliveries · horizon {HORIZON_DAYS} days (design value; not stated in the specification)
         </span>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <DensityToggle value={density} onChange={setDensity} />
+          <Button variant="outline" asChild><Link to="/sales/deliveries/create-run">Creation run wizard</Link></Button>
+          <Button variant="outline" asChild><Link to="/sales/shipments">Shipments</Link></Button>
+          <Button variant="outline" asChild><Link to="/sales/load-ship">Load and ship</Link></Button>
+          <Button variant="outline" asChild><Link to="/sales/dialogs/pgi">PGI dialogs</Link></Button>
           <Button
+            disabled={!st.writable}
+            title={st.why || undefined}
             onClick={() => {
               const r = actions.createDeliveries()
               if (!r.ok) setErr(r.error)
@@ -46,6 +63,7 @@ export function DeliveryCockpit() {
           </Button>
         </div>
       </div>
+      <div className="mb-4"><StateBar st={st} /></div>
       {err && (
         <div className="mb-4">
           <ErrorAlert title="No delivery created" onDismiss={() => setErr(null)}>
@@ -54,18 +72,18 @@ export function DeliveryCockpit() {
         </div>
       )}
       <div className="flex gap-2 overflow-x-auto pb-4">
-        {LIFECYCLE.delivery.map((st) => {
-          const items = db.deliveries.filter((d) => d.status === st)
+        {LIFECYCLE.delivery.map((col) => {
+          const items = st.empty ? [] : db.deliveries.filter((d) => d.status === col)
           return (
-            <section key={st} aria-label={`${st} column`} className="flex w-56 shrink-0 flex-col gap-2 rounded-lg bg-muted/50 p-2">
+            <section key={col} aria-label={`${col} column`} className="flex w-56 shrink-0 flex-col gap-2 rounded-lg bg-muted/50 p-2">
               <h2 className="flex items-center justify-between text-sm font-semibold">
-                <StatusBadge entity="delivery" status={st} />
+                <StatusBadge entity="delivery" status={col} />
                 <span className="tabular">{loading ? "…" : items.length}</span>
               </h2>
               {loading
                 ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
                 : items.length === 0
-                  ? <p className="text-xs text-muted-foreground">No deliveries at {st}.</p>
+                  ? <p className="text-xs text-muted-foreground">No deliveries at {col}.</p>
                   : items.map((d) => {
                       const c = db.customers.find((x) => x.id === d.customerId)!
                       return (
@@ -81,6 +99,7 @@ export function DeliveryCockpit() {
                           <span className="text-muted-foreground">
                             {d.soId} · Grouped by: {d.rule}
                           </span>
+                          <span className="flex flex-wrap items-center gap-1"><RuleChip id={ruleIdFor(d.rule, d.ruleId)} />{db.fx.ship[d.id]?.tender === "Rejected" && <Badge variant="destructive">Carrier rejected</Badge>}</span>
                           <span className="text-muted-foreground">Not passed: {failingFlags(d).join(", ") || "none"}</span>
                         </button>
                       )
@@ -103,6 +122,7 @@ export function DeliveryCockpit() {
           ["R-16", "PGI reversal: Shipping Manager only, before invoice, same fiscal period, reason mandatory.", "DOC:p.208 §2.5"],
           ["R-18", "SP-18 load scan accepts only HUs on this shipment (E-BC-08).", "DOC:p.96 SP-18"],
           ["R-19", "Carrier and tracking are manual in Phase 1 (DEC-04); expected POD date = ship date + planned transit days.", "DOC:p.205 DEC-04; p.207 §2.4"],
+          ["E-DLV-01", `Every split or merge decision stores the rule that fired and the message names it. Rule ids (design values, Reading SR-26): ${DELIVERY_RULES.map((r) => r.id).join(", ")}.`, "DOC:p.207 §2.3"],
         ]}
       />
     </div>
@@ -126,6 +146,9 @@ function DeliveryPanel({ d }: { d: Delivery }) {
   const [revOpen, setRevOpen] = useState(false)
   const [reason, setReason] = useState("")
   const [stub, setStub] = useState<string | null>(null)
+  const [reassign, setReassign] = useState(false)
+  const [revDlg, setRevDlg] = useState(false)
+  const ship = useSlice("sales").fx.ship[d.id]
   const [lp, setLp] = useState({
     equipment: d.equipment ?? "",
     door: d.door ?? "",
@@ -183,8 +206,9 @@ function DeliveryPanel({ d }: { d: Delivery }) {
       <dl className="grid grid-cols-2 gap-3">
         <KV k="Ship-to">{d.shipTo}</KV>
         <KV k="Incoterms">{d.incoterms}</KV>
-        <KV k="Grouped by">
-          {d.rule} · {d.ruleId}
+        <KV k="Grouped by (E-DLV-01)">
+          {d.rule} · <RuleChip id={ruleIdFor(d.rule, d.ruleId)} />
+          <span className="block text-xs text-muted-foreground">{explainRule(d.rule, d.ruleId).text}</span>
         </KV>
         <KV k="Warehouse">{d.warehouse}</KV>
         <KV k="Readiness flags (per Flow A stage 7)">
@@ -249,6 +273,21 @@ function DeliveryPanel({ d }: { d: Delivery }) {
         <Chip kind="k" id="K-11" note="No EDI dispatch advice; carrier manual per DEC-04" />
       </section>
 
+      {ship && d.carrier && preLoad && (
+        <section className={cn("rounded-lg border p-3 text-sm", ship.tender === "Rejected" && "border-destructive")} aria-label="Carrier tender">
+          <h3 className="mb-1 font-semibold">Carrier tender: {ship.tender}</h3>
+          {ship.tender === "Rejected" ? (
+            <p role="alert" className="text-destructive">{d.carrier} rejected the tender: {ship.rejectedReason}. Loading is refused until a carrier is reassigned.</p>
+          ) : (
+            <p className="text-muted-foreground">{d.carrier} · {ship.carrierHistory.at(-1)?.text ?? "No tender recorded"}</p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button size="sm" variant={ship.tender === "Rejected" ? "default" : "outline"} onClick={() => setReassign(true)}>Reassign carrier</Button>
+            {ship.tender !== "Accepted" && ship.tender !== "Rejected" && <Button size="sm" variant="outline" onClick={() => run(acceptTender(d.id), `${d.carrier} accepted`)}>Carrier accepted</Button>}
+            <Button size="sm" variant="ghost" asChild><Link to={`/sales/shipments/${shipIdOf(d.id)}`}>Open shipment</Link></Button>
+          </div>
+        </section>
+      )}
       {preLoad && (
         <section className="rounded-lg border p-3">
           <h3 className="mb-2 text-sm font-semibold">Load plan (carrier typed by hand, DEC-04)</h3>
@@ -342,7 +381,7 @@ function DeliveryPanel({ d }: { d: Delivery }) {
 
       {["Quality Cleared", "Loaded"].includes(d.status) && (
         <section className="rounded-lg border p-3">
-          <h3 className="mb-2 text-sm font-semibold">SP-18 load scan at the truck</h3>
+          <h3 className="mb-2 flex flex-wrap items-center gap-2 text-sm font-semibold">SP-18 load scan at the truck <Button size="sm" variant="outline" asChild><Link to="/sales/load-ship">Open load and ship (TC77)</Link></Button></h3>
           {scanFail && (
             <div className="mb-2">
               <ErrorAlert title="Scan failed" onDismiss={() => setScanFail(null)}>
@@ -411,9 +450,12 @@ function DeliveryPanel({ d }: { d: Delivery }) {
             (revBlock ? (
               <p className="mt-2 text-muted-foreground">{revBlock}</p>
             ) : (
-              <Button variant="outline" className="mt-2" onClick={() => setRevOpen(true)}>
-                Reverse PGI
-              </Button>
+              <span className="mt-2 flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setRevOpen(true)}>
+                  Reverse PGI
+                </Button>
+                <Button variant="ghost" onClick={() => setRevDlg(true)}>Reversal checks and consequence</Button>
+              </span>
             ))}
         </section>
       )}
@@ -490,6 +532,8 @@ function DeliveryPanel({ d }: { d: Delivery }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ReassignDialog d={d} open={reassign} onOpenChange={setReassign} />
+      <PgiReverseDialog d={d} open={revDlg} onOpenChange={setRevDlg} />
       <Dialog open={!!stub} onOpenChange={() => setStub(null)}>
         <DialogContent>
           <DialogHeader>

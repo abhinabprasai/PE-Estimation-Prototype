@@ -21,7 +21,7 @@ import { failedCloseCritical, hardClose, requestReopen, resolvePreClose, runInve
 import type { Period, PreCloseItem } from "../data/types"
 import { checkPostingDate, rPer01 } from "../lib/period"
 import { fmtDateTime, fmtMonth } from "../lib/time"
-import { act, Field, SimpleSelect, userName } from "../components/common"
+import { act, Field, SimpleSelect, StateText, userName } from "../components/common"
 
 export function PeriodControl() {
   const s = useSlice("admin")
@@ -58,7 +58,7 @@ export function PeriodControl() {
         chips: (
           <>
             <Chip kind="oq" id="OQ-22" note="Open / Soft Close / Hard Close / Year-End Closed read as the period list; inventory labels map onto the first three" />
-            <Chip kind="design" note="Route /configuration/periods is a design value; the PRD gives /inventory/configuration/fiscal-periods">Design route</Chip>
+            <Chip kind="design" note="Served at the PRD URL pattern /inventory/configuration/fiscal-periods [DOC:p.41 INV §9]; the shared registry still lists /configuration/periods, which redirects here (R-7)">PRD route</Chip>
           </>
         ),
       }}
@@ -117,6 +117,7 @@ export function PeriodControl() {
 
 function PeriodDetail({ p, role }: { p: Period; role: string }) {
   const s = useSlice("admin")
+  const [stepUp, setStepUp] = useState(false) // local until the shell publishes its step-up state (README request R-10)
   const [dialog, setDialog] = useState<null | "soft" | "hard" | "reopen" | "inv" | { resolve: PreCloseItem }>(null)
   const items = s.preClose.filter((i) => i.periodId === p.id)
   const open = unresolved(s, p.id)
@@ -251,7 +252,12 @@ function PeriodDetail({ p, role }: { p: Period; role: string }) {
       <DialogShell open={dialog === "soft"} onOpenChange={(o) => !o && setDialog(null)} title={`Soft close ${p.month}`} consequence={`${p.month} goes to Soft Close (inventory: Closing). Operational posting continues with the E-PER-02 warning; the next month opens automatically (R-PER-01). Finance and every module are told.`} confirmLabel="Soft close" onConfirm={() => act(softClose(p.id))} />
       <DialogShell open={dialog === "inv"} onOpenChange={(o) => !o && setDialog(null)} title={`Run inventory close for ${p.month}`} consequence={`Checks the pre-close list (must be zero), takes the valuation snapshot and posts the closing JE for ${p.month}. ACC 26.2 step 6b is then done.`} confirmLabel="Run inventory close" onConfirm={() => act(runInventoryClose(p.id))} />
       <DialogShell open={dialog === "hard"} onOpenChange={(o) => !o && setDialog(null)} title={`Hard close ${p.month}`} consequence={`${p.month} goes to Hard Close (inventory: Closed). Every posting dated in it is blocked for everyone (E-PER-01); corrections post in the open period with a Reference Date. Reopening needs Controller + CFO.`} confirmLabel="Hard close" destructive onConfirm={() => act(hardClose(p.id))} />
-      <DialogShell open={dialog === "reopen"} onOpenChange={(o) => !o && setDialog(null)} title={`Request reopen of ${p.month}`} consequence={`Raises a Fiscal period reopen request: Controller, then CFO, two distinct users in sequence (C-43). On approval ${p.month} returns to Soft Close and every posting in the window is tagged Reopened Posting.`} requireReason reasonLabel="Reopen reason (required, tagged on the audit trail)" confirmLabel="Send for approval" onConfirm={(r) => act(requestReopen(p.id, r))} />
+      <DialogShell open={dialog === "reopen"} onOpenChange={(o) => !o && setDialog(null)} title={`Request reopen of ${p.month}`} consequence={`Raises a Fiscal period reopen request: Controller, then CFO, two distinct users in sequence (C-43). On approval ${p.month} returns to Soft Close and every posting in the window is tagged Reopened Posting.`} requireReason reasonLabel="Reopen reason (required, tagged on the audit trail)" confirmLabel="Send for approval" confirmDisabled={!stepUp} onConfirm={(r) => { const e = act(requestReopen(p.id, r)); if (!e) setStepUp(false); return e }}>
+        <div role="group" aria-label="Step-up authentication" className="flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm">
+          <span className="flex-1 min-w-[220px]">A period reopen is a dual-control action, so it asks for step-up multi-factor authentication first. <Link className="text-link underline-offset-4 hover:underline" to="/auth/step-up">See the step-up prompt</Link>.</span>
+          {stepUp ? <StateText>Step-up confirmed for this action</StateText> : <Button type="button" size="sm" variant="outline" onClick={() => setStepUp(true)}>Confirm step-up (prototype)</Button>}
+        </div>
+      </DialogShell>
       <DialogShell open={typeof dialog === "object" && dialog !== null} onOpenChange={(o) => !o && setDialog(null)} title={`Resolve ${typeof dialog === "object" && dialog ? (dialog.resolve.ref?.id ?? dialog.resolve.loose?.id) : ""}`} consequence="Marks the row resolved on the pre-close list with your note. The document itself is corrected on its own screen." requireReason reasonLabel="How it was resolved (required)" confirmLabel="Mark resolved" onConfirm={(r) => (typeof dialog === "object" && dialog ? act(resolvePreClose(dialog.resolve.id, r)) : "Nothing selected.")} />
     </section>
   )

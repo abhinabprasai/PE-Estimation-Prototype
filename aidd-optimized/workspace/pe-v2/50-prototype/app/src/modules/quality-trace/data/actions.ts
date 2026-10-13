@@ -11,8 +11,9 @@ import { appendEvent } from "./chain"
 import { instrumentStatus } from "./seed"
 import type { QualityTraceState } from "./slice"
 import { derivePopulation } from "./trace"
-import type { CapaAction, Decision, Disposition, EightD, FinalTest, InspectionLot, PlanRevision, PopulationRow, QtCapa, QtCharacteristic, QtDeviation, QtNcr, QtRecall, ResultRow } from "./types"
-import { charOutcome, lotChars, planOf } from "./derive"
+import type { CapaAction, Decision, Disposition, EightD, FinalTest, InspectionLot, PlanRevision, PopulationRow, QtCapa, QtCharacteristic, QtDeviation, QtNcr, QtRecall, QtScar, ResultRow } from "./types"
+import { DEV_CONTROLLER_THRESHOLD, charOutcome, devApprovers, devNeedsCustomer, lotChars, planOf } from "./derive"
+import { AQL_LEVELS, AQL_VALUES, evaluateSwitching, openFinalTest, overlapsActive, type OrderForTest } from "./intake"
 
 const mut = <T>(fn: (d: QualityTraceState, ctx: MutateCtx) => T) => store.mutate("qualityTrace", fn)
 const now = (ctx: MutateCtx, t = "12:00") => `${ctx.today}T${t}:00`
@@ -42,17 +43,21 @@ export function checkInstrument(d: QualityTraceState, label: string, ctx: { toda
 const nextRev = (r: string) => String.fromCharCode(r.charCodeAt(0) + 1)
 export const plans = {
   /** Author a new plan: header + an empty Draft revision A. */
-  create: (o: { name: string; type: QualityTraceState["plans"][number]["type"]; scope: QualityTraceState["plans"][number]["scope"]; itemId?: string; itemGroup?: string; vendorId?: string; operation?: string; sampling: PlanRevision["sampling"]; aqlValue?: number; fixedSize?: number }) =>
+  create: (o: { name: string; type: QualityTraceState["plans"][number]["type"]; scope: QualityTraceState["plans"][number]["scope"]; itemId?: string; itemGroup?: string; vendorId?: string; operation?: string; sampling: PlanRevision["sampling"]; aqlValue?: number; aqlLevel?: string; fixedSize?: number }) =>
     mut((d, ctx) => {
       requireRole(ctx, ["Quality engineer", "Quality Manager"], "Authoring a plan")
       need(o.name.trim(), "Enter a plan name.", "name")
       need(o.scope === "Item Group" ? o.itemGroup?.trim() : o.itemId, o.scope === "Item Group" ? "Enter the item group." : "Choose the item.", "item")
       need(o.scope !== "Item + Vendor" || o.vendorId, "Choose the vendor.", "vendor")
       need(o.scope !== "Item + Operation" || o.operation?.trim(), "Enter the operation.", "operation")
+      need(o.scope !== "Item + Vendor" || o.type === "INC", "Item + Vendor scope is for incoming (INC) plans only [DOC:p.33 §6.2].", "scope")
+      need(o.scope !== "Item + Operation" || o.type === "INP", "Item + Operation scope is for in-process (INP) plans only [DOC:p.33 §6.2].", "scope")
+      need(!o.aqlLevel || (AQL_LEVELS as readonly string[]).includes(o.aqlLevel), "Choose an inspection level S1-S4 or G1-G3.", "aqlLevel")
+      need(o.aqlValue == null || (AQL_VALUES as readonly number[]).includes(o.aqlValue), "AQL value is 0.65, 1.0, 1.5, 2.5 or 4.0.", "aqlValue")
       const id = `IP-${o.type}-${String(++d.seq).padStart(4, "0")}` as QualityTraceState["plans"][number]["id"]
       d.plans.unshift({
         id, name: o.name.trim(), type: o.type, scope: o.scope, itemId: o.itemId as QualityTraceState["plans"][number]["itemId"], itemGroup: o.itemGroup, vendorId: o.vendorId as QualityTraceState["plans"][number]["vendorId"], operation: o.operation,
-        revisions: [{ rev: "A", status: "Draft", effectiveFrom: addDays(ctx.today, 7), sampling: o.sampling, aql: o.sampling === "AQL Sampling" ? { level: "II", value: o.aqlValue ?? 1.0, switching: true, state: "Normal" } : undefined, fixedSize: o.sampling === "Fixed Sample Size" ? o.fixedSize ?? 3 : undefined, skipLot: o.sampling === "Skip-Lot" ? { n: 5 } : undefined, characteristics: [], createdBy: ctx.userId, createdOn: ctx.today }],
+        revisions: [{ rev: "A", status: "Draft", effectiveFrom: addDays(ctx.today, 7), sampling: o.sampling, aql: o.sampling === "AQL Sampling" ? { level: o.aqlLevel ?? "G2", value: o.aqlValue ?? 1.0, switching: true, state: "Normal" } : undefined, fixedSize: o.sampling === "Fixed Sample Size" ? o.fixedSize ?? 3 : undefined, skipLot: o.sampling === "Skip-Lot" ? { n: 5 } : undefined, characteristics: [], createdBy: ctx.userId, createdOn: ctx.today }],
         activity: [{ at: ctx.today, by: ctx.role, text: "Plan authored; rev A Draft" }],
       })
       return id
@@ -74,6 +79,9 @@ export const plans = {
       const p = d.plans.find((x) => x.id === planId)!
       const r = p.revisions.find((x) => x.status === "In Review")
       need(r, "No revision is In Review.")
+      const from = ctx.today < r!.effectiveFrom ? r!.effectiveFrom : ctx.today
+      const clash = overlapsActive(d, p, { effectiveFrom: from })
+      need(!clash, `V-QM-01: ${clash?.id} is already Active for the same ${p.type} plan type and scope (${p.scope}) on these dates; only one Active plan per type + scope + date. Set it Obsolete or move this revision's effective date.`)
       for (const o of p.revisions) if (o.status === "Active") Object.assign(o, { status: "Superseded", effectiveTo: addDays(ctx.today, -1) })
       Object.assign(r!, { status: "Active", activatedBy: ctx.userId, activatedOn: ctx.today, effectiveFrom: ctx.today < r!.effectiveFrom ? r!.effectiveFrom : ctx.today })
       p.activity.push({ at: ctx.today, by: ctx.role, text: `Rev ${r!.rev} approved to Active${comment ? `: ${comment}` : ""}` })
@@ -129,6 +137,25 @@ export const plans = {
       r!.effectiveTo = ctx.today
       p.activity.push({ at: ctx.today, by: ctx.role, text: `Rev ${r!.rev} set Obsolete: ${reason}` })
     }),
+  /** Delete is allowed only while the plan has never been released: every revision is Draft [DOC:p.34 §6.4]. */
+  remove: (planId: string) =>
+    mut((d, ctx) => {
+      requireRole(ctx, ["Quality engineer", "Quality Manager"], "Deleting a plan")
+      const p = d.plans.find((x) => x.id === planId)!
+      need(p.revisions.every((r) => r.status === "Draft"), "Only a plan whose revisions are all Draft can be deleted; released plans are set Obsolete.")
+      d.plans = d.plans.filter((x) => x.id !== planId)
+    }),
+  /** Reduced inspection after 10 consecutive lots accepted needs approval [DOC:p.33 §6.2]. */
+  approveReduced: (planId: string) =>
+    mut((d, ctx) => {
+      requireRole(ctx, ["Quality Manager"], "Approving reduced inspection")
+      const p = d.plans.find((x) => x.id === planId)!
+      const r = [...p.revisions].reverse().find((x) => x.status === "Active")
+      need(r?.aql?.reduceEligible, "Reduced inspection is not yet eligible (10 consecutive lots accepted).")
+      r!.aql!.state = "Reduced"
+      r!.aql!.reduceEligible = false
+      p.activity.push({ at: ctx.today, by: ctx.role, text: "Reduced inspection approved" })
+    }),
   copy: (planId: string) =>
     mut((d, ctx) => {
       requireRole(ctx, ["Quality engineer", "Quality Manager"], "Copying a plan")
@@ -146,6 +173,7 @@ function moveStock(d: QualityTraceState, ctx: MutateCtx, lot: InspectionLot, to:
   if (b && b.stock !== to) {
     const from = b.stock
     b.stock = to
+    d.stockMoves.unshift({ id: `SMV-TBD-${String(++d.seq).padStart(4, "0")}`, at: ctx.today, batchId: b.id, from, to, gate: lot.gate, source: lot.id, reason, by: ctx.userId })
     ctx.emit("materials.stockStatusChanged", { batchId: b.id, from, to, reason })
   }
   for (const sn of lot.serials) {
@@ -156,20 +184,25 @@ function moveStock(d: QualityTraceState, ctx: MutateCtx, lot: InspectionLot, to:
 
 export const lots = {
   /** SP-05: batch + inspector badge; validates QI Hold. */
-  pullSample: (lotId: string, scanned: string) =>
+  pullSample: (lotId: string, scanned: string, badgeScanned: string) =>
     mut((d, ctx) => {
       const l = d.lots.find((x) => x.id === lotId)!
       need(!l.decision, "This inspection is decided.")
+      // SP-05 needs the batch and the inspector badge together [DOC:pp.95-96 Part F SP-05]
+      const bcode = badgeScanned.trim().toUpperCase()
+      need(bcode, "Scan the inspector badge first (SP-05 reads the batch and the badge).")
+      const badge = USERS.find((u) => u.badge?.toUpperCase() === bcode)
+      need(badge, `Badge ${badgeScanned} is not a known badge.`)
+      need(badge!.roles.some((r) => (["Inspector", "Quality engineer", "Quality Manager"] as Role[]).includes(r)), `${badge!.name} is not an inspector: SP-05 needs an Inspector, Quality engineer or Quality Manager badge.`)
       const code = scanned.trim().toUpperCase()
-      const badge = USERS.find((u) => u.badge?.toUpperCase() === code)
-      if (badge) throw new ProtoError(`Badge ${badge.badge} read. Scan the batch label (${l.batchId}) to pull the sample.`)
+      need(!USERS.some((u) => u.badge?.toUpperCase() === code), `${scanned} is a badge, not a batch label. Scan the batch label (${l.batchId}).`)
       need(code === (l.batchId ?? "").toUpperCase(), `Scanned ${scanned}; expected batch ${l.batchId}.`)
       const b = d.batches.find((x) => x.id === l.batchId)
       need(!b || b.stock === "QI Hold", `${l.batchId} is ${b?.stock}; a sample is pulled only from QI Hold stock.`)
-      l.samplePulled = { by: ctx.userId, on: ctx.today }
-      l.inspectorId ??= ctx.userId
-      l.activity.push({ at: ctx.today, by: ctx.role, text: `Sample of ${l.sampleSize} pulled (SP-05)` })
-      trace(d, ctx, "T03", { doc: { type: "inspectionLot", id: l.id }, batch: l.batchId, scanPoint: "SP-05", qty: l.sampleSize, evidence: `Sample ${l.sampleSize} to inspection, badge of ${ctx.userId}` })
+      l.samplePulled = { by: badge!.id, on: ctx.today, badge: badge!.badge }
+      l.inspectorId ??= badge!.id
+      l.activity.push({ at: ctx.today, by: ctx.role, text: `Sample of ${l.sampleSize} pulled (SP-05), badge ${badge!.badge} ${badge!.name}` })
+      trace(d, ctx, "T03", { doc: { type: "inspectionLot", id: l.id }, batch: l.batchId, scanPoint: "SP-05", qty: l.sampleSize, evidence: `Sample ${l.sampleSize} to inspection, batch ${l.batchId} and inspector badge ${badge!.badge}` })
     }),
   setSampleSize: (lotId: string, n: number) =>
     mut((d) => {
@@ -203,6 +236,18 @@ export const lots = {
       l.results = [...l.results.filter((x) => x.seq !== seq), { seq, ...v, by: ctx.userId, at: ctx.today }]
       if (v.instrumentId && !l.instruments.includes(v.instrumentId)) l.instruments.push(v.instrumentId)
     }),
+  /** Manual Inspection (no-plan policy): the inspector adds ad-hoc rows, each flagged Ad-Hoc [DOC:p.35 §6.5]. */
+  addAdHocRow: (lotId: string, c: { name: string; charType: QtCharacteristic["charType"]; uom?: string; min?: number; max?: number }) =>
+    mut((d, ctx) => {
+      const l = d.lots.find((x) => x.id === lotId)!
+      need(l.adHoc, "Ad-hoc rows are only for manual (no-plan) inspections.")
+      need(!l.decision, "The inspection is decided.")
+      need(c.name.trim(), "Name the test.", "name")
+      if (c.charType === "Quantitative") need(c.min != null || c.max != null, "A quantitative row needs at least one bound.", "min")
+      const rows = (l.adHocRows ??= [])
+      rows.push({ seq: rows.length + 1, name: `${c.name.trim()} (ad hoc)`, method: "Ad hoc", charType: c.charType, parameter: c.name.trim(), uom: c.uom || undefined, min: c.min, max: c.max, critical: false })
+      l.activity.push({ at: ctx.today, by: ctx.role, text: `Ad-hoc row added: ${c.name.trim()}` })
+    }),
   attachCertificate: (lotId: string, name: string) =>
     mut((d, ctx) => {
       need(name.trim(), "Enter the certificate file name.")
@@ -211,12 +256,21 @@ export const lots = {
       l.activity.push({ at: ctx.today, by: ctx.role, text: `Certificate attached: ${name}` })
     }),
   /** Accept or reject with disposition routing; stock status moves per gate [DOC:p.84 Part E §1]. */
-  decide: (lotId: string, decision: Decision, disposition: Disposition | undefined, reason: string) =>
+  decide: (lotId: string, decision: Decision, disposition: Disposition | undefined, reason: string, conditional?: { note: string; scope: string; expiresOn?: string }) =>
     mut((d, ctx) => {
       const l = d.lots.find((x) => x.id === lotId)!
       need(!l.decision, "Already decided.")
+      if (conditional) {
+        // conditional release is a Quality Manager action [DOC: Book I Part E roles: dispositions, conditional releases] (QT-R28)
+        requireRole(ctx, ["Quality Manager"], "A conditional release")
+        need(decision === "Accepted", "Only an acceptance can be conditional.")
+        need(conditional.note.trim(), "Write the restriction note: what the accepted material may and may not be used for.", "note")
+        need(conditional.scope.trim(), "State what the restriction covers (work order, customer, quantity).", "scope")
+        need(!conditional.expiresOn || conditional.expiresOn > ctx.today, "The restriction expiry must be after today.", "expiresOn")
+      }
       requireRole(ctx, l.adHoc ? ["Quality Manager"] : ["Inspector", "Quality engineer", "Quality Manager"], l.adHoc ? "Sign-off of a manual (no-plan) inspection" : "Deciding an inspection")
       const chars = lotChars(d, l)
+      need(!l.adHoc || chars.length > 0, "Add at least one ad-hoc test row before the sign-off.")
       const missing = chars.filter((c) => !l.results.some((r) => r.seq === c.seq))
       need(missing.length === 0, `Record every characteristic first (missing ${missing.map((c) => c.seq).join(", ")}).`)
       const outcomes = chars.map((c) => ({ c, o: charOutcome(c, l.results.find((r) => r.seq === c.seq)) }))
@@ -225,17 +279,37 @@ export const lots = {
         need(!criticalFail, "A critical characteristic failed: the inspection is rejected regardless of other results (R-QM-02).")
         need(!chars.some((c) => c.certRequired) || l.certificate, "Vendor test certificate upload is mandatory before Accept.")
         const anyFail = outcomes.some((x) => x.o === "Fail")
-        need(!anyFail || disposition === "Use as is under deviation", "A characteristic failed: accept only under an approved deviation, or reject.")
+        need(!anyFail || conditional || disposition === "Use as is under deviation", "A characteristic failed: accept only under an approved deviation, or reject.")
         if (disposition === "Use as is under deviation") {
           const dev = d.deviations.find((x) => x.id === l.deviationId)
           need(dev && dev.state === "Approved", "Link an Approved deviation first (QM-DEV-001).")
         }
       } else need(disposition && disposition !== "Use as is under deviation", "Choose a disposition: Return to vendor, Scrap or Rework.")
       Object.assign(l, { decision, disposition, decidedOn: ctx.today, decidedBy: ctx.userId })
-      l.activity.push({ at: ctx.today, by: ctx.role, text: `${decision}${disposition ? ` · ${disposition}` : ""}${reason ? `: ${reason}` : ""}` })
+      if (conditional) l.conditional = { note: conditional.note.trim(), scope: conditional.scope.trim(), expiresOn: conditional.expiresOn || undefined, by: ctx.userId, on: ctx.today }
+      l.activity.push({ at: ctx.today, by: ctx.role, text: `${decision}${conditional ? " (Conditional)" : ""}${disposition ? ` · ${disposition}` : ""}${reason ? `: ${reason}` : ""}${conditional ? ` Restriction: ${conditional.note.trim()} (${conditional.scope.trim()})` : ""}` })
       if (l.gate === "IQC" || l.gate === "RQC") moveStock(d, ctx, l, decision === "Accepted" ? "Unrestricted" : "Blocked", `${l.id} ${decision}`)
+      if (l.gate === "IQC" && l.vendorId) {
+        // vendor rating: rolling lot acceptance and the consecutive-accepted streak behind skip-lot [DOC:p.84 E §1; p.33 §6.2]
+        let v = d.vendorLots.find((x) => x.vendorId === l.vendorId)
+        if (!v) d.vendorLots.push((v = { vendorId: l.vendorId, lots: 0, accepted: 0, streak: 0 }))
+        v.lots += 1
+        if (decision === "Accepted") {
+          v.accepted += 1
+          v.streak = (v.streak ?? 0) + 1
+        } else v.streak = 0
+        l.activity.push({ at: ctx.today, by: "System", text: `Vendor rating: ${v.accepted} of ${v.lots} lots accepted (${((v.accepted / v.lots) * 100).toFixed(1)}%)${decision === "Rejected" ? "; skip-lot qualification revoked" : ""}` })
+      }
+      if (l.planId) {
+        const note = evaluateSwitching(d, l.planId)
+        if (note) {
+          const pl = d.plans.find((x) => x.id === l.planId)!
+          pl.activity.push({ at: ctx.today, by: "System", text: note })
+          l.activity.push({ at: ctx.today, by: "System", text: note })
+        }
+      }
       const code: TraceEventCode = l.gate === "IQC" ? "T03" : l.gate === "RQC" ? "T12" : "T08"
-      trace(d, ctx, code, { doc: { type: "inspectionLot", id: l.id }, batch: l.batchId, serial: l.serials.length === 1 ? l.serials[0] : undefined, scanPoint: l.instruments.length ? "SP-14" : undefined, evidence: `${l.planId ?? "ad hoc"} rev ${l.planRev ?? "-"}, sample ${l.sampleSize}, ${decision}${disposition ? `, ${disposition}` : ""}` })
+      trace(d, ctx, code, { doc: { type: "inspectionLot", id: l.id }, batch: l.batchId, serial: l.serials.length === 1 ? l.serials[0] : undefined, scanPoint: l.instruments.length ? "SP-14" : undefined, evidence: `${l.planId ?? "ad hoc"} rev ${l.planRev ?? "-"}, sample ${l.sampleSize}, ${decision}${conditional ? " (Conditional: " + conditional.note.trim() + ")" : ""}${disposition ? `, ${disposition}` : ""}` })
       ctx.emit("quality.inspectionClosed", { lotId: l.id as InspectionLotId, subject: l.subject, passed: decision === "Accepted" })
     }),
   linkDeviation: (lotId: string, devId: string) =>
@@ -262,6 +336,9 @@ export function createNcr(source: { type: "inspectionLot"; id: string }, o: { ti
     if (l) {
       l.ncrId = id
       l.activity.push({ at: ctx.today, by: ctx.role, text: `${id} created` })
+      // an NCR revokes the vendor's skip-lot qualification [DOC:p.33 §6.2]
+      const v = l.gate === "IQC" && l.vendorId ? d.vendorLots.find((x) => x.vendorId === l.vendorId) : undefined
+      if (v) v.streak = 0
     }
     if (f) {
       f.ncrId = id
@@ -287,6 +364,19 @@ export function finOutcome(f: FinalTest, runNo: number) {
   return { scope, results, complete: results.every((x) => x.r), failed: results.filter((x) => x.o === "Fail").map((x) => x.c.seq) }
 }
 export const fin = {
+  /** Units arrive from orders at the Testing status [DOC:p.87 §4]: pull every order now in Testing that has no record yet. */
+  pullFromOrders: () =>
+    mut((d, ctx) => {
+      const pp = store.getSlice("planningProduction") as unknown as { productionOrders?: (OrderForTest & { operations: { qcGate?: string; inspection?: { id: string } }[] })[] }
+      const orders = store.getSlice("sales").orders
+      let n = 0
+      for (const w of pp.productionOrders ?? []) {
+        if (w.status !== "Testing") continue
+        const lotId = w.operations.find((o) => o.qcGate === "Final Test")?.inspection?.id
+        if (openFinalTest(d, w, orders.find((o) => o.id === w.pegs[0]?.soId)?.customerId, ctx.today, lotId)) n++
+      }
+      return n
+    }),
   startRun: (id: string) =>
     mut((d, ctx) => {
       requireRole(ctx, ["Test technician", "Quality Manager"], "Starting a test run")
@@ -295,6 +385,7 @@ export const fin = {
       const last = f.runs[f.runs.length - 1]
       need(!last || last.outcome, `Run ${last?.run} is still open: complete it first.`)
       need(!last || last.outcome !== "Fail" || f.disposition === "Rework", "A failed run needs the NCR and a Rework disposition before the retest.")
+      need(f.disposition !== "Scrap", "Scrap is awaiting approval; no retest.")
       const retestScope = last?.outcome === "Fail" ? finOutcome(f, last.run).failed : undefined
       f.runs.push({ run: (last?.run ?? 0) + 1, sessions: [ctx.today], results: [], instruments: [], testerId: ctx.userId, ambient: "21 °C, 44% RH", retestScope })
       f.activity.push({ at: ctx.today, by: ctx.role, text: `Run ${(last?.run ?? 0) + 1} started${retestScope ? ` (retest scope: ${retestScope.join(", ")})` : ""}` })
@@ -360,15 +451,55 @@ export const fin = {
       }
       return r.outcome
     }),
-  dispose: (id: string, disposition: NonNullable<FinalTest["disposition"]>, reason: string) =>
+  /** Record the disposition of a failed run [DOC:p.87 §4]. Rework asks planning-production for the RWO (no number is
+   *  invented here); Engineering Review links an ECR; Scrap waits for the Controller and the Engineering Manager. */
+  dispose: (id: string, disposition: NonNullable<FinalTest["disposition"]>, reason: string, o: { ecrId?: string } = {}) =>
     mut((d, ctx) => {
       requireRole(ctx, ["Quality Manager"], "Disposition of a failed test")
       const f = d.finalTests.find((x) => x.id === id)!
-      need(f.ncrId && d.ncrs.find((n) => n.id === f.ncrId), "Create the mandatory NCR first.")
+      const n = d.ncrs.find((x) => x.id === f.ncrId)
+      need(f.ncrId && n, "Create the mandatory NCR first.")
+      need(!f.finalResult, "This unit's final result is recorded.")
+      need(f.disposition !== "Scrap" || !f.scrapApprovals?.length, "Scrap approvals have started; the disposition can no longer change.")
+      const last = f.runs[f.runs.length - 1]
       f.disposition = disposition
-      if (disposition === "Rework") f.rwoId = `RWO-TBD-${f.woId.slice(-4)}` as FinalTest["rwoId"]
-      if (disposition === "Scrap") f.finalResult = "Fail"
-      f.activity.push({ at: ctx.today, by: ctx.role, text: `Disposition ${disposition}${f.rwoId && disposition === "Rework" ? ` (${f.rwoId})` : ""}: ${reason}` })
+      f.scrapApprovals = disposition === "Scrap" ? [] : undefined
+      let extra = ""
+      if (disposition === "Rework") {
+        f.rwoRequestedOn = ctx.today
+        const retestScope = last ? finOutcome(f, last.run).failed : []
+        ctx.emit("quality.reworkRequested", { ncrId: f.ncrId!, woId: f.woId, serial: f.serial, retestScope })
+        extra = " (RWO requested from Production planning; retest of the failed scope)"
+      }
+      if (disposition === "Engineering Review") {
+        const ecrId = o.ecrId?.trim()
+        if (ecrId) {
+          f.ecrId = ecrId
+          ctx.link({ from: { type: "ncr", id: f.ncrId! }, to: { type: "ecr", id: ecrId }, kind: "escalates", note: "final test engineering review" })
+          extra = ` (linked to ${ecrId})`
+        } else {
+          f.ecrRequestedOn = ctx.today
+          ctx.emit("quality.ecrRequested", { ncrId: f.ncrId!, woId: f.woId, serial: f.serial, reason })
+          extra = " (ECR requested from Engineering)"
+        }
+      }
+      if (disposition === "Scrap") extra = " (awaiting the Controller and the Engineering Manager)"
+      f.activity.push({ at: ctx.today, by: ctx.role, text: `Disposition ${disposition}${extra}: ${reason}` })
+    }),
+  /** Scrap sign-off: Controller and Engineering Manager, two distinct people; both needed before Final Result Fail [DOC:p.87 §4]. */
+  approveScrap: (id: string) =>
+    mut((d, ctx) => {
+      requireRole(ctx, ["Controller", "Engineering Manager"], "Approving a final-test scrap")
+      const f = d.finalTests.find((x) => x.id === id)!
+      need(f.disposition === "Scrap" && !f.finalResult, "No scrap disposition is waiting for approval.")
+      f.scrapApprovals ??= []
+      need(!f.scrapApprovals.some((a) => a.role === ctx.role), `The ${ctx.role} has already approved.`)
+      need(!f.scrapApprovals.some((a) => a.by === ctx.userId), "The same person cannot give both approvals.")
+      f.scrapApprovals.push({ role: ctx.role, by: ctx.userId, on: ctx.today })
+      if (f.scrapApprovals.length === 2) {
+        f.finalResult = "Fail"
+        f.activity.push({ at: ctx.today, by: ctx.role, text: "Scrap approved by the Controller and the Engineering Manager; final result Fail, the unit is scrapped" })
+      } else f.activity.push({ at: ctx.today, by: ctx.role, text: `Scrap approved by the ${ctx.role}; waiting for the ${ctx.role === "Controller" ? "Engineering Manager" : "Controller"}` })
     }),
   countersign: (id: string) =>
     mut((d, ctx) => {
@@ -451,6 +582,28 @@ export const capa = {
     }),
 }
 
+/** One CAPA can span many NCRs: add NCRs, RMAs or SCARs as further sources [DOC:p.88 §5]. */
+export function capaAddSource(capaId: string, ref: { type: "ncr" | "rma" | "scar"; id: string }) {
+  return mut((d, ctx) => {
+    requireRole(ctx, ["Quality engineer", "Quality Manager"], "Linking a CAPA source")
+    const c = d.capas.find((x) => x.id === capaId)!
+    need(c.status !== "Closed", "A Closed CAPA is read-only.")
+    need(ref.id.trim(), "Choose the source.")
+    need(!c.sources.some((x) => x.type === ref.type && x.id === ref.id), `${ref.id} is already a source of ${capaId}.`)
+    if (ref.type === "ncr") {
+      const n = d.ncrs.find((x) => x.id === ref.id)
+      need(n, `No NCR ${ref.id}.`)
+      need(!n!.capaId || n!.capaId === capaId, `${ref.id} already escalates to ${n!.capaId}.`)
+      n!.capaId = capaId as CapaId
+      if (!c.ncrIds.includes(n!.id)) c.ncrIds.push(n!.id)
+    }
+    if (ref.type === "scar") need(d.scars.some((x) => x.id === ref.id), `No SCAR ${ref.id}.`)
+    c.sources.push(ref as QtCapa["sources"][number])
+    c.activity.push({ at: ctx.today, by: ctx.role, text: `Source added: ${ref.type.toUpperCase()} ${ref.id}` })
+    return c.sources.length
+  })
+}
+
 export const isOverdue = (s: { open: boolean; dueOn: string; respondedOn?: string }, today: string) => s.open && !s.respondedOn && s.dueOn < today
 export const scar = {
   raise: (ncrId: string, dueDays = 14) =>
@@ -462,6 +615,21 @@ export const scar = {
       const id = nextId(d, "SCAR-TBD-") as QualityTraceState["scars"][number]["id"]
       d.scars.unshift({ id, vendorId: n.vendorId!, title: n.title.replace(/^NCR: /, "SCAR: "), ncrIds: [n.id], issuedOn: ctx.today, dueOn: addDays(ctx.today, dueDays), open: true, sections: { D1: "PE quality engineer, vendor QA", D2: n.description, D3: "Vendor to contain suspect stock" }, escalations: [], activity: [{ at: ctx.today, by: ctx.role, text: "Issued; 8D form emailed to the vendor (portal Phase 3)" }] })
       n.scarId = id
+      return id
+    }),
+  /** SCAR from an RMA failure attributable to a component supplier (Failure Attributable To = Component Supplier) [DOC:p.89 §6]. */
+  raiseFromRma: (rmaId: string, vendorId: string, problem: string, dueDays = 14) =>
+    mut((d, ctx) => {
+      requireRole(ctx, ["Quality engineer", "Quality Manager"], "Authoring a SCAR")
+      const rma = store.getSlice("sales").rmas.find((r) => r.id === rmaId)
+      need(rma, `No RMA ${rmaId}.`, "rma")
+      need(rma!.attributable === "Component Supplier", `${rmaId} is not attributed to a component supplier (Failure Attributable To = ${rma!.attributable ?? "not set"}).`, "rma")
+      need(vendorId, "Choose the vendor.", "vendor")
+      need(problem.trim(), "Describe the failure.", "problem")
+      need(!d.scars.some((x) => x.rmaId === rmaId && x.vendorId === vendorId), `A SCAR for ${rmaId} and this vendor already exists.`)
+      const id = nextId(d, "SCAR-TBD-") as QualityTraceState["scars"][number]["id"]
+      d.scars.unshift({ id, vendorId: vendorId as QtScar["vendorId"], title: `SCAR: ${rmaId} failure`, ncrIds: [], rmaId: rmaId as QtScar["rmaId"], issuedOn: ctx.today, dueOn: addDays(ctx.today, dueDays), open: true, sections: { D1: "PE quality engineer, vendor QA", D2: problem.trim(), D3: "Vendor to contain suspect stock" }, escalations: [], activity: [{ at: ctx.today, by: ctx.role, text: `Issued from RMA failure ${rmaId}; 8D form emailed to the vendor (portal Phase 3)` }] })
+      ctx.link({ from: { type: "rma", id: rmaId }, to: { type: "scar", id }, kind: "escalates", note: "RMA failure attributable to a component supplier" })
       return id
     }),
   respond: (id: string, sections: Partial<Record<EightD, string>>) =>
@@ -546,7 +714,7 @@ export function measurementsAtRisk(s: QualityTraceState, insId: string) {
 
 // ============================================================================ deviations
 export const dev = {
-  create: (o: Pick<QtDeviation, "title" | "type" | "origin" | "scope" | "specReference" | "characteristic" | "specValue" | "acceptedValue" | "validUntil" | "validQty" | "affectedSerials" | "vendorId">) =>
+  create: (o: Pick<QtDeviation, "title" | "type" | "origin" | "scope" | "specReference" | "characteristic" | "specValue" | "acceptedValue" | "validUntil" | "validQty" | "affectedSerials" | "vendorId"> & Partial<Pick<QtDeviation, "customerRequired" | "valueImpact">>) =>
     mut((d, ctx) => {
       need(o.title.trim(), "Enter a title.", "title")
       need(o.validUntil || o.validQty, "Validity by date or by quantity is required.", "validUntil")
@@ -555,22 +723,31 @@ export const dev = {
       d.deviations.unshift({ ...o, id, usedQty: 0, requestedBy: ctx.userId, requestedOn: ctx.today, state: "Requested", approvals: [], activity: [{ at: ctx.today, by: ctx.role, text: "Requested" }] })
       return id
     }),
-  /** Quality and Engineering managers approve (Book VI QM-DEV-001); recorded here (reading QT-R08). */
+  /** Quality and Engineering managers approve (Book IV §7.3), plus the Controller when the value impact passes the threshold (QT-R27); recorded here (QT-R08). */
   approve: (id: string) =>
     mut((d, ctx) => {
-      requireRole(ctx, ["Quality Manager", "Engineering Manager"], "Approving a deviation")
+      requireRole(ctx, ["Quality Manager", "Engineering Manager", "Controller"], "Approving a deviation")
       const x = d.deviations.find((y) => y.id === id)!
       need(x.state === "Requested", `Deviation is ${x.state}.`)
+      const need3 = devApprovers(x)
+      need(need3.includes(ctx.role as (typeof need3)[number]), `The ${ctx.role} approves only when the value impact is above ${DEV_CONTROLLER_THRESHOLD.toLocaleString("en-US")} USD (this one is ${(x.valueImpact ?? 0).toLocaleString("en-US")}).`)
       need(!x.approvals.some((a) => a.role === ctx.role), `The ${ctx.role} has already approved.`)
-      need(!x.approvals.some((a) => a.by === ctx.userId), "The same person cannot give both approvals.")
-      need(!(x.type === "Waiver" && !x.customerEvidence && x.affectedSerials.length > 0), "Attach the customer evidence before approving a waiver on customer serials.")
+      need(!x.approvals.some((a) => a.by === ctx.userId), "The same person cannot give two approvals.")
+      need(!devNeedsCustomer(x) || x.customerEvidence, "Attach the customer approval evidence (attachment + reference) before approving: the customer flag or contract requires it.")
       x.approvals.push({ role: ctx.role, by: ctx.userId, on: ctx.today })
-      if (x.approvals.length === 2) x.state = "Approved"
-      x.activity.push({ at: ctx.today, by: ctx.role, text: x.state === "Approved" ? "Approved with expiry" : "First approval recorded" })
+      const done = need3.every((r) => x.approvals.some((a) => a.role === r))
+      if (done) {
+        x.state = "Approved"
+        // affected serials and batches link to the deviation as genealogy evidence rows [DOC:p.215 Book IV §7.3]
+        const text = `${x.id} approved: ${x.characteristic} ${x.acceptedValue} accepted against ${x.specValue}`
+        for (const sn of x.affectedSerials) trace(d, ctx, "T08", { doc: { type: "deviation", id: x.id }, serial: sn, evidence: text })
+        for (const sc of x.scope) if (sc.type === "batch") trace(d, ctx, "T03", { doc: { type: "deviation", id: x.id }, batch: sc.id as BatchId, evidence: text })
+      }
+      x.activity.push({ at: ctx.today, by: ctx.role, text: done ? "Approved with expiry; evidence rows written to the genealogy" : `${ctx.role} approval recorded (${x.approvals.length} of ${need3.length})` })
     }),
   reject: (id: string, reason: string) =>
     mut((d, ctx) => {
-      requireRole(ctx, ["Quality Manager", "Engineering Manager"], "Rejecting a deviation")
+      requireRole(ctx, ["Quality Manager", "Engineering Manager", "Controller"], "Rejecting a deviation")
       const x = d.deviations.find((y) => y.id === id)!
       need(x.state === "Requested", `Deviation is ${x.state}.`)
       x.state = "Rejected"
@@ -672,10 +849,12 @@ export const recall = {
       stageEvent(d, ctx, r, `Mass hold: ${held} newly Blocked, ${noop} already held (logged no-op); stage ${r.stage}`)
       return { held, noop }
     }),
-  exportList: (id: string) =>
+  exportList: (id: string, purpose = "Customer notification mailing") =>
     mut((d, ctx) => {
       const r = d.recalls.find((x) => x.id === id)!
       need(r.stage !== "Identify" && r.stage !== "Contain", "The notification list is exported after the dual approval (Notify).")
+      need(purpose.trim(), "State the purpose of the disclosure.", "purpose")
+      d.piiLog.unshift({ id: `PII-TBD-${String(++d.seq).padStart(4, "0")}`, recallId: id, on: `${ctx.today}T12:00`, by: ctx.userId, rows: r.population.filter((p) => p.where === "In field" || p.where === "Returned").length, purpose: purpose.trim() })
       r.notification = { text: r.notification?.text ?? "", exportedOn: ctx.today }
       for (const p of r.population) if (p.where === "In field" || p.where === "Returned") p.notifiedOn ??= ctx.today
       stageEvent(d, ctx, r, "Customer notification list exported (logged as a PII disclosure)")
@@ -802,6 +981,16 @@ export const traceOps = {
     mut((d, ctx) => {
       need(resolution.trim(), "Describe the resolution.")
       const x = d.traceExceptions.find((e) => e.id === exId)!
+      need(!x.resolvedOn, "Already resolved.")
+      // an orphan event is closed by recording the missing predecessor (late capture, append-only; C-53)
+      if (x.kind === "Orphan event") {
+        const orphan = d.genealogy.find((e) => e.type === "T04" && e.serial === x.object && e.correction === "Active")
+        const hasT02 = d.genealogy.some((e) => e.type === "T02" && e.serial === x.object && e.correction !== "Reversed")
+        if (orphan && !hasT02) {
+          const ev = appendEvent(d.genealogy, { type: "T02", at: now(ctx), doc: orphan.doc, serial: orphan.serial, scanPoint: "SP-03", qty: 1, userId: ctx.userId, evidence: `Late-recorded receipt for orphan ${x.id}: ${resolution}` })
+          ctx.emit("trace.eventRecorded", { code: "T02", doc: ev.doc, serial: ev.serial })
+        }
+      }
       Object.assign(x, { resolvedOn: ctx.today, resolution })
     }),
   runControls: () =>
@@ -817,7 +1006,7 @@ export const traceOps = {
           n++
         }
         if (e.type === "T04" && !has("T02", e.serial) && !d.serials.find((x) => x.id === e.serial)?.woId) raise("Orphan event", "T04 putaway with no T02 receipt for this serial")
-        if ((e.type === "T10" || e.type === "T11") && d.serials.find((x) => x.id === e.serial)?.woId && !has("T09", e.serial) && e.serial !== "SN-TBD-20M-0301") raise("Missing event", `${e.type} recorded, no T09 finished receipt`)
+        if ((e.type === "T10" || e.type === "T11") && d.serials.find((x) => x.id === e.serial)?.woId && !has("T09", e.serial)) raise("Missing event", `${e.type} recorded, no T09 finished receipt`)
       }
       return n
     }),

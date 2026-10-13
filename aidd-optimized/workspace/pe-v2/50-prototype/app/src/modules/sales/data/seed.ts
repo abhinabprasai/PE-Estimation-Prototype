@@ -1,5 +1,6 @@
 // THROWAWAY PROTOTYPE - FL-09. Seed data per prompt 5.4. All names, numbers and identifiers are fictitious.
 // Identifier formats other than SO-{YYYY}-{SEQ:5} are placeholders (OQ-30).
+import { ruleIdFor } from "../fx/model"
 import {
   type Activity,
   type Approval,
@@ -227,7 +228,7 @@ export function buildSeed(): DB {
       incoterms: c.incoterms,
       status: s.status,
       rule: s.rule,
-      ruleId: "RULE-TBD",
+      ruleId: ruleIdFor(s.rule),
       refs: [{ soId, line: lineNo, sched: 10, qty: s.qty }],
       flags,
       permits: hasLoad && s.item === "FIN-TBD-5000SS" ? ["Oversize/overweight permit"] : [],
@@ -245,7 +246,7 @@ export function buildSeed(): DB {
       irId: s.shipDate ? `IR-TBD-${String(100 + s.dlv).padStart(4, "0")}` : undefined,
       forcePgiFail: s.forceFail,
       warehouse: c.currency === "CAD" ? WH2 : WH,
-      activity: [A(addDays(created, 2), "Shipping office", `Delivery created. Grouped by: ${s.rule} (RULE-TBD)`)],
+      activity: [A(addDays(created, 2), "Shipping office", `Delivery created. Grouped by: ${s.rule} (${ruleIdFor(s.rule)})`)],
     }
     if (s.shipDate) d.activity.push(A(s.shipDate, "Shipping office", `Goods issue posted ${d.pgiId} in period ${s.period}. Invoice request ${d.irId} created at PGI`))
     deliveries.push(d)

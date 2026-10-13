@@ -6,6 +6,7 @@ import type { Material, MaterialPlantData, MaterialType, MaterialValuation } fro
 import { MATERIALS, materialById } from "@/data/shared"
 import { addBusinessDays, MCR_TASK_MATRIX } from "../lib/rules"
 import { U } from "./seed"
+import type { MaterialsExt } from "./ext"
 import type {
   AcctRow,
   ChangeEntry,
@@ -54,6 +55,8 @@ export interface MaterialsState {
   salesPrices: SalesPriceRow[]
   /** Rejected / Deleted materials (no status row, K-16): hidden from lists, kept for history. */
   ended: EndedMaterial[]
+  /** Feature-list additions: batches, duplicates, imports, consignment, plant sourcing, statistical SS (data/ext.ts). */
+  x: MaterialsExt
   seq: number
 }
 
@@ -84,6 +87,9 @@ export const R = {
   material: (id: string, tab?: string) => `/inventory/items/${id}${tab ? `?tab=${tab}` : ""}`,
   mcr: (id: string) => `/materials/creation-requests/${id}`,
   mch: (id: string) => `/materials/change-requests?mch=${id}`,
+  mchDoc: (id: string) => `/materials/change-register/${id}`,
+  batch: (id: string) => `/inventory/batches/${id}`,
+  report: (id: string) => `/materials/reports/${id}`,
   sup: (id: string) => `/materials/supersessions?id=${id}`,
   ir: (id: string) => `/purchasing/info-records/${id}`,
   sl: (materialId: string) => `/purchasing/source-lists?material=${materialId}`,

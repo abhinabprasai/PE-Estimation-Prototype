@@ -2,7 +2,7 @@
 
 > **What this is.** The owner's guide for `src/modules/materials/`. Materials and inventory: the PRD's Materials module (10) and the Book VII inventory entries INV-RETURN, INV-ITEM-SALES, INV-COUNT-DOC, INV-PLAN-SAFETY.
 >
-> **Where it stands.** Module pass, 11 October 2026. All 13 buildable screens are built and claimed "full" in `routes.tsx`; INV-RETURN stays the shell's redirect to /sales/rma. Type-check is clean for this folder.
+> **Where it stands.** Feature-list pass, 12 October 2026. All 13 PRD screens and all 13 feature-list screens (FX-MM-*) are built and claimed "full" in `routes.tsx`; the four partial rows (Material Listing, Material Detail, Material Change Request, Count documents) are completed as listed under "Feature rows". INV-RETURN stays the shell's redirect to /sales/rma. Type-check is clean for this folder.
 >
 > **What we need from you.** Build the screens below inside this folder only. Anything you need outside it goes under "Requests to foundation" at the end.
 
@@ -73,6 +73,9 @@ Write one row per change you need in a shared file. Do not edit the shared file 
 | R-10 | src/data/domain/approvals.ts | "Below price floor" from the item sales tab: a customer-price row needs the Controller (not only the Pricing Manager) [DOC:p.29 §4.3] | INV-ITEM-SALES (RD-MM-13) | open |
 | R-11 | src/data/domain/approvals.ts | "Material change" for Sellable ON on a default-OFF type: Sales admin then Materials Manager [DOC:p.147 §3.12, p.151 §4.4] | MM-MCH-001 (RD-MM-28) | open |
 | R-12 | src/data/domain/status.ts | Status rows for sales price-list assignment (Draft / Active / Expired) and customer price (Draft / Pending Approval / Active / Expired) [DOC:p.29 §4.2-4.3] | INV-ITEM-SALES shows family badges until then | open |
+| R-13 | src/data/domain/approvals.ts | "Valuation change" kind: Materials Manager then Controller (release at the period boundary) [Book II §5.4] | MM-MCH-001 valuation variant runs as "Material change" and the Controller releases it as an action (RD-MM-31) | open |
+| R-14 | src/data/domain/approvals.ts | "Consignment true-up" kind routed to the Controller [Book II §14.2] | FX-MM-CONSIGN: a true-up to 5215 is entered by the Controller acting directly (RD-MM-34) | open |
+| R-15 | src/data/domain/docflow.ts | Route DocTypes `mch` to `/materials/change-register/<id>` and `supersession`, `importJob`, `settlement` to their screens | Register and merge results link by path today | open |
 | R-7 | src/data/domain/docflow.ts | Route DocType `grn` to the material stock view (`/inventory/items/<material>?tab=stock&grn=<id>`) or a GRN page, instead of the traceability explorer | GRN-TBD-0301 in the hero thread lands on the explorer rather than the receipt | open |
 
 
@@ -112,8 +115,55 @@ Each is shown as a "Reading RD-MM-nn" chip where it applies; the text is in `lib
 | RD-MM-28 | Sellable ON on a default-OFF type runs as a Class 2 MCH; Sales admin step waits for R-11. |
 | RD-MM-29 | Simulation dimensions per Part H §3 rules 2-4; warehouse cost center from the shared master. |
 | RD-MM-30 | Supersession worklist generated from the predecessor's where-used references. |
+| RD-MM-31 | Valuation change approval runs through the shared "Material change" kind; the Controller applies it (R-13). |
+| RD-MM-32 | Open GR/IR per material and the BOM edges for the where-used report are seeded here (invoice matching is purchasing, the BOM is engineering). |
+| RD-MM-33 | Import templates are CSV with the PRD's XLSX columns; the first line carries the template name and version. Rows import as MCRs (path Migration) or one MCH per changed column. |
+| RD-MM-34 | Consignment settlement is posted by the Cost accountant or the Controller; a true-up to 5215 by the Controller; the AP side of the posting is a design value. |
+| RD-MM-35 | Costing-run mark window dates, the second plant PL-TBD-02 and the DEC-07 prototype switch are design values. |
+| RD-MM-36 | Statistical safety stock: demand variation by XYZ class (X 0.25, Y 0.5, Z 0.9 of ADU) and the service levels per ABC class are design values; flagged Phase 2. |
+| RD-MM-37 | Duplicate candidates carry a stored score (the matching job is not modelled); review at 0.9, auto-flag at 0.97. |
+| RD-MM-38 | Where-used impact lists come from the references held on the material. |
+| RD-MM-39 | De-Peg runs through the shared kind "Reallocation of confirmed supply" (Sales Director). |
+| RD-MM-40 | A placeholder's group level 2 is set to Other by the steward's General task so V-MM-01 can pass. |
 
 Other design values on screen: the empty and error states are previewed with the "Live data / Preview" selector on each list (the prototype has no backend that can fail).
+
+## Feature-list entries (added 12 October 2026)
+
+The user's feature list (`00-inputs/feature-list-2026-10.md`) is part of the prototype's scope together with the PRD. The feature mapper registered the rows below in `src/data/screens-features.ts`. Each has a placeholder route today. Build it at that path with `screenId` and a `built` claim, as for any registry screen. Routes, archetypes and ids marked FX- are design values. Rows that are a tab or panel of a screen you already own (for example Material Detail views, the RMA detail tabs, the Customer tax tab) have no entry: they are in the "Feature rows" list below and count as scope of that screen.
+
+| Screen ID | Title | Route | Archetype | Wave | Flows | Feature-list section | Built |
+|---|---|---|---|---|---|---|---|
+| FX-MM-DIALOGS | Material dialogs | `/inventory/dialogs/material` | Dialog (design value) | W2 | - | Material Management | full |
+| FX-MM-LIFECYCLE | Lifecycle transition and impact-sweep dialogs | `/inventory/dialogs/lifecycle` | Dialog (design value) | W2 | - | Material Management | full |
+| FX-MM-MCHREG | Material change register and document detail | `/materials/change-register`, `/materials/change-register/:id` | List (design value) | W2 | - | Material Management | full |
+| FX-MM-DUPES | Duplicate merge steward queue | `/materials/duplicates` | Workbench (design value) | W2 | - | Material Management | full |
+| FX-MM-IMPORT | Bulk import templates upload flow | `/materials/import` | Wizard (design value) | W2 | - | Material Management | full |
+| FX-MM-BATCH | Batch master | `/inventory/batches`, `/inventory/batches/:id` | List (design value) | W2 | FL-08, FL-11 | Material Management | full |
+| FX-MM-SPECIAL | Special stock and ownership | `/inventory/special-stock` | List (design value) | W2 | - | Material Management | full |
+| FX-MM-CONSIGN | Consignment settlement run | `/inventory/consignment-settlement` | Wizard (design value) | W2 | - | Material Management | full |
+| FX-MM-PLANTSRC | Plant sourcing sequence and network MRP fields | `/materials/plant-sourcing` | Config (design value) | W2 | - | Material Management | full |
+| FX-MM-REPORTS | Material management reports R1 to R8 | `/materials/reports`, `/materials/reports/:id` | Dashboard (design value) | W2 | - | Material Management | full |
+| FX-MM-CREATEFLOW | Material creation flow (placeholder to activation) | `/materials/creation-flow` | Wizard (design value) | W2 | FL-10 | Material Management | full |
+| FX-MM-SSEXC | Safety-stock exception report and projection delta | `/inventory/safety-stock/exceptions` | Workbench (design value) | W2 | - | Material Management | full |
+| FX-MM-SSSTAT | Statistical safety stock activation | `/inventory/safety-stock/statistical` | Wizard (design value) | W2 | - | Material Management | full |
+
+## Feature rows completed on screens already owned (12 October 2026)
+
+| Feature-list row | Where |
+|---|---|
+| MM-MAT-001 Material Listing: plant chips, plant filter | `/inventory/items`: a Plants column (one chip per plant the material is extended to, with status) and a Plant filter; bulk assign (Steward / Buyer / Planner), Set block and Add to change request were verified and stay in the bulk bar |
+| Material Detail: Simulate GL | Header action on valuated materials (`components/simulate.tsx`): transaction and quantity, resolved matrix accounts, E-MM-21 when a key is missing, nothing posts |
+| Material Detail: Accounting view GL determination preview check | Accounting and Costing tab: a pass/fail line (every event key resolves for the valuation class) above the preview table |
+| Material Detail: EBOM-ahead banner | Production tab: banner when an EBOM revision is newer than the active MBOM (`x.ebomAhead`, seeded; the BOM is owned by Engineering) |
+| Material Detail: embedded safety-stock grid | Planning tab: per-warehouse safety stock, default, ADU, lead time, alerts, pending change, linked to INV-PLAN-SAFETY |
+| Material Detail: embedded info-record and source-list grids | Purchasing tab: tables of info records (price, lead time, validity, status) and source list rows (validity, fixed, MRP relevant, blocked) |
+| Material Detail: lifecycle, block, Extend to Plant and Copy From | Header actions open the dialog components of FX-MM-DIALOGS and FX-MM-LIFECYCLE (Restrict, Reinstate, Mark Obsolete, Recall to Draft, function-specific block, Extend to Plant, Copy From) |
+| MM-MCH-001 valuation-change variant | `/materials/change-requests`: "Valuation change (5.4)" switch above the wizard (`pages/MchValuation.tsx`): period-boundary check, E-MM-22 mark window, GR/IR warnings, revaluation delta with GL preview, approval, Controller release (also on the change register detail) |
+| INV-COUNT-DOC Count documents | Complete on desktop (unchanged); the mobile count entry and Generate Count Sheets sit in inventory-ops |
+| INV-PLAN-SAFETY Suggested SS / Service level | The two reserved columns fill when statistical safety stock is activated (FX-MM-SSSTAT) |
+
+Other changes: the engineering placeholder handler now reuses the number Engineering already reserved when the description starts with it (for example RAW-TBD-CT600), so Engineering's placeholder turns Active when the MCR activates; the steward's General task sets material group level 2 to Other on a placeholder (RD-MM-40); new MCH and supersession ids use four digits (MCH-2026-0432).
 
 ## Hero thread through this module
 

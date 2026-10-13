@@ -16,11 +16,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { DetailPage, DialogShell, ListPage } from "@/components/templates"
 import { Chip, ErrorAlert, KV, RulesPanel, StatusBadge, type Column } from "@/components/patterns"
 import { STATUS, THRESHOLDS } from "@/data/domain"
-import { TODAY, USERS } from "@/data/shared"
+import { TODAY, USERS, VENDORS } from "@/data/shared"
 import { addDays } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useSlice } from "@/store"
-import { capa as act, isOverdue, ncrStage, scar as sact } from "../data/actions"
+import { capa as act, capaAddSource, isOverdue, ncrStage, scar as sact } from "../data/actions"
 import { EIGHT_D, type CapaAction, type EightD, type QtCapa, type QtNcr, type QtScar } from "../data/types"
 import { ActivityList, DocLinkText, NoList, NotFound, Pick, Reading, Section, Stat, TextField, materialText, report, useDataState, userName, vendorName } from "../components/bits"
 
@@ -28,10 +28,10 @@ export const CAPA_RULES: [string, string, string][] = [
   ["QM-C1", "CAPA lifecycle: Open → Analysis → Actions In Progress → Implemented → Effectiveness Check → Closed; a failed effectiveness check reopens it.", "DOC:p.88 §5"],
   ["QM-C2", "Root cause and method (5-Why, Fishbone, 8D, FMEA) are required before actions; every action needs done status and evidence before Implemented.", "DOC:p.88 §5"],
   ["QM-C3", `The effectiveness check runs at least ${THRESHOLDS.capaEffectivenessMinDays} days after implementation; only the Quality Manager closes.`, "DOC:p.88 §5"],
-  ["QM-C4", "Sources: NCRs, RMA failure analysis, audits. Containment, corrective and preventive actions each carry an owner and a due date.", "DOC:p.88 §5"],
+  ["QM-C4", "Sources are multi-link: one CAPA can span many NCRs, RMAs and SCARs (audit findings have no record in this build). Containment, corrective and preventive actions each carry an owner and a due date.", "DOC:p.88 §5"],
 ]
 export const SCAR_RULES: [string, string, string][] = [
-  ["QM-S1", "A SCAR is raised from a vendor-attributed NCR (Failure Attributable To = Component Supplier) in 8D structure; D1-D3 by PE, D4-D8 by the vendor.", "DOC:p.89 §6"],
+  ["QM-S1", "A SCAR is raised from a vendor-attributed NCR or an RMA failure (Failure Attributable To = Component Supplier) in 8D structure; D1-D3 by PE, D4-D8 by the vendor.", "DOC:p.89 §6"],
   ["QM-S2", `A vendor with ${THRESHOLDS.scarOverdueRestrictsVendor} or more open overdue SCARs becomes Restricted on the AVL; resolution restores the vendor.`, "DOC:p.89 §6"],
   ["QM-S3", "D4-D8 must be complete before closing; cost recovery is recorded as a vendor credit note.", "DOC:p.89 §6"],
 ]
@@ -225,16 +225,19 @@ export function CapaDetail() {
           {
             id: "sources", label: "Sources", count: c.sources.length,
             content: (
-              <ul className="flex flex-col gap-2 text-sm">
-                {c.sources.map((x) => {
-                  const n = s.ncrs.find((y) => y.id === x.id)
-                  return (
-                    <li key={x.id}>
-                      <DocLinkText r={x} /> {n ? `· ${n.title} · ${n.severity} · from ${n.source.id}` : ""}
-                    </li>
-                  )
-                })}
-              </ul>
+              <div className="flex flex-col gap-4">
+                <ul className="flex flex-col gap-2 text-sm">
+                  {c.sources.map((x) => {
+                    const n = s.ncrs.find((y) => y.id === x.id)
+                    return (
+                      <li key={`${x.type}-${x.id}`}>
+                        <DocLinkText r={x} /> {n ? `· ${n.title} · ${n.severity} · from ${n.source.id}` : ""}
+                      </li>
+                    )
+                  })}
+                </ul>
+                {c.status !== "Closed" && <AddSource c={c} />}
+              </div>
             ),
           },
           {
@@ -263,6 +266,32 @@ export function CapaDetail() {
       />
       <EffDialog c={c} open={dlg === "eff"} onClose={() => setDlg(null)} />
     </>
+  )
+}
+
+/** One CAPA can span many NCRs; further NCRs, RMAs and SCARs are linked as sources [DOC:p.88 §5]. */
+function AddSource({ c }: { c: QtCapa }) {
+  const s = useSlice("qualityTrace")
+  const rmas = useSlice("sales").rmas
+  const [kind, setKind] = useState<"ncr" | "rma" | "scar">("ncr")
+  const [id, setId] = useState("")
+  const taken = (t: string, i: string) => c.sources.some((x) => x.type === t && x.id === i)
+  const options =
+    kind === "ncr"
+      ? s.ncrs.filter((n) => (!n.capaId || n.capaId === c.id) && !taken("ncr", n.id)).map((n) => ({ value: n.id, label: `${n.id} · ${n.title.replace(/^NCR: /, "").slice(0, 48)}` }))
+      : kind === "scar"
+        ? s.scars.filter((x) => !taken("scar", x.id)).map((x) => ({ value: x.id, label: `${x.id} · ${x.title.slice(0, 48)}` }))
+        : rmas.filter((r) => !taken("rma", r.id)).map((r) => ({ value: r.id, label: `${r.id} · ${r.reasonDetail.slice(0, 48)}` }))
+  return (
+    <Section title="Add a source">
+      <div className="flex flex-wrap items-end gap-3">
+        <Pick id="src-kind" label="Kind" value={kind} onChange={(k) => { setKind(k); setId("") }} options={[{ value: "ncr", label: "NCR" }, { value: "rma", label: "RMA" }, { value: "scar", label: "SCAR" }]} />
+        <Pick id="src-id" label="Record" value={id} onChange={setId} placeholder="Choose" options={options} />
+        <Button variant="outline" size="sm" onClick={() => report(capaAddSource(c.id, { type: kind, id }), (n) => `Source added (${n} sources)`) && setId("")}>
+          Link source
+        </Button>
+      </div>
+    </Section>
   )
 }
 
@@ -391,18 +420,20 @@ export function ScarList() {
   const s = useSlice("qualityTrace")
   const ds = useDataState("QM-SCAR")
   const [last, setLast] = useState<{ vendorId: string; overdue: number; restricted: boolean }[] | null>(null)
+  const [rmaOpen, setRmaOpen] = useState(false)
   const vendors = [...new Set(s.scars.map((x) => x.vendorId))].map((v) => ({ v, overdue: s.scars.filter((x) => x.vendorId === v && isOverdue(x, TODAY)).length, open: s.scars.filter((x) => x.vendorId === v && x.open).length }))
   const cols: Column<QtScar>[] = [
     { id: "id", header: "SCAR", value: (x) => x.id, mono: true, sortable: true, className: "w-32" },
     { id: "title", header: "Title", value: (x) => x.title },
     { id: "vendor", header: "Vendor", value: (x) => vendorName(x.vendorId), filterable: true },
-    { id: "ncr", header: "NCRs", value: (x) => x.ncrIds.join(", "), cell: (x) => <span className="flex gap-1">{x.ncrIds.map((n) => <DocLinkText key={n} r={{ type: "ncr", id: n }} />)}</span> },
+    { id: "ncr", header: "From", value: (x) => [...x.ncrIds, x.rmaId ?? ""].join(", "), cell: (x) => <span className="flex gap-1">{x.ncrIds.map((n) => <DocLinkText key={n} r={{ type: "ncr", id: n }} />)}{x.rmaId && <DocLinkText r={{ type: "rma", id: x.rmaId }} />}</span> },
     { id: "issued", header: "Issued", value: (x) => x.issuedOn, sortable: true, mono: true },
     { id: "due", header: "Response due", value: (x) => x.dueOn, sortable: true, mono: true, cell: (x) => <span className={cn(isOverdue(x, TODAY) && "font-semibold text-destructive")}>{x.dueOn}</span> },
     { id: "state", header: "State", value: scarState, filterable: true },
     { id: "rec", header: "Recovery", value: (x) => x.recovery?.amount ?? 0, align: "right", mono: true, cell: (x) => (x.recovery ? `$${x.recovery.amount.toLocaleString("en-US")}` : "") },
   ]
   return (
+    <>
     <ListPage
       header={{
         title: "SCAR register",
@@ -411,7 +442,12 @@ export function ScarList() {
         description: "Supplier corrective action requests in 8D structure. Vendors answer D4-D8 (portal in Phase 3; today by email, recorded here).",
         chips: <><NoList text="SCAR state" /><Reading id="QT-R15" /><Reading id="QT-R20" /></>,
         primary: <Button onClick={() => { const r = sact.enforce(); if (report(r, "AVL enforcement run")) setLast(r.ok ? r.value : null) }}>Run AVL enforcement</Button>,
-        actions: <Button variant="outline" asChild><Link to="/quality/capa">CAPA register</Link></Button>,
+        actions: (
+          <>
+            <Button variant="outline" onClick={() => setRmaOpen(true)}>Raise SCAR from RMA</Button>
+            <Button variant="outline" asChild><Link to="/quality/capa">CAPA register</Link></Button>
+          </>
+        ),
       }}
       above={
         <div className="flex flex-col gap-2">
@@ -434,6 +470,38 @@ export function ScarList() {
       }}
       below={<RulesPanel rules={SCAR_RULES} />}
     />
+    <RmaScarDialog open={rmaOpen} onClose={() => setRmaOpen(false)} />
+    </>
+  )
+}
+
+function RmaScarDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const nav = useNavigate()
+  const rmas = useSlice("sales").rmas.filter((r) => r.attributable === "Component Supplier")
+  const [rma, setRma] = useState("")
+  const [vendor, setVendor] = useState("")
+  const [problem, setProblem] = useState("")
+  return (
+    <DialogShell
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title="Raise SCAR from an RMA failure"
+      consequence="Issues a SCAR (D1-D3 filled by PE) to the vendor for an RMA whose failure is attributable to a component supplier; the vendor answers D4-D8."
+      confirmLabel="Issue SCAR"
+      onConfirm={() => {
+        const r = sact.raiseFromRma(rma, vendor, problem)
+        if (!r.ok) return r.error
+        report(r, (id) => `${id} issued`)
+        nav(`/quality/scar/${r.value}`)
+        return null
+      }}
+    >
+      <div className="flex flex-col gap-3">
+        <Pick id="rs-rma" label="RMA (Failure Attributable To = Component Supplier)" value={rma} onChange={setRma} placeholder={rmas.length ? "Choose an RMA" : "No RMA is attributed to a supplier"} options={rmas.map((r) => ({ value: r.id, label: `${r.id} · ${r.reasonDetail.slice(0, 50)}` }))} />
+        <Pick id="rs-vendor" label="Vendor" value={vendor} onChange={setVendor} options={VENDORS.map((v) => ({ value: v.id, label: `${v.id} · ${v.name}` }))} />
+        <TextField id="rs-problem" label="Problem (D2)" value={problem} onChange={setProblem} />
+      </div>
+    </DialogShell>
   )
 }
 
@@ -476,7 +544,7 @@ export function ScarDetail() {
         summary={
           <>
             <KV k="Vendor">{vendorName(x.vendorId)}</KV>
-            <KV k="NCRs">{x.ncrIds.join(", ")}</KV>
+            <KV k="NCRs / RMA">{[...x.ncrIds, x.rmaId].filter(Boolean).join(", ") || "None"}</KV>
             <KV k="Responded">{x.respondedOn ?? "No response"}</KV>
             <KV k="Closed">{x.closedOn ?? "Open"}</KV>
           </>

@@ -2,13 +2,18 @@ import { useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DensityToggle, DetailHeader, EmptyState, ErrorAlert, KV, RulesPanel, SkeletonRows, StatusBadge, rowCls, useFirstVisitLoading, type Density } from "../components/common"
+import { DensityToggle, EmptyState, ErrorAlert, KV, RulesPanel, SkeletonRows, StatusBadge, rowCls, useFirstVisitLoading, type Density } from "../components/common"
+import { DetailPage } from "@/components/templates"
+import { Chip } from "@/components/patterns"
+import { ActivityList } from "../components/ext"
+import { recordQuoteOutcome } from "../fx/actions"
+import { quoteExtOf } from "../fx/derive"
+import { BudgetaryBanner, LossDialog, QuoteEto, QuoteLines, QuoteMargin, QuoteVersions, QuoteWinLoss } from "./fx/QuotationPanels"
+import { QuoteToOrderDialog } from "./fx/QuoteToOrder"
+import { StateBar, useFxState } from "./fx/kit"
 import { useStore } from "../data/store"
-import { LIFECYCLE, listDate, money, product, quoteValue } from "../data/model"
+import { LIFECYCLE, listDate, money, quoteValue } from "../data/model"
 
 export function QuotationList() {
   const { db } = useStore()
@@ -91,176 +96,126 @@ export function QuotationDetail() {
   const { id = "" } = useParams()
   const { db, actions } = useStore()
   const nav = useNavigate()
+  const st = useFxState()
   const [error, setError] = useState<string | null>(null)
   const [lossOpen, setLossOpen] = useState(false)
-  const [reason, setReason] = useState("")
-  const [lossErr, setLossErr] = useState<string | null>(null)
+  const [convOpen, setConvOpen] = useState(false)
   const q = db.quotations.find((x) => x.id === id)
   if (!q) return <ErrorAlert title="Quotation not found">No quotation {id} in this prototype. Open the quotation list.</ErrorAlert>
   const c = db.customers.find((x) => x.id === q.customerId)!
+  const ext = quoteExtOf(db, q)
   const locked = q.status !== "Draft"
+  const win = () => {
+    const r = recordQuoteOutcome(q.id, "Won", { notes: "" })
+    if (!r.ok) setError(r.error)
+    else toast.success("Win recorded. Quotation Won.")
+  }
   return (
-    <div className="max-w-[960px]">
-      <DetailHeader
-        title={q.id}
-        entity="quotation"
-        status={q.status}
-        sub={
-          <p className="text-sm">
-            {c.name} · {c.id}
-          </p>
-        }
-        actions={
-          <>
-            {q.status === "Issued" && (
-              <>
-                <Button
-                  onClick={() => {
-                    const r = actions.recordWin(q.id)
-                    if (!r.ok) setError(r.error)
-                    else toast.success("Win recorded. Quotation Won.")
-                  }}
-                >
-                  Record win
-                </Button>
-                <Button variant="outline" onClick={() => setLossOpen(true)}>
-                  Record loss
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const r = actions.revise(q.id)
-                    if (r.ok) nav(`/sales/quotations/${r.value}`)
-                    else setError(r.error)
-                  }}
-                >
-                  Revise
-                </Button>
-              </>
-            )}
-            {q.status === "Won" && !q.orderRef && (
-              <Button
-                onClick={() => {
-                  const r = actions.convert(q.id)
-                  if (r.ok) {
-                    toast.success(`Order ${r.value} created in Draft.`)
-                    nav(`/sales/orders/${r.value}`)
-                  } else setError(r.error)
-                }}
-              >
+    <>
+      <DetailPage
+        header={{
+          title: q.id,
+          screenId: "OM-QT-001/2",
+          crumbs: [{ label: "Quotations", to: "/sales/quotations" }, { label: q.id }],
+          description: `${c.name} · ${c.id}`,
+          chips: <><Chip kind="design" note="Quote type from the quote header: Budgetary (±25%, watermarked, no ATP) or Firm (binding, full costing).">{ext.type}</Chip>{q.status === "Issued" && <Chip kind="design" note="Issued content is locked; use Revise (R-8).">Content locked</Chip>}</>,
+          actions: (
+            <>
+              {q.status === "Issued" && (
+                <>
+                  <Button variant="outline" onClick={() => setLossOpen(true)} disabled={!st.writable} title={st.why || undefined}>
+                    Record loss
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={!st.writable}
+                    onClick={() => {
+                      const r = actions.revise(q.id)
+                      if (r.ok) nav(`/sales/quotations/${r.value}`)
+                      else setError(r.error)
+                    }}
+                  >
+                    Revise
+                  </Button>
+                </>
+              )}
+            </>
+          ),
+          primary:
+            q.status === "Issued" ? (
+              <Button onClick={win} disabled={!st.writable} title={st.why || undefined}>
+                Record win
+              </Button>
+            ) : q.status === "Won" && !q.orderRef ? (
+              <Button onClick={() => setConvOpen(true)} disabled={!st.writable} title={st.why || undefined}>
                 Convert to order
               </Button>
-            )}
+            ) : undefined,
+        }}
+        status={{ kind: "quotation", value: q.status }}
+        doc={{ type: "quotation", id: q.id }}
+        summary={
+          <>
+            <KV k="Valid until">{q.validUntil}</KV>
+            <KV k="Version">V{q.version}</KV>
+            <KV k="Total">
+              <span className="tabular">{money(quoteValue(q), c.currency)}</span>
+            </KV>
+            <KV k="Order cross-reference">{q.orderRef ? <Link className="text-link underline" to={`/sales/orders/${q.orderRef}`}>{q.orderRef} (quotation locked)</Link> : "None"}</KV>
+            {q.lossReason && <KV k="Loss reason">{q.lossReason}</KV>}
+            <KV k="Version chain">
+              {q.predecessor && (
+                <>
+                  Predecessor <Link className="text-link underline" to={`/sales/quotations/${q.predecessor}`}>{q.predecessor}</Link>{" "}
+                </>
+              )}
+              {q.successor && (
+                <>
+                  Successor <Link className="text-link underline" to={`/sales/quotations/${q.successor}`}>{q.successor}</Link>
+                </>
+              )}
+              {!q.predecessor && !q.successor && "Single version"}
+            </KV>
           </>
         }
+        tabs={[
+          {
+            id: "lines",
+            label: "Lines",
+            count: q.lines.length,
+            content: (
+              <div className="flex flex-col gap-3">
+                <StateBar st={st} />
+                {error && (
+                  <ErrorAlert title="Action not done" onDismiss={() => setError(null)}>
+                    {error}
+                  </ErrorAlert>
+                )}
+                {locked && q.status === "Issued" && <p className="text-sm text-muted-foreground">Issued content is locked. No Edit; use Revise to create the next version (R-8).</p>}
+                <QuoteLines q={q} db={db} writable={st.writable} />
+              </div>
+            ),
+          },
+          { id: "eto", label: "ETO configuration", content: <QuoteEto q={q} db={db} /> },
+          { id: "margin", label: "Cost and margin", content: <QuoteMargin q={q} db={db} /> },
+          { id: "versions", label: "Versions", content: <QuoteVersions q={q} db={db} /> },
+          { id: "winloss", label: "Win and loss", content: <QuoteWinLoss q={q} db={db} onLoss={() => setLossOpen(true)} onWin={win} /> },
+          { id: "activity", label: "Activity", content: <ActivityList items={q.activity} /> },
+        ]}
       />
-      {error && (
-        <div className="mb-4">
-          <ErrorAlert title="Action not done" onDismiss={() => setError(null)}>
-            {error}
-          </ErrorAlert>
-        </div>
-      )}
-      <dl className="mb-6 grid grid-cols-3 gap-4">
-        <KV k="Valid until">{q.validUntil}</KV>
-        <KV k="Version">V{q.version}</KV>
-        <KV k="Total">
-          <span className="tabular">{money(quoteValue(q), c.currency)}</span>
-        </KV>
-        <KV k="Version chain">
-          {q.predecessor && (
-            <>
-              Predecessor <Link className="text-link underline" to={`/sales/quotations/${q.predecessor}`}>{q.predecessor}</Link>{" "}
-            </>
-          )}
-          {q.successor && (
-            <>
-              Successor <Link className="text-link underline" to={`/sales/quotations/${q.successor}`}>{q.successor}</Link>
-            </>
-          )}
-          {!q.predecessor && !q.successor && "Single version"}
-        </KV>
-        <KV k="Order cross-reference">{q.orderRef ? <Link className="text-link underline" to={`/sales/orders/${q.orderRef}`}>{q.orderRef} (quotation locked)</Link> : "None"}</KV>
-        {q.lossReason && <KV k="Loss reason">{q.lossReason}</KV>}
-      </dl>
-      {locked && q.status === "Issued" && <p className="mb-2 text-sm text-muted-foreground">Issued content is locked. No Edit; use Revise to create the next version (R-8).</p>}
-      <h2 className="mb-2 font-semibold">Lines</h2>
-      <Table>
-        <TableHeader className="bg-table-head">
-          <TableRow className="h-8">
-            <TableHead>Line</TableHead>
-            <TableHead>Item</TableHead>
-            <TableHead>kVA rating</TableHead>
-            <TableHead>Primary – secondary voltage</TableHead>
-            <TableHead className="text-right">Qty</TableHead>
-            <TableHead className="text-right">Unit price</TableHead>
-            <TableHead className="text-right">Line value</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {q.lines.map((l) => {
-            const p = product(l.item)
-            return (
-              <TableRow key={l.no} className="h-8 text-[13px]">
-                <TableCell className="tabular">{l.no}</TableCell>
-                <TableCell>
-                  {l.item}
-                  <div className="text-xs text-muted-foreground">{p.description}</div>
-                </TableCell>
-                <TableCell className="tabular">{p.kva}</TableCell>
-                <TableCell>{p.voltages}</TableCell>
-                <TableCell className="tabular text-right">{l.qty}</TableCell>
-                <TableCell className="tabular text-right">{money(l.price, c.currency)}</TableCell>
-                <TableCell className="tabular text-right">{money(l.price * l.qty, c.currency)}</TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
-      <h2 className="mt-6 mb-2 font-semibold">Activity</h2>
-      <ul className="space-y-1 text-sm">
-        {[...q.activity].reverse().map((a, i) => (
-          <li key={i}>
-            <span className="tabular text-muted-foreground">{a.at}</span> · {a.by} · {a.text}
-          </li>
-        ))}
-      </ul>
-      <Dialog open={lossOpen} onOpenChange={setLossOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Record loss</DialogTitle>
-            <DialogDescription>A loss reason is required.</DialogDescription>
-          </DialogHeader>
-          <Label htmlFor="lossReason">Loss reason</Label>
-          <Input id="lossReason" value={reason} aria-invalid={!!lossErr} aria-describedby={lossErr ? "lossErr" : undefined} onChange={(e) => setReason(e.target.value)} />
-          {lossErr && (
-            <p id="lossErr" className="text-sm text-destructive">
-              {lossErr}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setLossOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                const r = actions.recordLoss(q.id, reason)
-                if (!r.ok) setLossErr(r.error)
-                else setLossOpen(false)
-              }}
-            >
-              Record loss
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {ext.type === "Budgetary" && <div className="mt-4"><BudgetaryBanner /></div>}
+      <LossDialog q={q} open={lossOpen} onOpenChange={setLossOpen} />
+      <QuoteToOrderDialog qt={q} open={convOpen} onOpenChange={setConvOpen} />
       <RulesPanel
         rules={[
           ["R-8", "Convert to order only from Won; prices copied and frozen, Price Source = Quotation; Issued quote content is locked (Revise only).", "DOC:p.51 §3.3"],
           ["R-1", "Credit check runs at quote-to-order conversion (result recorded on the order).", "DOC:p.49 §2.2"],
           ["R-23", "Detail header carries a status badge and a lifecycle strip.", "DOC:p.242 §10.2"],
+          ["QT-1", "Quote type: Budgetary (±25%, watermarked BUDGETARY, no ATP) or Firm (binding, full costing); a Firm ETO quote needs a linked cost estimate.", "DOC:p.50 §3.1"],
+          ["QT-2", "A loss reason is mandatory when the status goes to Lost: Price, Lead Time, Technical, Relationship, No-Bid, Other with notes.", "DOC:p.50 §3.1"],
+          ["QT-3", "Commodity surcharge lines show index, base, date and the math; margin below target needs estimator and pricing approval, below floor routes to the Pricing Manager, Sales Director and CFO.", "DOC:p.122 §6.3-6.4"],
         ]}
       />
-    </div>
+    </>
   )
 }

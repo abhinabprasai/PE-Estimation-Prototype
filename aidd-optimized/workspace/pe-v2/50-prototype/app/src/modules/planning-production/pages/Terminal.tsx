@@ -18,10 +18,12 @@ import type { User } from "@/data/domain"
 import { store, useMutate, useSlice, type MutateCtx } from "@/store"
 import { BodyState, matDesc, qty, useScreenState, Marker } from "../components"
 import * as act from "../lib/actions"
+import * as ext from "../lib/actions-ext"
+import { CaptureEntry, OvenBatch } from "../widgets/KioskViews"
 import { allWorkCenters, laborRateOf, ohRateOf, opHours } from "../lib/plan"
 import type { PPOperation, PPWorkOrder, PlanningProductionState } from "../data/types"
 
-type Mode = "work" | "install-parent" | "install-child" | "complete-scan" | "complete-qty" | "hold"
+type Mode = "work" | "install-parent" | "install-child" | "complete-scan" | "complete-qty" | "hold" | "nameplate"
 type Pending = { text: string; fn: (d: PlanningProductionState, c: MutateCtx) => unknown }
 const stdOf = (id: string) => MATERIALS.find((m) => m.id === id)?.stdCost ?? 0
 const FLOOR_ROLES = ["Operator", "Production supervisor", "Test technician"]
@@ -81,6 +83,7 @@ export function ShopFloorTerminal() {
   const [form, setForm] = useState({ good: "", scrap: "0", rework: "0", hours: "", scrapReason: "" })
   const [addingCrew, setAddingCrew] = useState(false)
   const [lastCode, setLastCode] = useState("")
+  const [batchOpen, setBatchOpen] = useState(false)
 
   const queue = useMemo(() => (wc ? act.wcQueue(s, wc) : []), [s, wc])
   const cur = sel ? queue.find((x) => `${x.wo.id}/${x.op.no}` === sel) ?? (() => {
@@ -185,14 +188,16 @@ export function ShopFloorTerminal() {
   if (!cur) {
     const actions: KioskAction[] = [
       { label: "Open next operation", primary: true, disabled: !queue.length, onClick: () => queue[0] && (setSel(`${queue[0].wo.id}/${queue[0].op.no}`), setMode("work")) },
+      ...(station.batchResource ? [{ label: batchOpen ? "Back to queue" : "Oven load (batch)", onClick: () => setBatchOpen((v) => !v) }] : []),
       { label: "Add crew member", onClick: () => setAddingCrew(true) },
       { label: online ? "Simulate offline" : "Reconnect and replay", onClick: () => (online ? setOnline(false) : goOnline()) },
       { label: "Log out", onClick: () => (setOperator(null), setCrew([])) },
     ]
     return (
       <KioskPage {...header} banners={banners} actions={actions}>
-        <h2 className="text-xl font-semibold">Queue at {station.id} ({queue.length})</h2>
-        <ul className="flex flex-col gap-2">
+        <h2 className="text-xl font-semibold">{batchOpen ? `Oven load at ${station.id}` : `Queue at ${station.id} (${queue.length})`}</h2>
+        {batchOpen && <OvenBatch s={s} wcId={station.id} crewIds={crewIds} exec={exec} notify={(kind, text) => setBanner({ kind, text })} />}
+        <ul className={batchOpen ? "hidden" : "flex flex-col gap-2"}>
           {queue.map(({ wo, op }) => {
             const ready = op.staged || op.components.every((c) => c.issue === "backflush" || c.issued >= c.qtyPerUnit * wo.qty)
             const lock = op.status === "Not Started" ? lockOf(op) : null
@@ -247,6 +252,15 @@ export function ShopFloorTerminal() {
       const r = exec(`Start ${key}`, (d, c) => act.startOp(d, c, wo.id, op.no, crewIds))
       return r.ok ? { ok: true, message: `op ${op.no} In Progress; labor clock on for ${crewIds.length} (SP-10)` } : { ok: false, expected: key, next: "See the message", message: r.error }
     }
+    if (mode === "nameplate") {
+      const left = ext.nameplateRemaining(wo, op)
+      const r = exec(`Nameplate ${code} at ${key}`, (d, c) => ext.verifyNameplate(d, c, wo.id, op.no, code))
+      if (r.ok) {
+        if (left.length <= 1) setMode("work")
+        return { ok: true, message: left.length > 1 ? `plate matches ${code}; ${left.length - 1} unit(s) left` : "every nameplate verified (SP-13)" }
+      }
+      return { ok: false, errorCode: r.field === "E-BC-06" ? "E-BC-06" : undefined, expected: `the nameplate serial of ${wo.id}: ${left.slice(0, 3).join(", ")}`, next: "Check the plate against the order. A wrong plate stops the line: call the supervisor", message: r.error }
+    }
     if (mode === "work") return issue(code)
     if (mode === "install-parent") {
       if (!wo.serials.includes(code as never)) return { ok: false, errorCode: "E-BC-05", expected: `parent serial ${wo.serials.join(" or ")}`, next: "Scan the nameplate serial of this unit", message: `${code} is not this order's serial` }
@@ -284,12 +298,13 @@ export function ShopFloorTerminal() {
     back()
   }
 
-  const scanPoint = op.status === "Not Started" || mode === "complete-scan" ? (mode === "complete-scan" ? "SP-11" : "SP-10") : mode.startsWith("install") ? "SP-12" : "SP-08"
+  const scanPoint = op.status === "Not Started" || mode === "complete-scan" ? (mode === "complete-scan" ? "SP-11" : "SP-10") : mode.startsWith("install") ? "SP-12" : mode === "nameplate" ? "SP-13" : "SP-08"
   const expected =
     op.status === "Not Started" ? `Scan the traveler op barcode ${key}` :
     mode === "install-parent" ? `Scan the parent serial (${wo.serials.join(", ")})` :
     mode === "install-child" ? `Scan the child serial (${serialComps.map((c) => c.materialId).join(", ")})` :
     mode === "complete-scan" ? `Scan ${key} again to complete` :
+    mode === "nameplate" ? `Scan the nameplate serial: ${ext.nameplateRemaining(wo, op).slice(0, 3).join(", ")}` :
     `Scan a component label: ${op.components.filter((c) => c.issue === "manual").map((c) => c.materialId).join(", ") || "no scan-issued components"}`
   const showScan = mode !== "complete-qty" && mode !== "hold" && wo.status !== "On Hold"
   const qcWaiting = !!op.qcGate && op.inspection?.result !== "Passed" && op.inspection?.result !== "Conditional pass"
@@ -311,6 +326,7 @@ export function ShopFloorTerminal() {
           : [
               { label: mode === "complete-scan" ? "Waiting for SP-11 scan" : "Complete operation", primary: true, disabled: mode === "complete-scan" || qcWaiting || wo.status === "On Hold", onClick: () => setMode("complete-scan") },
               ...(op.qcGate ? [{ label: op.inspection && !op.inspection.result ? `Inspection ${op.inspection.id} pending` : op.inspection?.result === "Passed" ? "Inspection passed" : op.inspection?.result === "Conditional pass" ? "Conditional pass" : "Request inspection", disabled: !!op.inspection && op.inspection.result !== "Failed", onClick: () => { const r = exec(`Request inspection ${key}`, (d, c) => act.requestInspection(d, c, wo.id, op.no)); setBanner(r.ok ? { kind: "info", text: "Inspection requested; Complete stays disabled until the result is posted." } : { kind: "error", text: r.error }) } }] : []),
+              ...(ext.needsNameplate(op) ? [{ label: mode === "nameplate" ? "Cancel nameplate check" : `Verify nameplate (SP-13)${ext.nameplateRemaining(wo, op).length ? "" : ": done"}`, disabled: !ext.nameplateRemaining(wo, op).length && mode !== "nameplate", onClick: () => setMode(mode === "nameplate" ? "work" : "nameplate") }] : []),
               ...(serialComps.length ? [{ label: mode.startsWith("install") ? "Cancel install" : "Install serial (SP-12)", onClick: () => (setMode(mode.startsWith("install") ? "work" : "install-parent"), setParent(null)) }] : []),
               { label: op.andon ? "Clear hold" : "Hold / Andon", onClick: () => (op.andon ? (exec(`Clear andon ${key}`, (d, c) => act.clearAndon(d, c, wo.id, op.no)), undefined) : setMode("hold")) },
               { label: "Back to queue", onClick: back },
@@ -375,17 +391,28 @@ export function ShopFloorTerminal() {
               )
             })}
           </section>
-          {op.captureTemplate && (
-            <section aria-label="Data capture" className="flex flex-col gap-2">
-              <h3 className="text-lg font-semibold">Data capture</h3>
-              <div className="grid grid-cols-3 gap-4">
-                {op.captureTemplate.map((f) => (
-                  <span key={f} className="grid gap-1">
-                    <Label htmlFor={`cap-${f}`} className="text-base">{f}</Label>
-                    <Input id={`cap-${f}`} className="h-12 text-base" defaultValue={op.capture?.[f] ?? ""} onBlur={(e) => e.target.value !== (op.capture?.[f] ?? "") && exec(`Capture ${f}`, (d, c) => act.captureValue(d, c, wo.id, op.no, f, e.target.value))} />
-                  </span>
-                ))}
-              </div>
+          {(() => {
+            const tpl = ext.publishedTemplateFor(s, op.workCenterId)
+            if (tpl) return <CaptureEntry template={tpl} values={op.capture} onSet={(label, value) => { const r = exec(`Capture ${label}`, (d, c) => ext.captureField(d, c, wo.id, op.no, label, value)); return r.ok ? null : r.error }} />
+            return op.captureTemplate ? (
+              <section aria-label="Data capture" className="flex flex-col gap-2">
+                <h3 className="text-lg font-semibold">Data capture</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  {op.captureTemplate.map((f) => (
+                    <span key={f} className="grid gap-1">
+                      <Label htmlFor={`cap-${f}`} className="text-base">{f}</Label>
+                      <Input id={`cap-${f}`} className="h-12 text-base" defaultValue={op.capture?.[f] ?? ""} onBlur={(e) => e.target.value !== (op.capture?.[f] ?? "") && exec(`Capture ${f}`, (d, c) => act.captureValue(d, c, wo.id, op.no, f, e.target.value))} />
+                    </span>
+                  ))}
+                </div>
+              </section>
+            ) : null
+          })()}
+          {ext.needsNameplate(op) && (
+            <section aria-label="Nameplate verification" className="flex flex-col gap-2 rounded-md border p-4">
+              <h3 className="text-lg font-semibold">Nameplate verification <span className="font-mono text-sm font-normal">SP-13</span></h3>
+              <p className="text-base">{ext.nameplateRemaining(wo, op).length ? `Scan each unit's nameplate before Complete: ${ext.verifiedSerials(op).length} of ${wo.serials.length} verified. A plate that does not match the order serial stops with E-BC-06.` : `All ${wo.serials.length} nameplate(s) match the order serial.`}</p>
+              {ext.verifiedSerials(op).length > 0 && <p className="font-mono text-sm text-muted-foreground">{ext.verifiedSerials(op).join(", ")}</p>}
             </section>
           )}
           {op.qcGate && <p className="text-base">QC gate: {op.qcGate}. {op.inspection ? `${op.inspection.id} ${op.inspection.result ?? "waiting for result"}${op.inspection.restriction ? `. Restriction: ${op.inspection.restriction}` : ""}` : "Request the inspection; Complete is disabled until the result is posted."}</p>}

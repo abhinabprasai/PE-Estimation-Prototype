@@ -11,6 +11,19 @@ import { FinalTestDetail, FinalTestList } from "./pages/FinalTest"
 import { InspectionDetail, InspectionQueues } from "./pages/Inspections"
 import { PlanDetail, PlanList } from "./pages/Plans"
 import { RecallDetail, RecallWorkbench } from "./pages/Recalls"
+import { AsBuiltDetail, AsBuiltList } from "./pages/AsBuilt"
+import { AuditDetail, AuditList } from "./pages/Audits"
+import { CameraScan } from "./pages/CameraScan"
+import { GenealogyCorrection } from "./pages/GenealogyCorrection"
+import { Relabel } from "./pages/Relabel"
+import { ReprintGovernance } from "./pages/ReprintGovernance"
+import { RoutineTests } from "./pages/RoutineTests"
+import { SamplingState } from "./pages/Sampling"
+import { ScanExceptionQueue } from "./pages/ScanExceptions"
+import { ScarVendorResponse } from "./pages/ScarResponse"
+import { SpcCharts } from "./pages/Spc"
+import { StockStatusMoves } from "./pages/StockStatus"
+import { TestImport } from "./pages/TestImport"
 import { TraceDashboard } from "./pages/TraceDashboard"
 import { TraceExplorer } from "./pages/TraceExplorer"
 
@@ -34,6 +47,22 @@ export const routes: ModuleRoute[] = [
   { path: "/traceability/explorer", element: <TraceExplorer />, screenId: "TRC-EXPL" },
   { path: "/traceability/completeness", element: <TraceDashboard />, screenId: "TRC-DASH" },
   { path: "/configuration/barcode", element: <BarcodeAdmin />, screenId: "BC-ADMIN" },
+  // feature-list screens (routes are design values)
+  { path: "/configuration/barcode/scan-exceptions", element: <ScanExceptionQueue />, screenId: "FX-BC-EXCEPTIONS" },
+  { path: "/configuration/barcode/reprint", element: <ReprintGovernance />, screenId: "FX-BC-REPRINT" },
+  { path: "/mobile/relabel", element: <Relabel />, layout: "kiosk", screenId: "FX-BC-RELABEL" },
+  { path: "/mobile/camera-scan", element: <CameraScan />, layout: "kiosk", screenId: "FX-BC-CAMERA" },
+  { path: "/quality/sampling", element: <SamplingState />, screenId: "FX-QM-SAMPLING" },
+  { path: "/quality/stock-status", element: <StockStatusMoves />, screenId: "FX-QM-INVALIGN" },
+  { path: "/quality/test-import", element: <TestImport />, screenId: "FX-QM-TESTIMPORT" },
+  { path: "/quality/routine-tests", element: <RoutineTests />, screenId: "FX-QM-ROUTINE" },
+  { path: "/quality/scar-response", element: <ScarVendorResponse />, screenId: "FX-QM-SCARRESP" },
+  { path: "/quality/spc", element: <SpcCharts />, screenId: "FX-QM-SPC" },
+  { path: "/quality/audits", element: <AuditList />, screenId: "FX-QM-AUDIT" },
+  { path: "/quality/audits/:id", element: <AuditDetail />, screenId: "FX-QM-AUDIT" },
+  { path: "/traceability/as-built", element: <AsBuiltList />, screenId: "FX-TRC-ASBUILT" },
+  { path: "/traceability/as-built/:id", element: <AsBuiltDetail />, screenId: "FX-TRC-ASBUILT" },
+  { path: "/traceability/genealogy-correction", element: <GenealogyCorrection />, screenId: "FX-TRC-CORRECTION" },
 ]
 
 /** Extra sidebar entries (the registry already lists every screen of this group). */
@@ -52,4 +81,17 @@ export const built: Partial<Record<string, Built>> = {
   "TRC-EXPL": "full",
   "TRC-DASH": "full",
   "BC-ADMIN": "full",
+  "FX-BC-EXCEPTIONS": "full",
+  "FX-BC-REPRINT": "full",
+  "FX-BC-RELABEL": "full",
+  "FX-BC-CAMERA": "full",
+  "FX-QM-SAMPLING": "full",
+  "FX-QM-INVALIGN": "full",
+  "FX-QM-TESTIMPORT": "full",
+  "FX-QM-ROUTINE": "full",
+  "FX-QM-SCARRESP": "full",
+  "FX-QM-SPC": "full",
+  "FX-QM-AUDIT": "full",
+  "FX-TRC-ASBUILT": "full",
+  "FX-TRC-CORRECTION": "full",
 }

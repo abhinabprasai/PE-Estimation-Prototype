@@ -75,22 +75,27 @@ export function isoWeek(d: ISODate): number {
 export const weekLabel = (d: ISODate) => `W${String(isoWeek(d)).padStart(2, "0")}`
 
 // ------------------------------------------------------------------ work centers (shared + own records)
-export type EffectiveWc = LocalWorkCenter & WcOverride
-export function allWorkCenters(s: Pick<PlanningProductionState, "workCenters" | "wc">): EffectiveWc[] {
+/** Scheduling constraints that read the maintenance calendar (FX-PLN-CONSTRAINTS): a Scheduled or
+ *  In progress window removes the whole work center from the plan for its days. */
+export type WcInputs = Pick<PlanningProductionState, "workCenters" | "wc"> & { maintWindows?: PlanningProductionState["maintWindows"] }
+export type EffectiveWc = LocalWorkCenter & WcOverride & { windows?: [ISODate, ISODate][] }
+export function allWorkCenters(s: WcInputs): EffectiveWc[] {
   const base: LocalWorkCenter[] = [...WORK_CENTERS, ...s.workCenters]
   return base.map((w) => {
     const o = s.wc[w.id]
-    return { ...w, ...o, status: o?.status ?? w.status } as EffectiveWc
+    const windows = (s.maintWindows ?? []).filter((m) => m.wcId === w.id && (m.status === "Scheduled" || m.status === "In progress")).map((m) => [m.from, m.to] as [ISODate, ISODate])
+    return { ...w, ...o, status: o?.status ?? w.status, windows } as EffectiveWc
   })
 }
-export const wcById = (s: Pick<PlanningProductionState, "workCenters" | "wc">, id: string) => allWorkCenters(s).find((w) => w.id === id)
+export const wcById = (s: WcInputs, id: string) => allWorkCenters(s).find((w) => w.id === id)
 
 /** Hours a work center can load on one working day: shifts x hours x stations x efficiency. */
 export function dailyCapacity(w: EffectiveWc, day: ISODate): number {
   if (!isWorkday(day)) return 0
   if (w.status === "Inactive") return 0
   if (w.status === "Maintenance" && (!w.maintenanceUntil || day <= w.maintenanceUntil)) return 0
-  return (w.shifts * w.hoursPerShift * w.stations * w.efficiencyPct) / 100
+  if (w.windows?.some(([a, b]) => day >= a && day <= b)) return 0
+  return (w.shifts * w.hoursPerShift * w.stations * w.efficiencyPct) / 100 + (w.extraHoursPerDay ?? 0)
 }
 
 export const opHours = (op: Pick<PPOperation, "setupHours" | "runHours">) => op.setupHours + op.runHours
@@ -114,7 +119,7 @@ export const modeOf = (o: Pick<PPWorkOrder, "scheduleMode" | "dueDate">) => (o.s
 
 /** Finite scheduler. `extra` lets CTP insert a hypothetical order (no due date: forward, earliest). */
 export function schedule(
-  s: Pick<PlanningProductionState, "productionOrders" | "workCenters" | "wc">,
+  s: Pick<PlanningProductionState, "productionOrders" | "workCenters" | "wc"> & { maintWindows?: PlanningProductionState["maintWindows"] },
   notBefore: Record<string, ISODate> = {},
   extra: PPWorkOrder[] = [],
   from: ISODate = TODAY,

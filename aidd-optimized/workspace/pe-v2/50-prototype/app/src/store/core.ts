@@ -54,6 +54,8 @@ export interface SliceDef<K extends keyof SliceStates> {
   seed: () => SliceStates[K]
   /** Subscribe to other modules' events. Called once after every slice is registered. */
   subscribe?: (api: StoreApi) => void
+  /** Re-run start-up work that raises approvals or other core state (the reset wipes the shared engine). Called after Scenario reset. */
+  afterReset?: (api: StoreApi) => void
   /** Global search provider over this slice's documents. */
   search?: (state: SliceStates[K]) => SearchHit[]
   /** Document links derived from this slice's records (in addition to SPINE_LINKS and runtime links). */
@@ -90,7 +92,7 @@ function seedCore(): CoreState {
     role: "Sales rep",
     userId: defaultUserFor("Sales rep").id,
     links: [],
-    seq: 100,
+    seq: 200, // above every seeded APR-TBD-01xx id (purchasing R-2)
     approvals: [
       mkRequest("APR-TBD-0101", "Long-lead release", { type: "llr", id: "LLR-2026-0011" }, "LLR-2026-0011 CRGO steel and 3 OLTCs, phase 2", 612000, "Engineering Manager", "2026-09-30", { riskClass: "Medium" }),
       mkRequest("APR-TBD-0102", "PO approval", { type: "purchaseOrder", id: "PO-TBD-0377" }, "PO-TBD-0377 Northstar Electrical Steel, CRGO 54,000 kg", 207900, "Buyer", "2026-10-05"),
@@ -255,6 +257,7 @@ class RootStore {
     const { role, userId } = this.core
     this.core = { ...seedCore(), role, userId }
     this.bump()
+    for (const d of this.defs.values()) d.afterReset?.(this.api)
   }
 
   private bump() {

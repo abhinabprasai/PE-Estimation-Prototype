@@ -14,10 +14,10 @@ import { THRESHOLDS, type VendorId } from "@/data/domain"
 import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { useSlice } from "@/store"
 import { expedite, groupIntoPos, startRfq } from "../data/actions"
-import { allAvl, businessDaysBetween, isUnconfirmedOverdue, itemText, poTotal, prTotal, vendorEligibility, vendorName, vendorOf } from "../data/logic"
+import { allAvl, allVendors, businessDaysBetween, isQiCritical, isUnconfirmedOverdue, itemText, poTotal, prTotal, vendorEligibility, vendorName, vendorOf } from "../data/logic"
 import type { MrpException } from "../data/types"
 import { DocLink, Reading, report, Section, useDemoState } from "../components/common"
-import { ItemLink, SelectField, userName } from "../components/bits"
+import { ItemLink, SelectField, TextField, userName } from "../components/bits"
 import { TODAY } from "@/data/shared"
 import { ExpediteFields } from "./PurchaseOrders"
 
@@ -50,14 +50,18 @@ export function BuyerWorkbench() {
   const [buyer, setBuyer] = useState("all")
   const [active, setActive] = useState<string | null>(sp.get("pr"))
   const [vendorFor, setVendorFor] = useState<Record<string, VendorId>>({})
+  const [why, setWhy] = useState<Record<string, string>>({})
   const mine = (b: string) => buyer === "all" || b === buyer
 
   const all = useMemo<Row[]>(() => {
     const out: Row[] = []
     for (const r of s.requisitions) {
       if ((r.status === "Approved" || r.status === "Open" || r.status === "In Approval") && !r.poIds.length) {
-        const gap = !r.suggestedVendorId || !allAvl(s).some((a) => r.lines.some((l) => l.itemId === a.itemId) && a.status !== "Suspended")
-        const row: Row = { id: r.id, queue: gap ? "gaps" : "prs", doc: { type: "requisition", id: r.id }, itemId: r.lines[0]?.itemId ?? "", text: r.title, value: prTotal(r.lines), date: r.lines[0]?.needBy, vendorId: r.suggestedVendorId, status: { kind: "requisition", value: r.status }, buyerId: r.buyerId }
+        // E-PUR-02 is a hard block for QI-critical items only (a Qualified AVL vendor is needed); any other item with no
+        // valid source is flagged EX-09 "no valid source of supply" and the buyer starts an RFQ or picks an eligible vendor.
+        const qi = r.lines.some((l) => isQiCritical(l.itemId))
+        const gap = qi ? !allAvl(s).some((a) => r.lines.some((l) => l.itemId === a.itemId) && a.status === "Qualified") : !r.suggestedVendorId || !allAvl(s).some((a) => r.lines.some((l) => l.itemId === a.itemId) && a.status !== "Suspended")
+        const row: Row = { id: r.id, flag: gap ? (qi ? "E-PUR-02" : "EX-09") : undefined, queue: gap ? "gaps" : "prs", doc: { type: "requisition", id: r.id }, itemId: r.lines[0]?.itemId ?? "", text: r.title, value: prTotal(r.lines), date: r.lines[0]?.needBy, vendorId: r.suggestedVendorId, status: { kind: "requisition", value: r.status }, buyerId: r.buyerId }
         if (row.value > THRESHOLDS.rfqRequiredAbove && !r.rfqId) {
           const avl = allAvl(s).find((a) => a.vendorId === r.suggestedVendorId && r.lines.some((l) => l.itemId === a.itemId))
           if (!avl || !/info record|contract|award/i.test(avl.priceBasis)) row.flag = "RFQ by policy"
@@ -112,7 +116,7 @@ export function BuyerWorkbench() {
         { label: "Requisitions to source", value: count("prs"), hint: "Approved or awaiting approval, no PO yet" },
         { label: "MRP exceptions (buy items)", value: count("exceptions"), hint: "EX-01, EX-02, EX-03, EX-06" },
         { label: "Unconfirmed POs", value: all.filter((r) => r.queue === "unconfirmed" && r.flag && mine(r.buyerId)).length, hint: `Sent more than ${THRESHOLDS.unconfirmedPoBusinessDays} business days` },
-        { label: "Source gaps", value: count("gaps"), hint: "No AVL source (E-PUR-02)" },
+        { label: "Source gaps", value: count("gaps"), hint: "E-PUR-02 for QI-critical items, EX-09 otherwise" },
       ]}
       queues={[
         { id: "prs", label: "Requisition queue", count: count("prs") },
@@ -141,7 +145,7 @@ export function BuyerWorkbench() {
                 <Button
                   size="sm"
                   onClick={() => {
-                    const r = groupIntoPos(sel, vendorFor)
+                    const r = groupIntoPos(sel, vendorFor, why)
                     report(r, (ids) => `${ids.length} draft PO(s) created: ${ids.join(", ")}`)
                     if (r.ok) {
                       clear()
@@ -191,22 +195,38 @@ export function BuyerWorkbench() {
                   .sort((a, b) => a.rank - b.rank)
                   .map((a) => {
                     const el = vendorEligibility(vendorOf(s, a.vendorId))
+                    const qiBlock = isQiCritical(a.itemId) && a.status !== "Qualified"
                     return (
                       <label key={a.id} className="flex items-center gap-2 text-sm">
-                        <input type="radio" name="src" checked={(vendorFor[pr.id] ?? pr.suggestedVendorId) === a.vendorId} onChange={() => setVendorFor({ ...vendorFor, [pr.id]: a.vendorId })} disabled={a.status === "Suspended" || !el.ok} />
+                        <input type="radio" name="src" checked={(vendorFor[pr.id] ?? pr.suggestedVendorId) === a.vendorId} onChange={() => setVendorFor({ ...vendorFor, [pr.id]: a.vendorId })} disabled={a.status === "Suspended" || !el.ok || qiBlock} />
                         #{a.rank} {vendorName(s, a.vendorId)} <StatusBadge kind="avl" status={a.status} size="sm" /> <span className="text-xs text-muted-foreground">{a.priceBasis}</span>
                         {!el.ok && <Chip kind="block">{vendorOf(s, a.vendorId)?.onboarding !== "Active" ? "Not Active" : "Disqualified"}</Chip>}
                         {el.needsOverride && <Chip kind="flag">Restricted</Chip>}
+                        {qiBlock && <Chip kind="block">E-PUR-02: not Qualified</Chip>}
                       </label>
                     )
                   })}
-                {!allAvl(s).some((a) => pr.lines.some((l) => l.itemId === a.itemId)) && <p className="text-sm">No AVL source for {pr.lines[0]?.itemId}: start an RFQ with prospects or AVL qualification (E-PUR-02).</p>}
+                {!pr.lines.some((l) => isQiCritical(l.itemId)) && (
+                  <SelectField
+                    id="src-other"
+                    label="Another eligible vendor (no AVL row)"
+                    value={vendorFor[pr.id] && !allAvl(s).some((a) => a.vendorId === vendorFor[pr.id] && pr.lines.some((l) => l.itemId === a.itemId)) ? vendorFor[pr.id] : ""}
+                    onChange={(v) => setVendorFor({ ...vendorFor, [pr.id]: v as VendorId })}
+                    options={allVendors(s).filter((v) => vendorEligibility(v).ok && !allAvl(s).some((a) => a.vendorId === v.id && pr.lines.some((l) => l.itemId === a.itemId))).map((v) => ({ value: v.id, label: `${v.id} ${v.name}` }))}
+                  />
+                )}
+                {pr.suggestedVendorId && vendorFor[pr.id] && vendorFor[pr.id] !== pr.suggestedVendorId && (
+                  <TextField id="src-why" label={`Reason for overriding the proposed source ${pr.suggestedVendorId} (logged)`} value={why[pr.id] ?? ""} onChange={(v) => setWhy({ ...why, [pr.id]: v })} />
+                )}
+                {!allAvl(s).some((a) => pr.lines.some((l) => l.itemId === a.itemId)) && <p className="text-sm">
+                    No AVL source for {pr.lines[0]?.itemId}: {isQiCritical(pr.lines[0]?.itemId) ? "start AVL qualification or an RFQ (E-PUR-02, QI-critical item)" : "no valid source of supply (EX-09): pick an eligible vendor above or start an RFQ"}. <Reading id="OQ-PF-18" />
+                  </p>}
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     disabled={pr.status !== "Approved"}
                     onClick={() => {
-                      const r = groupIntoPos([pr.id], vendorFor)
+                      const r = groupIntoPos([pr.id], vendorFor, why)
                       report(r, (ids) => `${ids.join(", ")} created`)
                       if (r.ok) nav(`/purchasing/orders/${r.value[0]}`)
                     }}

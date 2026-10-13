@@ -1,5 +1,6 @@
 // Read-only derivations shared by the quality-trace screens.
 import { daysBetween } from "@/lib/format"
+import { businessDaysBetween } from "./intake"
 import type { InspectionLot, PlanRevision, QtCharacteristic, QtPlan, ResultRow } from "./types"
 
 interface HasPlans {
@@ -38,5 +39,12 @@ export const fmtBounds = (c: QtCharacteristic) => {
   return c.parameter
 }
 
+/** Value impact above which the Controller also approves a deviation: the specification gives no number (reading QT-R27). */
+export const DEV_CONTROLLER_THRESHOLD = 10_000
+export const devApprovers = (d: { valueImpact?: number }): ("Quality Manager" | "Engineering Manager" | "Controller")[] => ["Quality Manager", "Engineering Manager", ...((d.valueImpact ?? 0) > DEV_CONTROLLER_THRESHOLD ? (["Controller"] as const) : [])]
+export const devNeedsCustomer = (d: { customerRequired?: boolean; type: string }) => !!d.customerRequired || d.type === "Customer-Approved Concession"
+
 export const lotAge = (l: InspectionLot, today: string) => daysBetween(l.createdOn, today)
-export const lotOverdue = (l: InspectionLot, today: string) => !l.decision && lotAge(l, today) > l.slaDays
+/** RQC counts 5 business days from receipt to inspection [DOC:pp.26-27 §3.8]; the other gates count calendar days (reading QT-R03). */
+export const lotSlaAge = (l: InspectionLot, today: string) => (l.gate === "RQC" ? businessDaysBetween(l.createdOn, today) : lotAge(l, today))
+export const lotOverdue = (l: InspectionLot, today: string) => !l.decision && lotSlaAge(l, today) > l.slaDays

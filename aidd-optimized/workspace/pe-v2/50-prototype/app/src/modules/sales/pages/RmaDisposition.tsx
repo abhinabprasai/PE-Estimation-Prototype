@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/patterns/status"
 import type { PostingLine } from "@/data/domain"
 import { useCore, useRole, useSlice } from "@/store"
 import { listDate, money, product } from "../data/model"
-import { ATTRIBUTABLE, DISPOSITIONS, EXCLUSIONS, TEARDOWN_ITEMS, type Attributable, type Disposition, type Rma, type RmaLine } from "../data/ext-model"
+import { ATTRIBUTABLE, DISPOSITIONS, TEARDOWN_ITEMS, type Attributable, type Disposition, type Rma, type RmaLine } from "../data/ext-model"
 import { adjudicatorIsActor, attachInspectionPhoto, exclusionNeeded, goodwillValue, needsGoodwill, closeRma, convertDenialToBillable, createScar, decideDispositions, dispositionErrors, entitlement, ncrForced, proposeDispositions, retryStep, saveFindings, startInspection, userName as userNameOf, INSPECT_ROLES, type Findings } from "../data/ext-actions"
 import { A, ActivityList, Reading, RmaClassBadge, Section } from "../components/ext"
 
@@ -238,7 +238,7 @@ export function RmaDisposition() {
                           <SelectTrigger id="d-exc"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">None cited</SelectItem>
-                            {EXCLUSIONS.map((x) => <SelectItem key={x.code} value={x.code}>{x.code} {x.category}: {x.text}</SelectItem>)}
+                            {db.fx.exclusions.filter((x) => x.active || x.code === f.exclusion).map((x) => <SelectItem key={x.code} value={x.code}>{x.code} {x.category}: {x.text}</SelectItem>)}
                           </SelectContent>
                         </Select>
                         <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">

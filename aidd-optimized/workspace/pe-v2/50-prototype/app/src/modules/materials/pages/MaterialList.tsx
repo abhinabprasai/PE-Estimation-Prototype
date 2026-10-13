@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DialogShell, ListPage } from "@/components/templates"
-import { RulesPanel, type Column } from "@/components/patterns"
+import { Chip, RulesPanel, type Column } from "@/components/patterns"
 import type { Material, MaterialBlock } from "@/data/domain"
 import { USERS } from "@/data/shared"
 import { fmtMoney, fmtNumber } from "@/lib/format"
@@ -62,6 +62,9 @@ export function MaterialList() {
   const [role] = useRole()
   const me = useCore().userId
   const [block, setBlk] = useState<MaterialBlock>("Purchasing Block")
+  const [plant, setPlant] = useState("all")
+  const plantsOf = (id: string) => s.plantData.filter((p) => p.materialId === id)
+  const plantIds = [...new Set(s.plantData.map((p) => p.plantId))].sort()
   const rows = useMemo<Row[]>(
     () =>
       allMaterials(s).map((m) => {
@@ -79,7 +82,18 @@ export function MaterialList() {
     { id: "desc", header: "Description", value: (r) => r.description, sortable: true },
     { id: "status", header: "Lifecycle", value: (r) => r.status, filterable: true, sortable: true, cell: (r) => <MaterialStatus m={r} /> },
     { id: "group", header: "Material group", value: (r) => r.group, sortable: true, cell: (r) => <span className="text-xs">{r.group || "Not classified"}</span> },
-    { id: "plant", header: "Plant", value: () => "PL-TBD-01", cell: () => <span className="rounded-md border px-1 font-mono text-xs">PL-TBD-01</span> },
+    {
+      id: "plant", header: "Plants", value: (r) => plantsOf(r.id).map((p) => p.plantId).join(" "),
+      cell: (r) => (
+        <span className="flex flex-wrap gap-1">
+          {plantsOf(r.id).map((p) => (
+            <Chip key={p.plantId} kind="design" note={`Plant ${p.plantId}: ${p.status}, ${p.mrpType}, ${p.procurement}, lead time ${p.leadTimeDays} d`}>
+              {p.plantId}{p.status !== "Active" ? ` (${p.status})` : ""}
+            </Chip>
+          ))}
+        </span>
+      ),
+    },
     { id: "pct", header: "Completeness", value: (r) => r.pct, sortable: true, cell: (r) => <Completeness pct={r.pct} active={r.status === "Active"} /> },
     { id: "qty", header: "On hand", value: (r) => r.qty, sortable: true, align: "right", mono: true, cell: (r) => (r.qty ? `${fmtNumber(r.qty)} ${r.baseUom}` : "") },
     { id: "value", header: "Stock value", value: (r) => r.value, sortable: true, align: "right", mono: true, cell: (r) => (r.value ? fmtMoney(r.value) : "") },
@@ -91,7 +105,7 @@ export function MaterialList() {
   ]
   const ownsAny = rows.some((r) => r.steward === me || r.buyer === me || r.planner === me)
   const pillDef = PILLS.find((p) => p.id === pill)
-  const visible = st.empty ? [] : rows.filter((r) => (!pillDef || pillDef.test(s, r)) && (!mine || r.steward === me || r.buyer === me || r.planner === me))
+  const visible = st.empty ? [] : rows.filter((r) => (!pillDef || pillDef.test(s, r)) && (!mine || r.steward === me || r.buyer === me || r.planner === me) && (plant === "all" || plantsOf(r.id).some((p) => p.plantId === plant)))
   const applyBulk = (fn: (id: string) => { ok: boolean; error?: string }) => {
     const res = selected.map((id) => ({ id, r: fn(id) }))
     const bad = res.filter((x) => !x.r.ok)
@@ -136,6 +150,22 @@ export function MaterialList() {
                 My Materials
               </Button>
               <Reading id="RD-MM-24" />
+              <div className="flex items-center gap-2">
+                <Label htmlFor="ml-plant" className="text-xs">Plant</Label>
+                <Select value={plant} onValueChange={setPlant}>
+                  <SelectTrigger id="ml-plant" size="sm" className="h-8 w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All plants</SelectItem>
+                    {plantIds.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             {selected.length > 0 && (
               <div role="region" aria-label="Bulk actions" className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted px-4 py-2 text-sm">

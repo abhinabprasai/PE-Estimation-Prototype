@@ -17,7 +17,7 @@ import { useSlice } from "@/store"
 import { cn } from "@/lib/utils"
 import { traceOps } from "../data/actions"
 import { effectiveState, verifyChain } from "../data/chain"
-import { backward, countNodes, eventsFor, forward, resolveInput, MAX_DEPTH, type TraceNode } from "../data/trace"
+import { backward, countNodes, eventsFor, forward, resolveInput, treeDeviations, MAX_DEPTH, type TraceNode } from "../data/trace"
 import type { QtEvent } from "../data/types"
 import { DocLinkText, Reading, TextField, report, useDataState, userName } from "../components/bits"
 
@@ -59,6 +59,7 @@ export function TraceExplorer() {
   const all = tree ? rowsOf(tree) : []
   const rows = all.filter((r) => !r.parents.some((p) => collapsed.has(p)))
   const bad = useMemo(() => verifyChain(s.genealogy), [s.genealogy])
+  const devs = useMemo(() => (tree ? treeDeviations(s, tree) : []), [s, tree])
   const evCount = tree ? new Set(all.flatMap((r) => eventsFor(s, r.node.id).map((e) => e.id))).size : 0
   const toggle = (k: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(k)) n.delete(k); else n.add(k); return n })
 
@@ -81,7 +82,7 @@ export function TraceExplorer() {
     },
     { id: "sub", header: "Detail", value: (r) => r.node.sub ?? "", cell: (r) => <span className="text-muted-foreground">{r.node.sub}</span> },
     { id: "status", header: "Status", value: (r) => r.node.status?.value ?? "", cell: (r) => (r.node.status ? <StatusBadge kind={r.node.status.kind} status={r.node.status.value} size="sm" /> : null) },
-    { id: "note", header: "Link", value: (r) => r.node.note ?? "", cell: (r) => <span className="text-xs">{r.node.removed && <Chip kind="change">Removed</Chip>} {r.node.note}</span> },
+    { id: "note", header: "Link", value: (r) => r.node.note ?? "", cell: (r) => <span className="text-xs">{r.node.removed && <Chip kind="change">Removed</Chip>} {r.node.note} {r.node.deviations?.map((d) => <Chip key={d} kind="flag" note="Deviation applies to this record">{d}</Chip>)}</span> },
     { id: "ev", header: "Events", value: (r) => eventsFor(s, r.node.id).length, align: "right", mono: true },
     { id: "lvl", header: "Level", value: (r) => r.node.depth + 1, align: "right", mono: true },
   ]
@@ -134,6 +135,7 @@ export function TraceExplorer() {
                 { label: "Root", value: root.id, hint: root.via ? `matched by ${root.via}` : root.type },
                 { label: "Nodes", value: tree ? countNodes(tree) : 0, hint: `max ${MAX_DEPTH} levels` },
                 { label: "Events behind the tree", value: evCount },
+                { label: "Deviations disclosed", value: devs.length, hint: devs.length ? devs.map((d) => d.id).join(", ") : "none apply" },
                 { label: "Hash chain", value: bad.length ? `${bad.length} broken` : "Verified", hint: `${s.genealogy.length} events in the store` },
               ]
             : undefined
@@ -171,6 +173,20 @@ export function TraceExplorer() {
           content: active ? <Evidence id={active.node.id} events={eventsFor(s, active.node.id)} log={s.genealogy} bad={bad} /> : null,
         }}
       />
+      {devs.length > 0 && (
+        <section aria-label="Deviations disclosed" className="mt-4 rounded-lg border border-status-exception p-4">
+          <h2 className="mb-2 text-sm font-semibold">Deviations disclosed on this {dir === "backward" ? "as-built record" : "where-used record"}</h2>
+          <ul className="flex flex-col gap-1 text-sm">
+            {devs.map((d) => (
+              <li key={d.id}>
+                <DocLinkText r={{ type: "deviation", id: d.id }} /> · {d.type} · {d.characteristic}: {d.acceptedValue} accepted against {d.specValue} · {d.state}
+                {d.validUntil ? `, valid until ${d.validUntil}` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">The exported dossier lists these with the as-built record [DOC:p.215 Book IV §7.3].</p>
+        </section>
+      )}
       {s.dossiers.length > 0 && (
         <section aria-label="Exported dossiers" className="mt-4 rounded-lg border p-4">
           <h2 className="mb-2 text-sm font-semibold">Exported dossiers</h2>

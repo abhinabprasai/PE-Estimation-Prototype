@@ -8,11 +8,14 @@ import type { DocLink, DocRef, LinkKind, TraceEventCode } from "@/data/domain"
 import { materialById, vendorById } from "@/data/shared"
 import "./events"
 import { appendEvent, dedupeKey } from "./chain"
+import { openFinalTest, openGateLot, type OrderForTest } from "./intake"
 import { recall } from "./actions"
 import { buildSeed, P, type Seed } from "./seed"
-import type { QtEvent } from "./types"
+import { extraSeed, patchSeed, type ExtraSeed } from "./extra-seed"
+import type { FinalTest, QtBatch, QtEvent, QtSerial } from "./types"
+import type { InspectionLotId } from "@/data/domain"
 
-export interface QualityTraceState extends Seed {
+export interface QualityTraceState extends Seed, ExtraSeed {
   seq: number
 }
 
@@ -24,7 +27,9 @@ declare module "@/store/types" {
 
 /** Fresh seed; called at start and on Scenario reset. */
 export function seed(): QualityTraceState {
-  return { ...buildSeed(), seq: 500 }
+  const base = buildSeed()
+  patchSeed(base)
+  return { ...base, ...extraSeed(), seq: 500 }
 }
 
 const G = "Quality and traceability"
@@ -86,12 +91,20 @@ function links(s: QualityTraceState): DocLink[] {
 }
 
 /** Record an event coming from another module's transaction, once (dedupe by code + doc + object). */
-function recordExternal(draft: QualityTraceState, code: TraceEventCode, doc: DocRef, o: Partial<QtEvent> & { evidence: string }) {
+function recordExternal(draft: QualityTraceState, today: string, code: TraceEventCode, doc: DocRef, o: Partial<QtEvent> & { evidence: string }) {
   const key = dedupeKey(code, doc.id, o.serial, o.batch)
   if (draft.genealogy.some((e) => dedupeKey(e.type, e.doc.id, e.serial, e.batch) === key)) return false
-  appendEvent(draft.genealogy, { type: code, at: new Date().toISOString().slice(0, 19), doc, ...o })
+  // stamped with the scenario's date (ctx.today), never the real clock
+  appendEvent(draft.genealogy, { type: code, at: `${today}T12:00:00`, doc, ...o })
   return true
 }
+
+/** Minimal structural views of other modules' slices (read through the store; never imported). */
+type PpView = { productionOrders?: (OrderForTest & { operations: { no: number; workCenterId: string; qcGate?: string }[]; qty: number })[] }
+type PurView = { grns?: { id: string; poId: string; lines: { itemId: string; qty: number }[] }[]; purchaseOrders?: { id: string; vendorId: string }[] }
+type SalesView = { orders?: { id: string; customerId: string }[]; rmas?: { id: string; lines: { itemId: string; serial?: string; qtyRecd: number }[] }[] }
+const customerOf = (api: { getSlice: (k: "sales") => unknown }, soId?: string) => (api.getSlice("sales") as SalesView).orders?.find((o) => o.id === soId)?.customerId
+
 
 export const qualityTraceSlice = defineSlice({
   key: "qualityTrace",
@@ -101,32 +114,89 @@ export const qualityTraceSlice = defineSlice({
   subscribe: (api) => {
     // Every traceability capture made elsewhere lands in the one append-only store (FL-11).
     api.on("trace.eventRecorded", ({ code, doc, serial, batch }) =>
-      api.mutate("qualityTrace", (d) => void recordExternal(d, code, doc, { serial: serial as QtEvent["serial"], batch: batch as QtEvent["batch"], evidence: `Recorded by ${doc.type} ${doc.id}` })))
-    // T02: receipt identity; an IQC inspection opens for a batch this module knows (gate trigger).
+      api.mutate("qualityTrace", (d, ctx) => {
+        recordExternal(d, ctx.today, code, doc, { serial: serial as QtEvent["serial"], batch: batch as QtEvent["batch"], evidence: `Recorded by ${doc.type} ${doc.id}` })
+        // shipment gate: packing a unit for a delivery opens the pre-shipment inspection (OQC) [DOC:p.84 E §1]
+        if (code === "T10" && doc.type === "delivery" && serial) {
+          const ser = d.serials.find((x) => x.id === serial)
+          if (ser) openGateLot(d, { gate: "OQC", subject: doc, itemId: ser.materialId, serials: [ser.id], lotSize: 1 }, ctx.today)
+        }
+      }))
+    // T02: receipt identity; the GRN line of a QI-required item opens an IQC inspection (gate trigger, [DOC:p.33 §6.1]).
     api.on("purchasing.grnPosted", ({ grnId, poId, batches, serials }) =>
-      api.mutate("qualityTrace", (d) => {
-        for (const b of batches) recordExternal(d, "T02", { type: "grn", id: grnId }, { batch: b as QtEvent["batch"], scanPoint: "SP-02", evidence: `GRN ${grnId} for ${poId}` })
-        for (const sn of serials) recordExternal(d, "T02", { type: "grn", id: grnId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-03", evidence: `GRN ${grnId} for ${poId}` })
+      api.mutate("qualityTrace", (d, ctx) => {
+        for (const b of batches) recordExternal(d, ctx.today, "T02", { type: "grn", id: grnId }, { batch: b as QtEvent["batch"], scanPoint: "SP-02", evidence: `GRN ${grnId} for ${poId}` })
+        for (const sn of serials) recordExternal(d, ctx.today, "T02", { type: "grn", id: grnId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-03", evidence: `GRN ${grnId} for ${poId}` })
+        const pur = api.getSlice("purchasingFinance") as unknown as PurView
+        const grn = pur.grns?.find((g) => g.id === grnId)
+        const line = grn?.lines[0]
+        if (!line) return
+        const vendorId = pur.purchaseOrders?.find((p) => p.id === poId)?.vendorId
+        const batchId = batches[0] as QtBatch["id"] | undefined
+        if (batchId && !d.batches.some((b) => b.id === batchId))
+          d.batches.push({ id: batchId as QtBatch["id"], materialId: line.itemId as QtBatch["materialId"], stock: "QI Hold", qty: line.qty, qtyReceived: line.qty, receivedOn: ctx.today, vendorId: vendorId as QtBatch["vendorId"], grnId, poId, warehouseId: "WH-TBD-01" })
+        for (const sn of serials)
+          if (!d.serials.some((x) => x.id === sn)) d.serials.push({ id: sn as QtSerial["id"], materialId: line.itemId as QtSerial["materialId"], status: "QI Hold", bornOn: ctx.today, batchId: batchId as QtSerial["batchId"] })
+        const r = openGateLot(d, { gate: "IQC", subject: { type: "grn", id: grnId }, itemId: line.itemId as QtBatch["materialId"], vendorId: vendorId as QtBatch["vendorId"], batchId, serials: serials as QtSerial["id"][], lotSize: line.qty }, ctx.today)
+        if (r.lot?.skipped && batchId) {
+          const b = d.batches.find((x) => x.id === batchId)
+          if (b) b.stock = "Unrestricted"
+        }
+        if (r.warning && batchId) {
+          const b = d.batches.find((x) => x.id === batchId)
+          if (b) b.stock = "Unrestricted"
+        }
+        if (r.lot && r.note !== "exists") ctx.emit("quality.inspectionOpened", { lotId: r.lot.id as InspectionLotId, gate: "IQC", subject: { type: "grn", id: grnId } })
       }))
     api.on("sales.pgiPosted", ({ deliveryId, serials }) =>
-      api.mutate("qualityTrace", (d) => {
+      api.mutate("qualityTrace", (d, ctx) => {
         for (const sn of serials) {
-          recordExternal(d, "T11", { type: "delivery", id: deliveryId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-18", evidence: `PGI posted for ${deliveryId}` })
+          recordExternal(d, ctx.today, "T11", { type: "delivery", id: deliveryId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-18", evidence: `PGI posted for ${deliveryId}` })
           const ser = d.serials.find((x) => x.id === sn)
           if (ser) ser.status = "Shipped"
         }
       }))
     api.on("production.confirmationPosted", ({ woId, op, good, scrap }) =>
-      api.mutate("qualityTrace", (d) => void recordExternal(d, "T07", { type: "productionOrder", id: woId }, { scanPoint: "SP-11", evidence: `Op ${op}: good ${good}, scrap ${scrap}`, qty: good })))
+      api.mutate("qualityTrace", (d, ctx) => void recordExternal(d, ctx.today, "T07", { type: "productionOrder", id: woId }, { scanPoint: "SP-11", evidence: `Op ${op}: good ${good}, scrap ${scrap}`, qty: good })))
     api.on("production.fgReceived", ({ woId, serial }) =>
-      api.mutate("qualityTrace", (d) => void recordExternal(d, "T09", { type: "productionOrder", id: woId }, { serial, evidence: "Finished goods receipt" })))
+      api.mutate("qualityTrace", (d, ctx) => void recordExternal(d, ctx.today, "T09", { type: "productionOrder", id: woId }, { serial, evidence: "Finished goods receipt" })))
     api.on("production.orderReleased", ({ woId, serial }) =>
-      api.mutate("qualityTrace", (d) => {
-        if (serial && !d.serials.some((x) => x.id === serial)) d.serials.push({ id: serial, materialId: "FIN-TBD-20MVA", status: "In Production", bornOn: new Date().toISOString().slice(0, 10), woId })
+      api.mutate("qualityTrace", (d, ctx) => {
+        if (!serial || d.serials.some((x) => x.id === serial)) return
+        // the serial's item comes from the production order itself, born on the scenario date
+        const wo = (api.getSlice("planningProduction") as unknown as PpView).productionOrders?.find((w) => w.id === woId)
+        d.serials.push({ id: serial, materialId: (wo?.itemId ?? "FIN-TBD-20MVA") as QtSerial["materialId"], status: "In Production", bornOn: ctx.today, woId })
       }))
-    api.on("sales.rmaReceived", ({ rmaId, serials }) =>
+    // Routing checkpoints: a requested in-process inspection opens an IPQC lot; the Final Test op opens the final test record.
+    api.on("production.inspectionRequested", ({ woId, op, gate, inspectionId }) =>
+      api.mutate("qualityTrace", (d, ctx) => {
+        const wo = (api.getSlice("planningProduction") as unknown as PpView).productionOrders?.find((w) => w.id === woId)
+        if (!wo) return
+        if (gate === "Final Test") {
+          openFinalTest(d, wo, customerOf(api, wo.pegs[0]?.soId), ctx.today, inspectionId)
+          return
+        }
+        const wc = wo.operations.find((o) => o.no === op)?.workCenterId
+        const r = openGateLot(d, { gate: "IPQC", id: inspectionId, subject: { type: "productionOrder", id: wo.id as QtSerial["woId"] & string }, itemId: wo.itemId as QtBatch["materialId"], serials: wo.serials as QtSerial["id"][], lotSize: wo.qty || 1, workCenterId: wc as never }, ctx.today)
+        if (r.lot && r.note !== "exists") ctx.emit("quality.inspectionOpened", { lotId: r.lot.id as InspectionLotId, gate: "IPQC", subject: r.lot.subject })
+      }))
+    // The rework order Production planning drafts for a failed final test is linked back by its NCR.
+    api.on("production.reworkOrderCreated", ({ rwoId, origin }) =>
       api.mutate("qualityTrace", (d) => {
-        for (const sn of serials) recordExternal(d, "T12", { type: "rma", id: rmaId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-19", evidence: `RMA receipt ${rmaId}` })
+        const f = d.finalTests.find((x) => x.disposition === "Rework" && !x.rwoId && ((origin.type === "ncr" && origin.id === x.ncrId) || (origin.type === "productionOrder" && origin.id === x.woId)))
+        if (f) f.rwoId = rwoId as FinalTest["rwoId"]
+      }))
+    // RMA receipt: opens the return inspection (RQC), SLA 5 business days.
+    api.on("sales.rmaReceived", ({ rmaId, serials }) =>
+      api.mutate("qualityTrace", (d, ctx) => {
+        for (const sn of serials) recordExternal(d, ctx.today, "T12", { type: "rma", id: rmaId }, { serial: sn as QtEvent["serial"], scanPoint: "SP-19", evidence: `RMA receipt ${rmaId}` })
+        const rma = (api.getSlice("sales") as unknown as SalesView).rmas?.find((r) => r.id === rmaId)
+        const line = rma?.lines.find((l) => l.qtyRecd > 0 && (!serials.length || (l.serial && serials.includes(l.serial)))) ?? rma?.lines[0]
+        if (!line) return
+        const ser = d.serials.find((x) => x.id === serials[0])
+        const batch = ser?.batchId ? d.batches.find((b) => b.id === ser.batchId) : undefined
+        const r = openGateLot(d, { gate: "RQC", subject: { type: "rma", id: rmaId }, itemId: line.itemId as QtBatch["materialId"], vendorId: batch?.vendorId, batchId: batch?.id, serials: serials as QtSerial["id"][], lotSize: serials.length || 1 }, ctx.today)
+        if (r.lot && r.note !== "exists") ctx.emit("quality.inspectionOpened", { lotId: r.lot.id as InspectionLotId, gate: "RQC", subject: { type: "rma", id: rmaId } })
       }))
     // Recover: Sales drafts the recall-class RMAs on the same event; link them back once it has run.
     api.on("quality.recallStageChanged", ({ recallId, stage }) => {

@@ -8,7 +8,7 @@ import { refKey, type DocLink, type DocRef } from "@/data/domain"
 import "./events"
 import { seed } from "./seed"
 import type { PlanningProductionState } from "./types"
-import { onEcoReleased, onEngineeringMbomActivated, onInspectionClosed, onRecallStage, onSalesOrderConfirmed, onSupplySlip, onWoReopenDecided } from "../lib/actions"
+import { onEcoReleased, onEngineeringMbomActivated, onInspectionClosed, onRecallStage, onReworkRequested, onSalesOrderConfirmed, onSupplySlip, onWoReopenDecided } from "../lib/actions"
 
 export type { PlanningProductionState }
 
@@ -53,6 +53,9 @@ function search(s: PlanningProductionState): SearchHit[] {
   for (const w of s.workCenters) out.push({ title: w.id, subtitle: `Work center · ${w.name}`, route: `/production/work-centers/${w.id}`, status: { kind: "workCenter", value: s.wc[w.id]?.status ?? w.status }, group: G })
   for (const a of s.atRisk) out.push({ title: a.id, subtitle: `At-risk promise · ${a.soId} line ${a.line} · ${cust(a.customerId)} (${a.state})`, route: `/production/at-risk?id=${a.id}`, group: G })
   for (const st of s.settlements) out.push({ title: st.id, subtitle: `Settlement run · ${st.orders.length} order(s) · ${st.postedOn}`, route: `/production/settlement?run=${st.id}`, group: G })
+  for (const t of s.transportOrders) out.push({ title: t.id, subtitle: `Stock transport order (${t.status}) · ${t.fromPlant} to ${t.toPlant} · ${t.lines.length} line(s)`, route: `/production/transport-orders/${t.id}`, group: G })
+  for (const c of s.captureTemplates) out.push({ title: c.id, subtitle: `Capture template (${c.status}) · ${c.name} v${c.version}`, route: "/production/capture-templates", group: G })
+  for (const b of s.laborBatches) out.push({ title: b.id, subtitle: `Labor export file (IF-22, review only) · ${b.period}`, route: "/production/labor-export", group: G })
   return out
 }
 
@@ -93,6 +96,7 @@ export const planningProductionSlice = defineSlice({
     api.on("engineering.ecoReleased", (p) => api.mutate("planningProduction", (d, ctx) => onEcoReleased(d, ctx, p.ecoId, p.affected)))
     api.on("purchasing.poDeliveryDateChanged", (p) => api.mutate("planningProduction", (d, ctx) => onSupplySlip(d, ctx, { itemId: p.itemId, supply: { type: "purchaseOrder", id: p.poId }, newDate: p.newDate as never, soId: p.soId })))
     api.on("quality.inspectionClosed", (p) => api.mutate("planningProduction", (d, ctx) => onInspectionClosed(d, ctx, p.lotId, p.subject, p.passed)))
+    api.on("quality.reworkRequested", (p) => api.mutate("planningProduction", (d, ctx) => onReworkRequested(d, ctx, p)))
     api.on("quality.recallStageChanged", (p) => api.mutate("planningProduction", (d, ctx) => onRecallStage(d, ctx, p.recallId, p.stage)))
     api.on("approval.decided", (p) => {
       if (p.kind !== "WO reopen" || p.subject.type !== "productionOrder") return

@@ -63,3 +63,12 @@ export const LLR_MIRROR: { id: LlrId; items: MaterialId[]; pos: { poId: string; 
 
 /** Long-lead flagged items [DOC:p.209 §3.2] (asserted): core steel, copper, bushings, tap changers. */
 export const LONG_LEAD_ITEMS: MaterialId[] = ["RAW-TBD-CRGO23", "RAW-TBD-CTC", "RAW-TBD-FOIL", "RAW-TBD-BSH145", "RAW-TBD-OLTC"]
+
+/** Sales-kit headers (material type KIT [DOC:p.256 §6.1]). The shared material master has no KIT type yet
+ *  (foundation request R-13), so the headers are kept here as design values. Non-stocked, non-valuated. */
+export const KIT_HEADERS: { id: MaterialId; description: string; stocked: boolean }[] = [
+  { id: "KIT-TBD-COMM20" as MaterialId, description: "Commissioning kit, 20 MVA substation transformer", stocked: false },
+  { id: "KIT-TBD-SPARES20" as MaterialId, description: "Recommended spares package, 20 MVA substation transformer", stocked: false },
+  { id: "KIT-TBD-HW5000" as MaterialId, description: "Installation hardware set, 5 MVA secondary unit substation", stocked: false },
+]
+export const isKitId = (id: string) => id.startsWith("KIT-")

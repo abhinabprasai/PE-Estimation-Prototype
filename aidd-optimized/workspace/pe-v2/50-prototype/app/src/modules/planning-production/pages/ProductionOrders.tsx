@@ -23,6 +23,7 @@ import * as act from "../lib/actions"
 import { closeChecks, releaseGates, shortages, unsettledBreach } from "../lib/gates"
 import { allWorkCenters, goodQty, laborRateOf, modeOf, ohRateOf, opHours, projected, stdTotal, variances, woWip } from "../lib/plan"
 import type { CancelDisposition, PPWorkOrder } from "../data/types"
+import { WoDecisionDialog, type WoDecisionKind } from "../widgets/WoDecisionDialogs"
 
 export function ProductionOrderList() {
   const s = useSlice("planningProduction")
@@ -94,6 +95,7 @@ export function ProductionOrderDetail() {
   const [dlg, setDlg] = useState<null | "hold" | "unhold" | "cancel" | "receive" | "close" | "traveler" | "scrap">(null)
   const [cancelKind, setCancelKind] = useState<CancelDisposition>("Stop-scrap")
   const [opDlg, setOpDlg] = useState<null | { kind: "cancelOp" | "reverse" | "conditional"; no: number; cnfId?: string; note: string }>(null)
+  const [dec, setDec] = useState<null | { kind: WoDecisionKind; cnfId?: string; requestId?: string }>(null)
   const w = s.productionOrders.find((x) => x.id === id)
   return (
     <BodyState state={st} found={!!w} what={`Production order ${id}`} back={{ to: "/production/orders", label: "Back to production orders" }}>
@@ -163,6 +165,8 @@ export function ProductionOrderDetail() {
                 )}
                 {["Created", "Released", "In Progress", "Testing"].includes(wo.status) && <Button variant="outline" onClick={() => setDlg("hold")}>Hold</Button>}
                 {wo.status === "On Hold" && <Button variant="outline" onClick={() => setDlg("unhold")}>Release hold</Button>}
+                {wo.status === "Closed (TECO)" && <Button variant="outline" onClick={() => setDec({ kind: "reopen" })}>Preview reopen</Button>}
+                <Button variant="ghost" asChild><Link to={`/production/dialogs/wo-decisions?wo=${wo.id}`}>Decision dialogs</Link></Button>
                 {act.isOpenWo(wo) && <Button variant="outline" onClick={() => run((d, c) => act.setScheduleMode(d, c, wo.id, modeOf(wo) === "Backward" ? "Forward" : "Backward"), "Rescheduled")} disabled={!wo.dueDate && modeOf(wo) === "Forward"}>{modeOf(wo) === "Backward" ? "Schedule forward from release" : "Schedule backward from due date"}</Button>}
                 {["Created", "Released", "In Progress", "Testing", "On Hold"].includes(wo.status) && <Button variant="ghost" onClick={() => setDlg("cancel")}>Cancel order</Button>}
               </>
@@ -247,7 +251,8 @@ export function ProductionOrderDetail() {
                         <TableCell className="text-sm">{o.status}{o.cancelledReason && <span className="block text-xs text-muted-foreground">{o.cancelledReason}</span>}{o.inspection && <span className="block text-xs text-muted-foreground">{o.inspection.id} {o.inspection.result ?? "requested"}</span>}{o.requiredSkill && <span className="block text-xs text-muted-foreground">Skill: {o.requiredSkill}</span>}</TableCell>
                         <TableCell>
                           {o.status === "Not Started" && !o.qcGate && act.isOpenWo(wo) && <Button size="sm" variant="ghost" onClick={() => setOpDlg({ kind: "cancelOp", no: o.no, note: "" })}>Cancel op</Button>}
-                          {o.status === "Completed" && lastCnf?.op === o.no && act.isOpenWo(wo) && !wo.fgReceivedOn && <Button size="sm" variant="ghost" onClick={() => setOpDlg({ kind: "reverse", no: o.no, cnfId: lastCnf.id, note: "" })}>Reverse {lastCnf.id}</Button>}
+                          {o.status === "Completed" && lastCnf?.op === o.no && act.isOpenWo(wo) && !wo.fgReceivedOn && !s.reversalRequests.some((r) => r.cnfId === lastCnf.id && r.status === "Awaiting second sign-off") && <Button size="sm" variant="ghost" onClick={() => setDec({ kind: "reversalRequest", cnfId: lastCnf.id })}>Request reversal of {lastCnf.id}</Button>}
+                          {s.reversalRequests.filter((r) => r.woId === wo.id && r.status === "Awaiting second sign-off" && lastCnf?.op === o.no).map((r) => <Button key={r.id} size="sm" variant="outline" onClick={() => setDec({ kind: "reversalSign", requestId: r.id })}>Second sign-off {r.id}</Button>)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -381,6 +386,7 @@ export function ProductionOrderDetail() {
           ]}
         />
 
+        {dec && <WoDecisionDialog kind={dec.kind} wo={wo} cnfId={dec.cnfId} requestId={dec.requestId} open onOpenChange={(o) => !o && setDec(null)} />}
         <DialogShell open={dlg === "hold"} onOpenChange={(o) => !o && setDlg(null)} title={`Put ${wo.id} On Hold`} confirmLabel="Put On Hold" requireReason reasonLabel="Reason (mandatory): quality hold, ECO immediate effectivity, SO cancellation pending disposition, other"
           consequence={`${wo.id} goes ${wo.status} → On Hold. Terminal operations stop; the dispatch list flags it.`}
           onConfirm={(r) => runD((d, c) => act.holdWo(d, c, wo.id, r), `${wo.id} On Hold`)} />

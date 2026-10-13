@@ -70,7 +70,12 @@ export function NotBuilt({ screen }: { screen: ScreenEntry }) {
         </div>
       )}
       <p className="text-sm text-muted-foreground">
-        Source: PRD screen plan [DOC:pp.245-282] (asserted). See <Link to="/coverage" className="text-link underline">coverage</Link> for what is built.
+        {screen.source === "feature-list" ? (
+          <>Source: the user&apos;s feature list, section "{screen.feature}" (00-inputs/feature-list-2026-10.md). The route is a design value. See{" "}</>
+        ) : (
+          <>Source: PRD screen plan [DOC:pp.245-282] (asserted). See{" "}</>
+        )}
+        <Link to="/coverage" className="text-link underline">coverage</Link> for what is built.
       </p>
     </div>
   )

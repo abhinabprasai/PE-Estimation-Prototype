@@ -2,7 +2,7 @@
 // PR grid with pegs and budget results; RFQ with sealed responses, technical pass / fail before
 // commercial opening, landed-cost comparison grid. Primary actions: approve expense PRs (through
 // WF-INBOX), issue RFQ with STP attachments, award (writes the AVL price basis and a Draft PO).
-import { useMemo, useState } from "react"
+import { Fragment, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { Award, ClipboardList, Gavel, Plus, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -18,6 +18,9 @@ import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { useSlice } from "@/store"
 import { awardRfq, cancelRequisition, cancelRfq, closeResponses, createRequisition, issueRfq, recordResponse, setRfqVendors, startRfq, technicalReview } from "../data/actions"
 import { allAvl, allVendors, material, prTotal, vendorName } from "../data/logic"
+import { bidFor, scoreBids, weightsOf } from "../data/xlogic"
+import { reviseBid, selectBidVersion, setScoringWeights } from "../data/xactions"
+import { useNineStates, writeProps, type NineStates } from "../components/states"
 import type { PrRec, RfqRec, RfqResp } from "../data/types"
 import { CsvButton, DocLink, Reading, report, useDemoState } from "../components/common"
 import { ccName, DetailFrame, ItemLink, RecLink, SelectField, TextField, userName, VendorLink } from "../components/bits"
@@ -371,18 +374,20 @@ export function RfqList() {
 export function RfqDetail() {
   const { id = "" } = useParams()
   const s = useSlice("purchasingFinance")
-  const st = useDemoState("PUR-RFQ-002")
+  const st = useNineStates("PUR-RFQ-002", { writers: "the Buyer or Purchasing Manager", degraded: "Vendor responses arrive through the supplier portal, which answered slowly: a response keyed by the vendor in the last hour may not show yet." })
   const q = s.rfqs.find((x) => x.id === id)
   return (
-    <DetailFrame loading={st.loading} error={st.error} onRetry={st.retry} found={!!q} title={id} screenId="PUR-PR/RFQ" back={{ label: "RFQs", to: "/purchasing/rfqs" }}>
-      {() => <RfqBody q={q!} menu={st.menu} />}
+    <DetailFrame loading={st.loading} error={undefined} onRetry={st.retry} found={!!q} title={id} screenId="PUR-PR/RFQ" back={{ label: "RFQs", to: "/purchasing/rfqs" }}>
+      {() => <RfqBody q={q!} st={st} />}
     </DetailFrame>
   )
 }
-function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
+function RfqBody({ q, st }: { q: RfqRec; st: NineStates }) {
+  const menu = st.menu
+  const wr = writeProps(st)
   const s = useSlice("purchasingFinance")
   const nav = useNavigate()
-  const [dlg, setDlg] = useState<null | "issue" | "award" | "cancel" | "vendors" | { resp: VendorId } | { tech: VendorId }>(null)
+  const [dlg, setDlg] = useState<null | "issue" | "award" | "cancel" | "vendors" | { resp: VendorId } | { tech: VendorId } | { rev: VendorId }>(null)
   const rs = s.rfqResponses.filter((x) => x.rfqId === q.id)
   const sealedClosed = q.sealed && !q.technicalReviewed && q.status !== "Awarded" && q.status !== "Cancelled"
   const passed = rs.filter((x) => x.received && x.technicalPass)
@@ -394,20 +399,30 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
   const [vs, setVs] = useState<VendorId[]>(q.vendorIds)
   const [sealed, setSealed] = useState(q.sealed)
   const [due, setDue] = useState(q.dueOn)
+  const w0 = weightsOf(s, q.id)
+  const [wts, setWts] = useState({ landed: String(w0.landed), lead: String(w0.lead), quality: String(w0.quality), buyAmerica: String(w0.buyAmerica) })
+  const wNum = { landed: Number(wts.landed) || 0, lead: Number(wts.lead) || 0, quality: Number(wts.quality) || 0, buyAmerica: Number(wts.buyAmerica) || 0 }
+  const wSum = wNum.landed + wNum.lead + wNum.quality + wNum.buyAmerica
+  const closedRfq = q.status === "Awarded" || q.status === "Cancelled"
+  const scoreIds = rs.filter((x) => x.received && x.technicalPass !== false).map((x) => x.vendorId)
+  const scores = scoreBids(s, q.id, scoreIds, wNum)
+  const [revForm, setRevForm] = useState({ price: "", lead: "", freight: "3", duty: "0", valid: "", ba: false, note: "", dev: "" })
+  const devsOf = (vid: string) => [...(bidFor(s, q.id, vid)?.deviations ?? []).map((d) => ({ key: d, text: d, ref: undefined as string | undefined })), ...s.supplierDeviations.filter((d) => d.rfqId === q.id && d.vendorId === vid && !d.withdrawn).map((d) => ({ key: d.id, text: `${d.characteristic}: ${d.kind.toLowerCase()}, ${d.original} to ${d.proposed}`, ref: d.id }))]
 
   const primary =
     q.status === "Draft" ? (
-      <Button onClick={() => setDlg("issue")}>
+      <Button {...wr} onClick={() => setDlg("issue")}>
         <Send aria-hidden="true" /> Issue RFQ
       </Button>
     ) : q.status === "Responses In" ? (
-      <Button onClick={() => setDlg("award")} disabled={!q.technicalReviewed} title={q.technicalReviewed ? undefined : "Technical review first"}>
+      <Button onClick={() => setDlg("award")} disabled={!q.technicalReviewed || !!st.blockReason} title={st.blockReason ?? (q.technicalReviewed ? undefined : "Technical review first")}>
         <Award aria-hidden="true" /> Award
       </Button>
     ) : undefined
 
   return (
     <>
+      {st.banner}
       <DetailPage
         header={{
           screenId: "PUR-PR/RFQ",
@@ -418,17 +433,17 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
             <>
               {menu}
               {q.status === "Draft" && (
-                <Button variant="outline" onClick={() => setDlg("vendors")}>
+                <Button variant="outline" {...wr} onClick={() => setDlg("vendors")}>
                   Vendors and due date
                 </Button>
               )}
               {q.status === "Issued" && (
-                <Button variant="outline" onClick={() => report(closeResponses(q.id), "Closed for responses")}>
+                <Button variant="outline" {...wr} onClick={() => report(closeResponses(q.id), "Closed for responses")}>
                   Close for responses
                 </Button>
               )}
               {q.status !== "Awarded" && q.status !== "Cancelled" && (
-                <Button variant="ghost" onClick={() => setDlg("cancel")}>
+                <Button variant="ghost" {...wr} onClick={() => setDlg("cancel")}>
                   Cancel RFQ
                 </Button>
               )}
@@ -477,6 +492,7 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
                       <TableHead className="text-right">Lead time</TableHead>
                       <TableHead>Buy America</TableHead>
                       <TableHead>Valid until</TableHead>
+                      <TableHead>Bid version</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
@@ -484,8 +500,12 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
                     {q.vendorIds.map((vid) => {
                       const x = rs.find((r) => r.vendorId === vid)
                       const hide = sealedClosed && x?.received
+                      const vers = s.bidVersions.filter((b) => b.rfqId === q.id && b.vendorId === vid)
+                      const cur = bidFor(s, q.id, vid)
+                      const devs = devsOf(vid)
                       return (
-                        <TableRow key={vid} className="h-10 align-top text-[13px]">
+                        <Fragment key={vid}>
+                        <TableRow className="h-10 align-top text-[13px]">
                           <TableCell>
                             <VendorLink id={vid} name={vendorName(s, vid)} />
                           </TableCell>
@@ -503,24 +523,126 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
                           <TableCell className="tabular text-right">{x?.received && !hide ? `${x.prices[0].leadDays} d` : ""}</TableCell>
                           <TableCell>{x?.received && !hide ? (x.buyAmerica ? "Yes" : "No") : ""}</TableCell>
                           <TableCell>{x?.received && !hide ? fmtDate(x.validUntil) : ""}</TableCell>
+                          <TableCell>
+                            {x?.received && !hide && vers.length > 0 && (
+                              <select
+                                aria-label={`Bid version for ${vendorName(s, vid)}`}
+                                className="h-8 rounded-md border bg-background px-2 text-sm"
+                                value={cur?.version}
+                                disabled={closedRfq || !!st.blockReason}
+                                title={st.blockReason ?? (closedRfq ? `Fixed once the RFQ is ${q.status}` : undefined)}
+                                onChange={(e) => report(selectBidVersion(q.id, vid, Number(e.target.value)), `Version ${e.target.value} selected`)}
+                              >
+                                {vers.map((b) => (
+                                  <option key={b.version} value={b.version}>
+                                    v{b.version} · {fmtDate(b.receivedOn)} · {fmtMoney(b.price)}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </TableCell>
                           <TableCell className="flex gap-1">
                             {(q.status === "Issued" || q.status === "Responses In") && !x?.received && (
-                              <Button size="sm" variant="outline" onClick={() => setDlg({ resp: vid })}>
+                              <Button size="sm" variant="outline" {...wr} onClick={() => setDlg({ resp: vid })}>
                                 Key response
                               </Button>
                             )}
                             {x?.received && (q.status === "Issued" || q.status === "Responses In") && (
-                              <Button size="sm" variant="outline" onClick={() => setDlg({ tech: vid })}>
+                              <Button size="sm" variant="outline" {...wr} onClick={() => setDlg({ tech: vid })}>
                                 Technical result
+                              </Button>
+                            )}
+                            {x?.received && (q.status === "Issued" || q.status === "Responses In") && vers.length > 0 && (
+                              <Button size="sm" variant="outline" {...wr} onClick={() => setDlg({ rev: vid })}>
+                                Revised bid
                               </Button>
                             )}
                           </TableCell>
                         </TableRow>
+                        {x?.received && !hide && (
+                          <TableRow className="bg-muted/30 text-xs hover:bg-muted/30">
+                            <TableCell colSpan={11}>
+                              <span className="font-medium">Deviations from the RFQ package, {vendorName(s, vid)} v{cur?.version}: </span>
+                              {devs.length === 0 ? (
+                                <span className="text-muted-foreground">None listed: the bid meets the package as issued.</span>
+                              ) : (
+                                <ul className="mt-1 flex flex-col gap-1">
+                                  {devs.map((d) => (
+                                    <li key={d.key}>
+                                      {d.ref ? <RecLink to={`/purchasing/supplier-deviations/${d.ref}`}>{d.ref}</RecLink> : <Chip kind="design" note="Listed on the bid; not a structured deviation request">Bid note</Chip>} {d.text}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        </Fragment>
                       )
                     })}
                   </TableBody>
                 </Table>
                 <p className="text-sm text-muted-foreground">Landed cost = price × (1 + estimated freight % + duty %) (Book I G §4). Award to anyone but the lowest landed cost needs a justification note.</p>
+              </div>
+            ),
+          },
+          {
+            id: "scoring",
+            label: "Weighted scoring",
+            content: (
+              <div className="flex flex-col gap-4">
+                {sealedClosed ? (
+                  <EmptyState title="Bids are sealed">Scores appear once Engineering records the technical results (FL-10 stage 8).</EmptyState>
+                ) : (
+                  <>
+                    <div className="grid gap-2 sm:grid-cols-5">
+                      <TextField id="w-landed" label="Landed cost %" value={wts.landed} onChange={(v) => setWts({ ...wts, landed: v })} />
+                      <TextField id="w-lead" label="Lead time %" value={wts.lead} onChange={(v) => setWts({ ...wts, lead: v })} />
+                      <TextField id="w-quality" label="Quality rating %" value={wts.quality} onChange={(v) => setWts({ ...wts, quality: v })} />
+                      <TextField id="w-ba" label="Buy America %" value={wts.buyAmerica} onChange={(v) => setWts({ ...wts, buyAmerica: v })} />
+                      <div className="flex flex-col justify-end gap-1">
+                        <span className={wSum === 100 ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>{wSum} of 100</span>
+                        <Button variant="outline" disabled={closedRfq || !!st.blockReason} title={st.blockReason ?? (closedRfq ? `Weights are fixed once the RFQ is ${q.status}` : undefined)} onClick={() => report(setScoringWeights(q.id, wNum), "Weights saved")}>
+                          Save weights
+                        </Button>
+                      </div>
+                    </div>
+                    {st.validation && wSum !== 100 && <p role="alert" className="text-sm text-destructive">The weights add up to {wSum}; they must add up to 100.</p>}
+                    {scores.length === 0 ? (
+                      <EmptyState title="Nothing to score yet">Scoring needs at least one received response that has not failed the technical review.</EmptyState>
+                    ) : (
+                      <Table>
+                        <TableHeader className="bg-table-head">
+                          <TableRow>
+                            <TableHead>Rank</TableHead>
+                            <TableHead>Vendor</TableHead>
+                            <TableHead className="text-right">Landed ({wNum.landed}%)</TableHead>
+                            <TableHead className="text-right">Lead ({wNum.lead}%)</TableHead>
+                            <TableHead className="text-right">Quality ({wNum.quality}%)</TableHead>
+                            <TableHead className="text-right">Buy America ({wNum.buyAmerica}%)</TableHead>
+                            <TableHead className="text-right">Weighted score</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {scores.map((sc) => (
+                            <TableRow key={sc.vendorId} className="h-8 text-[13px]">
+                              <TableCell className="tabular">{sc.rank}</TableCell>
+                              <TableCell><VendorLink id={sc.vendorId} name={vendorName(s, sc.vendorId)} /></TableCell>
+                              <TableCell className="tabular text-right">{sc.landed}</TableCell>
+                              <TableCell className="tabular text-right">{sc.lead}</TableCell>
+                              <TableCell className="tabular text-right">{sc.quality}</TableCell>
+                              <TableCell className="tabular text-right">{sc.buyAmerica}</TableCell>
+                              <TableCell className="tabular text-right font-semibold">{sc.total}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Each criterion scores 0 to 100 against the best bid; the weights come from the Book IV §3.3 table and are the buyer's to set. The lowest landed cost still decides whether an award needs a justification note. <Reading id="OQ-PF-35" /> Scores use the bid version selected for each vendor.
+                    </p>
+                  </>
+                )}
               </div>
             ),
           },
@@ -551,7 +673,7 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
                         <TableCell>
                           {t ? (
                             <span className="flex items-center gap-2">
-                              <RecLink to={`/purchasing/long-lead/${t.id}`}>{t.id}</RecLink> v{t.version} {t.superseded && <Chip kind="block">Superseded: attach {t.supersededBy}</Chip>}
+                              <RecLink to={`/purchasing/stp/${t.id}`}>{t.id}</RecLink> v{t.version} {t.superseded && <Chip kind="block">Superseded: attach {t.supersededBy}</Chip>}
                             </span>
                           ) : (
                             "None"
@@ -639,6 +761,34 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
         </div>
       </DialogShell>
       <DialogShell
+        open={!!dlg && typeof dlg === "object" && "rev" in dlg}
+        onOpenChange={(o) => !o && setDlg(null)}
+        title={`Revised bid from ${dlg && typeof dlg === "object" && "rev" in dlg ? vendorName(s, dlg.rev) : ""}`}
+        confirmLabel="Record revised bid"
+        consequence="Keeps the earlier versions and makes this the version the grid, the scores and the award read."
+        onConfirm={() => {
+          if (!dlg || typeof dlg !== "object" || !("rev" in dlg)) return null
+          return report(
+            reviseBid(q.id, dlg.rev, { price: Number(revForm.price), leadDays: Number(revForm.lead), freightPct: Number(revForm.freight), dutyPct: Number(revForm.duty), validUntil: revForm.valid || q.dueOn, buyAmerica: revForm.ba, note: revForm.note, deviations: revForm.dev.split("\n").map((x) => x.trim()).filter(Boolean) }),
+            (v) => `Version ${v} recorded`,
+          )
+        }}
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <TextField id="rv-price" label="Unit price" value={revForm.price} onChange={(v) => setRevForm({ ...revForm, price: v })} />
+          <TextField id="rv-lead" label="Lead time (days)" value={revForm.lead} onChange={(v) => setRevForm({ ...revForm, lead: v })} />
+          <TextField id="rv-fr" label="Estimated freight %" value={revForm.freight} onChange={(v) => setRevForm({ ...revForm, freight: v })} />
+          <TextField id="rv-du" label="Duty %" value={revForm.duty} onChange={(v) => setRevForm({ ...revForm, duty: v })} />
+          <TextField id="rv-valid" type="date" label="Valid until" value={revForm.valid} onChange={(v) => setRevForm({ ...revForm, valid: v })} />
+          <div className="flex items-center gap-2 pt-6">
+            <Switch id="rv-ba" checked={revForm.ba} onCheckedChange={(c) => setRevForm({ ...revForm, ba: c })} />
+            <Label htmlFor="rv-ba">Buy America compliant</Label>
+          </div>
+          <TextField id="rv-note" label="What changed" value={revForm.note} onChange={(v) => setRevForm({ ...revForm, note: v })} />
+          <TextField id="rv-dev" label="Deviations from the package (one per line)" value={revForm.dev} onChange={(v) => setRevForm({ ...revForm, dev: v })} />
+        </div>
+      </DialogShell>
+      <DialogShell
         open={!!dlg && typeof dlg === "object" && "tech" in dlg}
         onOpenChange={(o) => !o && setDlg(null)}
         title="Technical pass or fail (Engineering)"
@@ -657,7 +807,7 @@ function RfqBody({ q, menu }: { q: RfqRec; menu: React.ReactNode }) {
         onOpenChange={(o) => !o && setDlg(null)}
         title={`Award ${q.id}`}
         confirmLabel="Award and create PO"
-        consequence="Awards the RFQ, writes the AVL price basis (info record) for the winner, sends regret notices and creates a Draft PO that goes for approval on the PO ladder."
+        consequence="Awards the RFQ, writes the AVL price basis (info record) for the winner, sends regret notices and creates a Draft PO that goes for approval on the PO ladder. A winner who is not a Qualified AVL vendor is written as Conditional, and for a QI-critical item the PO cannot go for approval until the AVL row is Qualified (E-PUR-02)."
         onConfirm={() => {
           const r = awardRfq(q.id, award as VendorId, just)
           const err = report(r, (po) => `${q.id} awarded; ${po} created`)

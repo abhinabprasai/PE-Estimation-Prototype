@@ -618,11 +618,19 @@ function requestWoHold(e: EcoRecord, ctx: MutateCtx) {
 }
 /** Mass update: replace component A with B across selected EBOMs always creates an ECO (C-15). */
 export function massReplace(d: D, ctx: MutateCtx, ebomIds: string[], from: MaterialId, to: MaterialId) {
-  if (!ebomIds.length) throw new ProtoError("Select at least one EBOM.")
-  if (from === to) throw new ProtoError("Pick a different replacement component.")
+  if (!ebomIds.length) throw new ProtoError("Select at least one EBOM.", "ebomIds")
+  if (from === to) throw new ProtoError("Pick a different replacement component.", "to")
+  const fi = itemInfo(d, from)
+  const ti = itemInfo(d, to)
+  if (ti.status === "Obsolete") throw new ProtoError(`${to} is Obsolete (C-16); pick an active replacement.`, "to")
+  if (ti.uom !== fi.uom) throw new ProtoError(`${to} is stocked in ${ti.uom} and ${from} in ${fi.uom}; there is no conversion, so the quantities cannot carry over.`, "to")
   const changes: EbomChange[] = []
   for (const id of ebomIds) {
     const e = find(d.eboms, id, "EBOM")
+    if (e.status === "Obsolete") throw new ProtoError(`${e.id} is Obsolete (C-16).`, "ebomIds")
+    // Conflict: another open ECO already changes this EBOM's use of the component.
+    const clash = d.ecos.find((x) => x.stage !== "Released" && x.changes.some((c) => c.ebomId === e.id && c.ops.some((o) => o.kind !== "add" && e.lines.some((l) => l.no === o.line && l.componentId === from))))
+    if (clash) throw new ProtoError(`${clash.id} (${clash.stage}) already changes ${from} on ${e.id}. Finish or amend that ECO first so two changes do not collide.`, "conflict")
     const ops = e.lines.filter((l) => l.componentId === from).map((l) => ({ kind: "replace" as const, line: l.no, componentId: to }))
     if (ops.length) changes.push({ ebomId: e.id, ops })
   }
@@ -1012,4 +1020,152 @@ export function stageCsvProposal(d: D, ctx: MutateCtx, ebomId: string, lines: Im
   const id = `IMP-TBD-${pad4(n)}`
   d.proposals.unshift({ id, ebomId: ebomId as never, source: "CSV upload", createdOn: ctx.today, lines: lines.map(({ findNo, partNo, mpn, description, qty, refDes }) => ({ findNo, partNo, mpn, description, qty, refDes })) })
   return id
+}
+
+
+// ================================================================== sales kit usage [DOC:p.256 §6.1]
+export function setUsage(d: D, ctx: MutateCtx, id: string, usage: "Production" | "Sales") {
+  const e = draftEbom(d, id)
+  if (usage === e.usage) return
+  e.usage = usage
+  log(e, ctx, `Usage set to ${usage}${usage === "Sales" ? " (sales kit: single level, components only, no phantoms, no nested kits)" : ""}`)
+}
+
+// ================================================================== Copy From, subtree [DOC:p.61 §3.3]
+/** Copy a subtree of a Released EBOM into a Draft EBOM, re-numbering Find # and placing it under `parent`. */
+export function copySubtree(d: D, ctx: MutateCtx, fromId: string, rootLine: number, toId: string, parent?: number) {
+  const src = find(d.eboms, fromId, "EBOM")
+  if (src.status !== "Released") throw new ProtoError("Copy From takes a Released EBOM.", "source")
+  const target = draftEbom(d, toId)
+  if (src.id === target.id) throw new ProtoError("Pick a different target EBOM.", "target")
+  const root = src.lines.find((l) => l.no === rootLine)
+  if (!root) throw new ProtoError("Choose the line to copy from.", "root")
+  if (parent != null && !target.lines.some((l) => l.no === parent)) throw new ProtoError(`Line ${parent} does not exist on ${target.id}.`, "parent")
+  const ids = new Set<number>([rootLine])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const l of src.lines) if (l.parent != null && ids.has(l.parent) && !ids.has(l.no)) (ids.add(l.no), (grew = true))
+  }
+  const sub = src.lines.filter((l) => ids.has(l.no)).sort((a, b) => a.no - b.no)
+  let n = Math.floor(Math.max(0, ...target.lines.map((l) => l.no)) / 10) * 10 + 10
+  const map = new Map<number, number>()
+  for (const l of sub) {
+    map.set(l.no, n)
+    n += 1
+  }
+  for (const l of sub) {
+    const c = structuredClone(l)
+    c.no = map.get(l.no)!
+    c.parent = l.no === rootLine ? parent : map.get(l.parent!)
+    c.comments = undefined
+    target.lines.push(c)
+  }
+  target.lines.sort((a, b) => a.no - b.no)
+  target.baseDesign = target.baseDesign ?? `Copy From ${src.id} rev ${src.rev} (subtree)`
+  log(target, ctx, `Copied subtree of line ${rootLine} (${root.componentId}, ${sub.length} line${sub.length === 1 ? "" : "s"}) from ${src.id} rev ${src.rev}; provenance kept as Base Design`)
+  return sub.length
+}
+
+// ================================================================== PDF redline layer [DOC:p.64 §5.2]
+export function addMarkup(d: D, ctx: MutateCtx, id: string, p: { x: number; y: number; page: number; text: string }) {
+  const x = doc(d, id)
+  const r = currentRev(x)
+  if (r.status !== "In Review") throw new ProtoError(`Markups are placed on the PDF while the revision is In Review; rev ${r.rev} is ${r.status}.`)
+  if (!p.text.trim()) throw new ProtoError("Enter the markup comment.", "text")
+  r.redlines.push({ id: `MK-${next(d)}`, by: ctx.userId, on: ctx.today, text: p.text.trim(), page: p.page, x: p.x, y: p.y })
+  log(x, ctx, `Markup added on rev ${r.rev}, sheet ${p.page}`)
+}
+export function resolveMarkup(d: D, ctx: MutateCtx, id: string, markupId: string, resolved: boolean) {
+  const x = doc(d, id)
+  const r = currentRev(x)
+  if (r.status !== "In Review") throw new ProtoError(`Rev ${r.rev} is ${r.status}; markups are read-only.`)
+  const m = r.redlines.find((k) => k.id === markupId)
+  if (!m) throw new ProtoError("Markup not found.")
+  m.resolved = resolved
+  m.resolvedBy = resolved ? ctx.userId : undefined
+  log(x, ctx, `Markup ${markupId} ${resolved ? "resolved" : "reopened"}`)
+}
+export function reviewerApprove(d: D, ctx: MutateCtx, id: string, note: string) {
+  const x = doc(d, id)
+  const r = currentRev(x)
+  if (r.status !== "In Review") throw new ProtoError(`Reviewer approvals are recorded while the revision is In Review; rev ${r.rev} is ${r.status}.`)
+  r.reviewerApprovals = [...(r.reviewerApprovals ?? []).filter((a) => a.by !== ctx.userId), { by: ctx.userId, on: ctx.today, note: note.trim() || undefined }]
+  log(x, ctx, `Reviewer approval recorded on rev ${r.rev}`)
+}
+
+// ================================================================== CAD vs EBOM [DOC:p.198 §3]
+export function reviewCad(d: D, ctx: MutateCtx, assemblyId: string, note: string) {
+  const c = find(d.cad, assemblyId, "Assembly")
+  if (!note.trim()) throw new ProtoError("State why no structure change is needed.", "note")
+  const e = find(d.eboms, c.ebomId, "EBOM")
+  c.reviewed = { on: ctx.today, by: ctx.userId, note: note.trim() }
+  c.alignedRev = c.vaultRev
+  e.cadAhead = undefined
+  log(e, ctx, `CAD assembly ${c.id} ${c.vaultRev} reviewed: ${note.trim()}`)
+}
+/** Stage the current vault assembly as an import proposal for CAD-IMP (Draft EBOM only; commit stays engineer-confirmed). */
+export function stageAssembly(d: D, ctx: MutateCtx, assemblyId: string) {
+  const c = find(d.cad, assemblyId, "Assembly")
+  const e = find(d.eboms, c.ebomId, "EBOM")
+  if (e.status !== "Draft") throw new ProtoError(`${e.id} is ${e.status}; extraction proposals import into a Draft EBOM. Raise an ECR for a structural change to a released EBOM.`)
+  const had = d.proposals.find((p) => p.ebomId === e.id && p.vaultTx === c.vaultTx && !p.committed)
+  if (had) return had.id
+  const pid = `IMP-TBD-${pad4(next(d))}`
+  d.proposals.unshift({ id: pid, ebomId: e.id, source: "Vault assembly extraction", vaultTx: c.vaultTx, createdOn: ctx.today, lines: structuredClone(c.lines) })
+  log(e, ctx, `Vault assembly ${c.id} ${c.vaultRev} staged as import proposal ${pid}`)
+  return pid
+}
+
+// ================================================================== PDM linkage [Book III Part G §4]
+const pdm = (d: D, id: string) => find(d.pdm, id, "PDM link")
+/** PDM release requires the linked ERP ECO task set to be release-ready (the connector checks via API). */
+export function pdmReadiness(d: D, link: { linkedEco?: string }): string[] {
+  if (!link.linkedEco) return ["No ERP ECO is linked to this PDM change; the release sequence needs one."]
+  const eco = d.ecos.find((x) => x.id === link.linkedEco)
+  if (!eco) return [`${link.linkedEco} not found.`]
+  return ecoBlockers(eco)
+}
+export function confirmPdmEcr(d: D, ctx: MutateCtx, linkId: string) {
+  const l = pdm(d, linkId)
+  if (l.state !== "Change order opened") throw new ProtoError(`${l.id} is ${l.state}; the ECR proposal applies to an opened PDM change order.`)
+  if (l.linkedEcr) throw new ProtoError(`${l.linkedEcr} is already linked.`)
+  const x = doc(d, l.documentId)
+  const id = createEcr(d, ctx, {
+    title: `PDM ${l.pdmCo}: change to ${l.documentId}`, source: "Engineering", classification: "Documentation Only", priority: "Standard",
+    description: `A PDM change order ${l.pdmCo} was opened on ${x.title} (vault rev ${l.vaultRev}).`, reason: `Cross-reference ${l.pdmCo}; engineer confirmed the link.`, affected: [{ type: "document", id: l.documentId }],
+  })
+  l.linkedEcr = id as never
+  l.activity.push({ at: ctx.today, by: ctx.role, text: `ECR ${id} created and cross-referenced to ${l.pdmCo}` })
+  return id
+}
+export function pdmRelease(d: D, ctx: MutateCtx, linkId: string) {
+  const l = pdm(d, linkId)
+  if (l.state !== "Release approved") throw new ProtoError(`${l.id} is ${l.state}; the release round-trip runs from Release approved.`)
+  const blockers = pdmReadiness(d, l)
+  if (blockers.length) throw new ProtoError(`PDM release is sequenced after the ERP ECO: ${blockers.join(" ")}`)
+  const blocked = d.vaultEvents.find((e) => e.ref?.id === l.documentId && e.kind === "Release" && e.state !== "Delivered" && e.error)
+  if (blocked) throw new ProtoError(`The vault rule still blocks the release set: ${blocked.error}`)
+  l.state = "Released, rendition published"
+  l.lastEvent = `${ctx.today} (publish)`
+  l.activity.push({ at: ctx.today, by: ctx.role, text: "Rendition published; ERP ECO release now executes the atomic cutover. The floor keys off ERP effectivity, not PDM state." })
+}
+export function pdmReplay(d: D, ctx: MutateCtx, linkId: string) {
+  const l = pdm(d, linkId)
+  const ids = d.vaultEvents.filter((e) => e.ref?.id === l.documentId && e.state !== "Delivered").map((e) => e.id)
+  if (!ids.length) throw new ProtoError("Nothing queued for this document.")
+  const ok = replayEvents(d, ctx, ids)
+  if (ok > 0) {
+    l.state = "Released, rendition published"
+    l.note = "Replayed (at-least-once, idempotent on the vault transaction ID); rendition delivered."
+  }
+  l.activity.push({ at: ctx.today, by: ctx.role, text: ok > 0 ? "Publish replayed; delivered" : "Publish replayed; still blocked by a vault rule (fix the source in the vault)" })
+  return ok
+}
+/** ERP document follows an Obsolete-in-PDM state only after the where-used sweep warns on active usage. */
+export function pdmObsolete(d: D, ctx: MutateCtx, linkId: string, reason: string) {
+  const l = pdm(d, linkId)
+  if (l.state !== "Obsolete in PDM") throw new ProtoError(`${l.id} is ${l.state}.`)
+  if (!reason.trim()) throw new ProtoError("Enter a reason.")
+  obsoleteDoc(d, ctx, l.documentId, reason)
+  l.activity.push({ at: ctx.today, by: ctx.role, text: `ERP document obsoleted after the where-used sweep: ${reason}` })
 }

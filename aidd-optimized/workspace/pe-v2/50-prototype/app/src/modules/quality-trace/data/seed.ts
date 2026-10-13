@@ -11,14 +11,14 @@ import { appendEvent, type NewEvent } from "./chain"
 import type {
   Dossier, FinalTest, InspectionLot, LabelTemplate, PlanRevision, PopulationRow, Printer, QtBatch, QtCapa, QtCharacteristic,
   QtDeviation, QtEvent, QtInstrument, QtNcr, QtPlan, QtRecall, QtScar, QtSerial, Reprint, ResultRow, ScanException, ScanPolicy,
-  TestRun, TraceException,
+  TestRun, TraceException, AutoAcceptWarning, VendorLots,
 } from "./types"
 
 // people (src/data/shared/users.ts)
 export const P = {
   inspector: "USR-TBD-034", tester: "USR-TBD-035", qe: "USR-TBD-036", qm: "USR-TBD-037", qit: "USR-TBD-038",
   receiving: "USR-TBD-017", operator: "USR-TBD-032", whop: "USR-TBD-018", engMgr: "USR-TBD-024", plantIt: "USR-TBD-043",
-  exec: "USR-TBD-044", packer: "USR-TBD-015", shipping: "USR-TBD-014", supervisor: "USR-TBD-031",
+  exec: "USR-TBD-044", controller: "USR-TBD-009", packer: "USR-TBD-015", shipping: "USR-TBD-014", supervisor: "USR-TBD-031",
 } as const satisfies Record<string, UserId>
 
 // ============================================================================ instruments (S-26)
@@ -30,7 +30,7 @@ const INS: InsRow[] = [
   [104, "Power analyzer and loss measurement system", "Loss system", "0.05 to 30 MVA, 0.1% accuracy class", "Test Lab bay 1", "WC-500", 365, "2026-01-15"],
   [105, "AC applied-voltage test set", "Hipot", "0 to 200 kV, 60 Hz", "Test Lab HV cage", "WC-500", 365, "2025-10-14"],
   [106, "Partial discharge measurement system", "PD", "0.1 to 10,000 pC", "Test Lab HV cage", "WC-500", 365, "2026-03-03"],
-  [107, "Oil dielectric breakdown tester, ASTM D877", "BDV", "0 to 100 kV", "Quality lab", undefined, 365, "2025-09-30"],
+  [107, "Oil dielectric breakdown tester, ASTM D877", "BDV", "0 to 100 kV", "Quality lab", undefined, 365, "2025-10-04"],
   [108, "Karl Fischer moisture titrator, ASTM D1533", "Moisture", "1 to 5,000 ppm", "Quality lab", undefined, 365, "2026-06-12"],
   [109, "Capacitance and tan delta bridge", "C / tan δ", "10 pF to 1 µF; 0 to 10%", "Receiving inspection", undefined, 365, "2026-05-01"],
   [110, "Helium leak detector", "Leak", "1e-9 to 1e-1 mbar·L/s", "Receiving inspection", undefined, 365, "2026-03-12", { on: "2026-10-03", reason: "Failed daily verification against the reference leak; sent to Precision Cal Services" }],
@@ -141,8 +141,17 @@ export const FIN_POWER: QtCharacteristic[] = [
   ch(7, "Induced voltage with PD", "IEEE C57.12.90 §10.7", "Quantitative", "Partial discharge at 1.5 pu", { uom: "pC", max: 250, instrumentClass: "PD", critical: true }),
   ch(8, "Oil tests", "ASTM D877 / D1533", "Quantitative", "BDV", { uom: "kV", min: 30, instrumentClass: "BDV" }),
   ch(9, "Temperature rise (type test, when ordered)", "IEEE C57.12.90 §11", "Quantitative", "Average winding rise", { uom: "K", max: 65, instrumentClass: "Temperature" }),
+  // Further captured values the specification lists for the same tests [DOC:p.86 §3]; numbered after 9 so the
+  // seqs of earlier records stay stable. Bounds for the loss and excitation rows come from fin() below.
+  ch(10, "Insulation resistance HV-G", "IEEE C57.12.90", "Quantitative", "HV-G, 1 min", { uom: "MΩ", min: 1000, instrumentClass: "Megohmmeter" }),
+  ch(11, "Insulation resistance LV-G", "IEEE C57.12.90", "Quantitative", "LV-G, 1 min", { uom: "MΩ", min: 1000, instrumentClass: "Megohmmeter" }),
+  ch(12, "Polarization index (PI)", "IEEE C57.12.90", "Quantitative", "PI = 10 min / 1 min insulation resistance", { uom: "ratio", min: 1.5, instrumentClass: "Megohmmeter" }),
+  ch(13, "Excitation current", "IEEE C57.12.90 §8", "Quantitative", "%I at 100% V", { uom: "%", instrumentClass: "Loss system" }),
+  ch(14, "No-load loss at 110% V", "IEEE C57.12.90 §8", "Quantitative", "No-load loss at 110% V", { uom: "kW", instrumentClass: "Loss system" }),
+  ch(15, "Load loss at rated current", "IEEE C57.12.90 §9", "Quantitative", "Load loss at rated current, 85 °C reference", { uom: "kW", instrumentClass: "Loss system" }),
+  ch(16, "Oil moisture", "ASTM D1533", "Quantitative", "Water content", { uom: "ppm", max: 35, instrumentClass: "Moisture" }),
 ]
-const FIN_PAD: QtCharacteristic[] = FIN_POWER.slice(0, 8).map((c) => (c.seq === 7 ? { ...c, name: "Induced voltage", charType: "Attributive", parameter: "Withstand at 2 pu, 7,200 cycles", uom: undefined, max: undefined, instrumentClass: "Hipot" } : c))
+const FIN_PAD: QtCharacteristic[] = FIN_POWER.filter((c) => c.seq !== 9).map((c) => (c.seq === 7 ? { ...c, name: "Induced voltage", charType: "Attributive", parameter: "Withstand at 2 pu, 7,200 cycles", uom: undefined, max: undefined, instrumentClass: "Hipot" } : c))
 const PSI_POWER: QtCharacteristic[] = [
   ch(1, "Nameplate matches serial and order", "WI-QA-070", "Attributive", "Nameplate serial = WO serial (SP-13 record)", { critical: true }),
   ch(2, "Transport gas pressure", "WI-QA-071", "Quantitative", "Dry air / N2 pressure for transport", { uom: "psi", min: 2, max: 5, instrumentClass: "Pressure" }),
@@ -246,11 +255,11 @@ function serials(): QtSerial[] {
     // final test queue and other units
     s("SN-TBD-5M-0388", "FIN-TBD-5000SS", "In Production", "2026-08-03", { woId: "WO-TBD-0388", customerId: "CUS-TBD-0027" }),
     s("SN-TBD-7M5-0391", "FIN-TBD-7500MTO", "In Production", "2026-08-10", { woId: "WO-TBD-0391", customerId: "CUS-TBD-0035" }),
-    s("SN-TBD-5M-0395", "FIN-TBD-5000SS", "In Production", "2026-08-24", { woId: "WO-TBD-0395", customerId: "CUS-TBD-0044" }),
+    s("SN-TBD-5M-0395", "FIN-TBD-5000SS", "In Production", "2026-08-24", { woId: "WO-2026-00395", customerId: "CUS-TBD-0044" }),
     s("SN-TBD-2500-0397", "FIN-TBD-2500PM", "In Production", "2026-09-07", { woId: "WO-TBD-0397", customerId: "CUS-TBD-0031" }),
     s("SN-TBD-5M-0372", "FIN-TBD-5000SS", "Picked", "2026-06-15", { woId: "WO-TBD-0372", customerId: "CUS-TBD-0041" }),
     s("SN-TBD-5M-0365", "FIN-TBD-5000SS", "Available", "2026-06-01", { woId: "WO-TBD-0365" }),
-    s("SN-TBD-CORE-0395", "SEMI-TBD-CORE20", "In Production", "2026-09-28", { woId: "WO-TBD-0395" }),
+    s("SN-TBD-CORE-0395", "SEMI-TBD-CORE20", "In Production", "2026-09-28", { woId: "WO-2026-00395" }),
     s("SN-TBD-CORE-0398", "SEMI-TBD-CORE20", "In Production", "2026-10-02", { woId: "WO-TBD-0398" }),
     s("SN-TBD-HVC-0393A", "SEMI-TBD-HVC20", "In Production", "2026-09-22", { woId: "WO-TBD-0393" }),
     s("SN-TBD-HVC-0391A", "SEMI-TBD-HVC20", "In Production", "2026-09-01", { woId: "WO-TBD-0391", parentSerial: "SN-TBD-7M5-0391" }),
@@ -307,7 +316,7 @@ function genealogy(): QtEvent[] {
   for (const child of ["SN-TBD-BSH-0301", "SN-TBD-BSH-0302", "SN-TBD-BSH-0303", "SN-TBD-OLTC-0301"] as const)
     add({ type: "T06", at: at("2026-06-23", "10:20"), serial: child, parentSerial: "SN-TBD-20M-0301", doc: HERO_WO, scanPoint: "SP-12", action: "install", userId: P.operator, evidence: "Installed in SN-TBD-20M-0301 at op 0150 WC-400" })
   add({ type: "T07", at: at("2026-06-26", "17:00"), serial: "SN-TBD-20M-0301", doc: HERO_WO, scanPoint: "SP-11", userId: P.operator, evidence: "WC-400 op 0150 final assembly and fittings, good 1" })
-  add({ type: "T08", at: at("2026-07-28", "16:45"), serial: "SN-TBD-20M-0301", doc: { type: "inspectionLot", id: "IL-TBD-0302" }, scanPoint: "SP-14", userId: P.tester, evidence: "IP-FIN-0003 rev D, run 1, all pass, calibration current for CAL-0101..0106, CAL-0108; FTR-2026-0188" })
+  add({ type: "T08", at: at("2026-07-28", "16:45"), serial: "SN-TBD-20M-0301", doc: { type: "inspectionLot", id: "IL-TBD-0302" }, scanPoint: "SP-14", userId: P.tester, evidence: "IP-FIN-0003 rev D, run 1, all pass, calibration current for CAL-0101..0108; FTR-2026-0188" })
   add({ type: "T09", at: at("2026-07-30", "09:30"), serial: "SN-TBD-20M-0301", doc: HERO_WO, userId: P.supervisor, evidence: "FG receipt, standard cost version 2026-01, location WH-TBD-01 yard, quality status Unrestricted" })
   add({ type: "T10", at: at("2026-08-07", "15:40"), serial: "SN-TBD-20M-0301", doc: { type: "delivery", id: "DLV-TBD-0031" }, scanPoint: "SP-17", userId: P.packer, evidence: "HU-TBD-0031-1 (main tank), HU-TBD-0031-2..4 (radiators, bushings crate, accessories); seals 44120-44123" })
   add({ type: "T11", at: at("2026-08-11", "06:15"), serial: "SN-TBD-20M-0301", doc: { type: "delivery", id: "DLV-TBD-0031" }, scanPoint: "SP-18", userId: P.shipping, evidence: "BOL-TBD-0031, carrier Great Plains Heavy Haul, PGI posted (#25), site Omaha North" })
@@ -324,12 +333,22 @@ function genealogy(): QtEvent[] {
   add({ type: "T07", at: at("2026-09-30", "16:00"), serial: "SN-TBD-5M-0388", doc: { type: "productionOrder", id: "WO-TBD-0388" }, scanPoint: "SP-11", userId: P.operator, evidence: "WC-400 op 0150 final assembly, good 1" })
   add({ type: "T08", at: at("2026-10-07", "17:20"), serial: "SN-TBD-5M-0388", doc: { type: "inspectionLot", id: "IL-TBD-0352" }, scanPoint: "SP-14", userId: P.tester, evidence: "IP-FIN-0003 rev D, run 1 session 1, characteristics 1-3 captured" })
   add({ type: "T08", at: at("2026-10-02", "15:45"), serial: "SN-TBD-7M5-0391", doc: { type: "inspectionLot", id: "IL-TBD-0353" }, scanPoint: "SP-14", userId: P.tester, evidence: "IP-FIN-0003 rev D, run 1 FAIL: PD 410 pC above 250 pC; NCR-TBD-0049" })
-  add({ type: "T05", at: at("2026-10-05", "07:30"), serial: "SN-TBD-CORE-0395", batch: "BAT-TBD-C2655", doc: { type: "productionOrder", id: "WO-TBD-0395" }, scanPoint: "SP-08", qty: 12400, userId: P.operator, evidence: "Issue 12,400 kg to op 0010 WC-100" })
+  add({ type: "T05", at: at("2026-10-05", "07:30"), serial: "SN-TBD-CORE-0395", batch: "BAT-TBD-C2655", doc: { type: "productionOrder", id: "WO-2026-00395" }, scanPoint: "SP-08", qty: 12400, userId: P.operator, evidence: "Issue 12,400 kg to op 0010 WC-100" })
   add({ type: "T05", at: at("2026-10-05", "07:42"), serial: "SN-TBD-CORE-0398", batch: "BAT-TBD-C2611", doc: { type: "productionOrder", id: "WO-TBD-0398" }, scanPoint: "SP-08", qty: 1200, userId: P.operator, evidence: "Issue 1,200 kg to op 0010 WC-100 (wrong batch scanned; operator meant BAT-TBD-C2655)" })
   add({ type: "T05", at: at("2026-10-05", "08:05"), serial: "SN-TBD-CORE-0398", batch: "BAT-TBD-C2611", doc: { type: "productionOrder", id: "WO-TBD-0398" }, scanPoint: "SP-08", qty: 1200, userId: P.supervisor, correction: "Reversed", refersTo: log[log.length - 1].id, evidence: "Reversal of the wrong-batch issue (correction pair, replacement pending)" })
   add({ type: "T10", at: at("2026-10-08", "14:20"), serial: "SN-TBD-5M-0372", doc: { type: "delivery", id: "DLV-TBD-0052" }, scanPoint: "SP-17", userId: P.packer, evidence: "HU-TBD-0052-1, seal 44290" })
   add({ type: "T04", at: at("2026-10-08", "02:10"), serial: "SN-TBD-5M-0365", doc: { type: "productionOrder", id: "WO-TBD-0365" }, scanPoint: "SP-15", userId: P.whop, device: "HH-07", delayedMin: 320, evidence: "Pick to staging lane 4 (captured offline, synced 07:30)" })
   add({ type: "T04", at: at("2026-10-08", "09:40"), serial: "SN-TBD-CT6-0003", doc: { type: "grn", id: "GRN-TBD-0371" }, scanPoint: "SP-04", userId: P.whop, device: "HH-03", delayedMin: 70, evidence: "Putaway to BIN-TBD-Q-01-02 (no T02 receipt event found for this serial)" })
+  // deviation evidence rows: affected serials / batches link to the approved deviation [DOC:p.215 Book IV §7.3]
+  const devRows: [string, string, string[], string[], string, string][] = [
+    ["DEV-2026-0008", "2026-02-07", ["SN-TBD-HVC-0301A", "SN-TBD-HVC-0301B", "SN-TBD-HVC-0301C"], ["BAT-TBD-K0602"], "Kraft paper density 0.78 g/cm³ accepted (≥ 0.76); customer concession MPG-2026-0207", "2026-05-07"],
+    ["DEV-2026-0011", "2026-08-28", ["SN-TBD-CORE-0395", "SN-TBD-CORE-0398"], ["BAT-TBD-C2655"], "CRGO lamination 0.243 mm accepted (≤ 0.245 mm; core loss within guarantee)", "2026-10-05"],
+    ["DEV-2026-0009", "2026-07-03", [], ["BAT-TBD-R2507"], "Radiator fin pitch 52 ± 1 mm accepted, temporary, expired 2026-09-30", "2026-07-03"],
+  ]
+  for (const [dev, on, sers, bats, text, serOn] of devRows) {
+    for (const sn of sers) add({ type: "T08", at: at(serOn, "15:30"), serial: sn as SerialNo, doc: { type: "deviation", id: dev }, userId: P.qm, evidence: `${dev} applies: ${text}` })
+    for (const b of bats) add({ type: "T03", at: at(on, "15:35"), batch: b as BatchId, doc: { type: "deviation", id: dev }, userId: P.qm, evidence: `${dev} approved: ${text}` })
+  }
   // closed recall from 2025
   add({ type: "T13", at: at("2025-08-12", "10:00"), batch: "BAT-TBD-R2507", doc: { type: "recall", id: "RCL-2025-004" }, userId: P.qm, evidence: "Campaign closed: 12 of 12 accounted, effectiveness check passed" })
   return log
@@ -366,7 +385,7 @@ function lots(): InspectionLot[] {
     L({ id: "IL-TBD-0359", gate: "IQC", planId: "IP-INC-0027", planRev: "C", subject: { type: "grn", id: "GRN-TBD-0341" }, itemId: "RAW-TBD-CRGO23", vendorId: "VEN-TBD-0101", batchId: "BAT-TBD-C2655", lotSize: 7, sampleSize: 7, createdOn: "2026-08-24",
       results: [R(1, 0.82, "INS-TBD-0113", P.inspector, "2026-08-25"), R(2, 0.243, "INS-TBD-0117", P.inspector, "2026-08-25"), R(3, "Pass", undefined, P.inspector, "2026-08-25"), R(4, "Pass", undefined, P.inspector, "2026-08-25")], certificate: "NS-26-0819 mill cert.pdf",
       inspectorId: P.inspector, decision: "Accepted", decidedOn: "2026-08-27", decidedBy: P.qm, disposition: "Use as is under deviation", deviationId: "DEV-2026-0011" }),
-    L({ id: "IL-TBD-0366", gate: "IPQC", planId: "IP-INP-0012", planRev: "A", subject: { type: "productionOrder", id: "WO-TBD-0395" }, itemId: "SEMI-TBD-CORE20", serials: ["SN-TBD-CORE-0395"], lotSize: 1, sampleSize: 1, createdOn: "2026-10-08", workCenterId: "WC-110" }),
+    L({ id: "IL-TBD-0366", gate: "IPQC", planId: "IP-INP-0012", planRev: "A", subject: { type: "productionOrder", id: "WO-2026-00395" }, itemId: "SEMI-TBD-CORE20", serials: ["SN-TBD-CORE-0395"], lotSize: 1, sampleSize: 1, createdOn: "2026-10-08", workCenterId: "WC-110" }),
     L({ id: "IL-TBD-0367", gate: "IPQC", planId: "IP-INP-0015", planRev: "B", subject: { type: "productionOrder", id: "WO-TBD-0398" }, itemId: "SEMI-TBD-TANK20", lotSize: 1, sampleSize: 1, createdOn: "2026-10-07", workCenterId: "WC-050",
       instruments: ["INS-TBD-0115"], results: [R(1, 12.1, "INS-TBD-0115", "USR-TBD-034", "2026-10-08")], inspectorId: P.inspector }),
     L({ id: "IL-TBD-0350", gate: "IPQC", planId: "IP-INP-0014", planRev: "A", subject: { type: "productionOrder", id: "WO-TBD-0391" }, itemId: "SEMI-TBD-HVC20", serials: ["SN-TBD-HVC-0391A"], lotSize: 1, sampleSize: 1, createdOn: "2026-09-01", workCenterId: "WC-210",
@@ -385,11 +404,16 @@ function lots(): InspectionLot[] {
 }
 
 // ============================================================================ final tests (QM-FIN-001)
-function fin(nll: number, z: number, wr: number, typeTest = false): QtCharacteristic[] {
-  return FIN_POWER.filter((c) => typeTest || c.seq !== 9).map((c) => {
+export function finSpec(nll: number, z: number, wr: number, typeTest = false, pad = false): QtCharacteristic[] {
+  return (pad ? FIN_PAD : FIN_POWER).filter((c) => typeTest || c.seq !== 9).map((c) => {
+    // winding resistance: the specification says "design sheet ±tolerances" without a number; ±2% is a reading (QT-R24)
     if (c.seq === 1) return { ...c, target: wr, min: +(wr * 0.98).toFixed(1), max: +(wr * 1.02).toFixed(1) }
-    if (c.seq === 4) return { ...c, target: nll, max: +(nll * 1.1).toFixed(2) } // single unit: guarantee +10%
-    if (c.seq === 5) return { ...c, target: z, min: +(z * 0.925).toFixed(2), max: +(z * 1.075).toFixed(2) } // ±7.5% two-winding
+    if (c.seq === 4) return { ...c, target: nll, max: +(nll * 1.1).toFixed(2) } // single unit: guarantee +10% [DOC:p.86 §3]
+    if (c.seq === 5) return { ...c, target: z, min: +(z * 0.925).toFixed(2), max: +(z * 1.075).toFixed(2) } // ±7.5% two-winding [DOC:p.86 §3]
+    // design values of the further rows: guarantee with the same single-unit +10% band (reading QT-R24)
+    if (c.seq === 13) return { ...c, target: +(0.55 - nll * 0.02).toFixed(2), max: +((0.55 - nll * 0.02) * 1.1).toFixed(2) }
+    if (c.seq === 14) return { ...c, target: +(nll * 1.32).toFixed(2), max: +(nll * 1.32 * 1.1).toFixed(2) }
+    if (c.seq === 15) return { ...c, target: +(nll * 7.4).toFixed(1), max: +(nll * 7.4 * 1.1).toFixed(1) }
     return c
   })
 }
@@ -397,35 +421,35 @@ const run = (n: number, sessions: string[], results: [number, number | "Pass" | 
   run: n, sessions, instruments, testerId: P.tester, ambient: "22 °C, 41% RH", outcome, retestScope,
   results: results.map(([seq, v]) => R(seq, v, undefined, P.tester, sessions[sessions.length - 1])),
 })
-const FIN_INS: InstrumentId[] = ["INS-TBD-0101", "INS-TBD-0102", "INS-TBD-0103", "INS-TBD-0104", "INS-TBD-0105", "INS-TBD-0106", "INS-TBD-0108"]
+const FIN_INS: InstrumentId[] = ["INS-TBD-0101", "INS-TBD-0102", "INS-TBD-0103", "INS-TBD-0104", "INS-TBD-0105", "INS-TBD-0106", "INS-TBD-0107", "INS-TBD-0108"]
 
 function finalTests(): FinalTest[] {
   const np = (mva: string, voltage: string, z: string): FinalTest["nameplate"] => ({ mva, voltage, cooling: "ONAN/ONAF", impedance: z, taps: "OLTC ±8 × 1.25%" })
   return [
     { id: "IL-TBD-0302", planId: "IP-FIN-0003", planRev: "D", woId: "WO-TBD-0301", woStatusText: "Closed (TECO)", serial: "SN-TBD-20M-0301", itemId: "FIN-TBD-20MVA", soId: "SO-2026-00301", customerId: "CUS-TBD-0048", promisedOn: "2026-08-10",
-      nameplate: np("20 / 26.7 MVA", "115 kV - 13.8 kV", "9.5%"), spec: fin(12.0, 9.5, 412.0), typeTestOrdered: false,
-      runs: [run(1, ["2026-07-27", "2026-07-28"], [[1, 411.6], [2, 0.11], [3, 8200], [4, 11.6], [5, 9.42], [6, "Pass"], [7, 92], [8, 62]], FIN_INS, "Pass")],
+      nameplate: np("20 / 26.7 MVA", "115 kV - 13.8 kV", "9.5%"), spec: finSpec(12.0, 9.5, 412.0), typeTestOrdered: false,
+      runs: [run(1, ["2026-07-27", "2026-07-28"], [[1, 411.6], [2, 0.11], [3, 8200], [4, 11.6], [5, 9.42], [6, "Pass"], [7, 92], [8, 62], [10, 6400], [11, 7100], [12, 2.6], [13, 0.3], [14, 15.6], [15, 89.9], [16, 12]], FIN_INS, "Pass")],
       finalResult: "Pass", ftrId: "FTR-2026-0188", ftrIssuedOn: "2026-07-28", testerSigned: P.tester, qmCountersign: { by: P.qm, on: "2026-07-29" },
       activity: [{ at: "2026-07-27", by: "Test technician", text: "Run 1 started" }, { at: "2026-07-28", by: "Test technician", text: "All pass; FTR-2026-0188 issued; milestone Production Complete / Tested fired" }, { at: "2026-07-29", by: "Quality Manager", text: "FTR countersigned" }] },
     { id: "IL-TBD-0341", planId: "IP-FIN-0003", planRev: "D", woId: "WO-TBD-0372", woStatusText: "Completed", serial: "SN-TBD-5M-0372", itemId: "FIN-TBD-5000SS", soId: "SO-2026-00309", customerId: "CUS-TBD-0041", promisedOn: "2026-09-30",
-      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: fin(4.1, 6.5, 186.0, true), typeTestOrdered: true,
-      runs: [run(1, ["2026-09-14", "2026-09-15", "2026-09-17"], [[1, 185.2], [2, 0.09], [3, 6400], [4, 4.02], [5, 6.61], [6, "Pass"], [7, 120], [8, 58], [9, 61.4]], [...FIN_INS, "INS-TBD-0116"], "Pass")],
+      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: finSpec(4.1, 6.5, 186.0, true), typeTestOrdered: true,
+      runs: [run(1, ["2026-09-14", "2026-09-15", "2026-09-17"], [[1, 185.2], [2, 0.09], [3, 6400], [4, 4.02], [5, 6.61], [6, "Pass"], [7, 120], [8, 58], [9, 61.4], [10, 4800], [11, 5200], [12, 2.2], [13, 0.46], [14, 5.3], [15, 30.9], [16, 14]], [...FIN_INS, "INS-TBD-0116"], "Pass")],
       finalResult: "Pass", ftrId: "FTR-2026-0193", ftrIssuedOn: "2026-09-17", testerSigned: P.tester, qmCountersign: { by: P.qm, on: "2026-09-18" }, activity: [{ at: "2026-09-17", by: "Test technician", text: "FTR-2026-0193 issued" }] },
     { id: "IL-TBD-0352", planId: "IP-FIN-0003", planRev: "D", woId: "WO-TBD-0388", woStatusText: "Testing", serial: "SN-TBD-5M-0388", itemId: "FIN-TBD-5000SS", soId: "SO-2026-00318", customerId: "CUS-TBD-0027", promisedOn: "2026-10-16",
-      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: fin(4.1, 6.5, 186.0), typeTestOrdered: false,
+      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: finSpec(4.1, 6.5, 186.0), typeTestOrdered: false,
       runs: [run(1, ["2026-10-07"], [[1, 186.4], [2, 0.12], [3, 7100]], ["INS-TBD-0101", "INS-TBD-0102", "INS-TBD-0103"])], activity: [{ at: "2026-10-07", by: "Test technician", text: "Run 1 session 1 saved (partial)" }] },
     { id: "IL-TBD-0353", planId: "IP-FIN-0003", planRev: "D", woId: "WO-TBD-0391", woStatusText: "Testing", serial: "SN-TBD-7M5-0391", itemId: "FIN-TBD-7500MTO", soId: "SO-2026-00322", customerId: "CUS-TBD-0035", promisedOn: "2026-10-23",
-      nameplate: np("7.5 MVA", "24.94 kV - 600Y/347 V", "5.75%"), spec: fin(5.6, 5.75, 96.0), typeTestOrdered: false,
-      runs: [run(1, ["2026-10-01", "2026-10-02"], [[1, 96.3], [2, 0.14], [3, 5200], [4, 5.48], [5, 5.81], [6, "Pass"], [7, 410], [8, 55]], FIN_INS, "Fail", [7])],
-      ncrId: "NCR-TBD-0049", disposition: "Rework", rwoId: "RWO-TBD-0391",
-      activity: [{ at: "2026-10-02", by: "Test technician", text: "Run 1 FAIL on characteristic 7 (PD 410 pC); NCR-TBD-0049 created" }, { at: "2026-10-03", by: "Quality Manager", text: "Disposition Rework: RWO-TBD-0391, retest scope characteristic 7" }] },
-    { id: "IL-TBD-0354", planId: "IP-FIN-0003", planRev: "D", woId: "WO-TBD-0395", woStatusText: "Testing", serial: "SN-TBD-5M-0395", itemId: "FIN-TBD-5000SS", soId: "SO-2026-00331", customerId: "CUS-TBD-0044", promisedOn: "2026-11-06",
-      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: fin(4.1, 6.5, 186.0, true), typeTestOrdered: true, runs: [], activity: [{ at: "2026-10-09", by: "System", text: "WO reached Testing; added to the final test queue" }] },
+      nameplate: np("7.5 MVA", "24.94 kV - 600Y/347 V", "5.75%"), spec: finSpec(5.6, 5.75, 96.0), typeTestOrdered: false,
+      runs: [run(1, ["2026-10-01", "2026-10-02"], [[1, 96.3], [2, 0.14], [3, 5200], [4, 5.48], [5, 5.81], [6, "Pass"], [7, 410], [8, 55], [10, 3900], [11, 4300], [12, 1.9], [13, 0.43], [14, 7.2], [15, 41.9], [16, 16]], FIN_INS, "Fail", [7])],
+      ncrId: "NCR-TBD-0049", disposition: "Rework", rwoRequestedOn: "2026-10-03",
+      activity: [{ at: "2026-10-02", by: "Test technician", text: "Run 1 FAIL on characteristic 7 (PD 410 pC); NCR-TBD-0049 created" }, { at: "2026-10-03", by: "Quality Manager", text: "Disposition Rework: RWO requested from Production planning, retest scope characteristic 7" }] },
+    { id: "IL-TBD-0354", planId: "IP-FIN-0003", planRev: "D", woId: "WO-2026-00395", woStatusText: "Testing", serial: "SN-TBD-5M-0395", itemId: "FIN-TBD-5000SS", soId: "SO-2026-00331", customerId: "CUS-TBD-0044", promisedOn: "2026-11-06",
+      nameplate: np("5 / 6.25 MVA", "34.5 kV - 4.16 kV", "6.5%"), spec: finSpec(4.1, 6.5, 186.0, true), typeTestOrdered: true, runs: [], activity: [{ at: "2026-10-09", by: "System", text: "WO reached Testing; added to the final test queue" }] },
     { id: "IL-TBD-0355", planId: "IP-FIN-0004", planRev: "A", woId: "WO-TBD-0397", woStatusText: "Testing", serial: "SN-TBD-2500-0397", itemId: "FIN-TBD-2500PM", soId: "SO-2026-00340", customerId: "CUS-TBD-0031", promisedOn: "2026-10-13",
       nameplate: { mva: "2,500 kVA", voltage: "12.47 kV - 480Y/277 V", cooling: "KNAN", impedance: "5.75%", taps: "DETC ±2 × 2.5%" },
-      spec: FIN_PAD.map((c) => (c.seq === 1 ? { ...c, target: 640, min: 627, max: 653 } : c.seq === 4 ? { ...c, target: 2.9, max: 3.19 } : c.seq === 5 ? { ...c, target: 5.75, min: 5.32, max: 6.18 } : c)),
-      typeTestOrdered: false, runs: [run(1, ["2026-10-08", "2026-10-09"], [[1, 641.2], [2, 0.1], [3, 4100], [4, 2.84], [5, 5.7], [6, "Pass"], [7, "Pass"], [8, 52]], ["INS-TBD-0101", "INS-TBD-0102", "INS-TBD-0103", "INS-TBD-0104", "INS-TBD-0105", "INS-TBD-0108"])],
-      activity: [{ at: "2026-10-09", by: "Test technician", text: "All characteristics captured in run 1" }] },
+      spec: finSpec(2.9, 5.75, 640, false, true),
+      typeTestOrdered: false, runs: [run(1, ["2026-10-08", "2026-10-09"], [[1, 641.2], [2, 0.1], [3, 4100], [4, 2.84], [5, 5.7], [6, "Pass"], [7, "Pass"], [10, 3100], [11, 3300], [12, 1.8], [13, 0.48], [14, 3.7], [15, 21.2], [16, 18]], ["INS-TBD-0101", "INS-TBD-0102", "INS-TBD-0103", "INS-TBD-0104", "INS-TBD-0105", "INS-TBD-0108"])],
+      activity: [{ at: "2026-10-09", by: "Test technician", text: "Run 1 saved with the oil BDV (characteristic 8) still open: the only BDV tester, CAL-0107, is Overdue (E-QM-05)" }] },
   ]
 }
 
@@ -440,7 +464,8 @@ function ncrs(): QtNcr[] {
     n("NCR-TBD-0047", "NCR: radiator weld porosity", { type: "inspectionLot", id: "IL-TBD-0356" }, "Major", "Dispositioned", "2026-09-19", "Component Supplier", "Visible porosity on header welds of 2 of 3 sampled radiator banks.", { itemId: "RAW-TBD-RAD", vendorId: "VEN-TBD-0108", batchId: "BAT-TBD-R0918", scarId: "SCAR-TBD-0010" }),
     n("NCR-TBD-0048", "NCR: HV winding turns count error", { type: "inspectionLot", id: "IL-TBD-0351" }, "Major", "Dispositioned", "2026-09-22", "Production", "Disc 14 one turn short; winding machine counter skipped on a crossover.", { itemId: "SEMI-TBD-HVC20", serial: "SN-TBD-HVC-0393A", capaId: "CAPA-TBD-0016" }),
     n("NCR-TBD-0049", "NCR: partial discharge above limit at final test", { type: "inspectionLot", id: "IL-TBD-0353" }, "Critical", "Open", "2026-10-02", "Production", "PD 410 pC at 1.5 pu against a 250 pC limit on SN-TBD-7M5-0391. Suspected loose lead clamp near the LV exit.", { itemId: "FIN-TBD-7500MTO", serial: "SN-TBD-7M5-0391" }),
-    n("NCR-TBD-0040", "NCR: paint adhesion failure", { type: "inspectionLot", id: "IL-TBD-0356" }, "Major", "Closed", "2026-05-12", "Component Supplier", "Cross-hatch adhesion 2B on topcoat batch from Coastal Coatings.", { vendorId: "VEN-TBD-0113", capaId: "CAPA-TBD-0011", scarId: "SCAR-TBD-0003" }),
+    n("NCR-TBD-0037", "NCR: bushing sight glass fogging at receiving", { type: "grn", id: "GRN-TBD-0344" }, "Minor", "Dispositioned", "2026-09-01", "Component Supplier", "Sight glass fogging on 2 of 6 sampled HV bushings at receiving; vendor to replace the glasses on open orders.", { itemId: "RAW-TBD-BSH145", vendorId: "VEN-TBD-0104", scarId: "SCAR-TBD-0006" }),
+    n("NCR-TBD-0040", "NCR: paint adhesion failure", { type: "grn", id: "GRN-TBD-0222" }, "Major", "Closed", "2026-05-12", "Component Supplier", "Cross-hatch adhesion 2B on topcoat batch from Coastal Coatings.", { vendorId: "VEN-TBD-0113", capaId: "CAPA-TBD-0011", scarId: "SCAR-TBD-0003" }),
     n("NCR-TBD-0041", "NCR: batch label misprint at receiving", { type: "grn", id: "GRN-TBD-0251" }, "Minor", "Closed", "2026-02-06", "Production", "Label printed with the vendor batch in the internal batch field; reprinted with reason.", { capaId: "CAPA-TBD-0010" }),
     n("NCR-TBD-0042", "NCR: main tank gasket compression set", { type: "rma", id: "RMA-TBD-0009" }, "Major", "Closed", "2026-06-20", "Component Supplier", "Gaskets from Saguaro batch SGS-0714 took a permanent set at 70% after 60 days.", { vendorId: "VEN-TBD-0111", batchId: "BAT-TBD-GS0714", capaId: "CAPA-TBD-0013", scarId: "SCAR-TBD-0005" }),
     n("NCR-TBD-0043", "NCR: tap changer contact kit torque marks missing", { type: "rma", id: "RMA-TBD-0013" }, "Minor", "Open", "2026-09-30", "Component Supplier", "Spare contact kits shipped without torque witness marks; field crew could not verify assembly.", { vendorId: "VEN-TBD-0103", batchId: "BAT-TBD-SK0301", capaId: "CAPA-TBD-0017" }),
@@ -464,7 +489,7 @@ function capas(): QtCapa[] {
     c({ id: "CAPA-TBD-0016", title: "CAPA: HV winding turns counter skip", status: "Actions In Progress", ncrIds: ["NCR-TBD-0048"], sources: [{ type: "ncr", id: "NCR-TBD-0048" }], openedOn: "2026-09-23", ownerId: P.qe,
       problem: "Winding machine WM-2 counter skipped a turn on a disc crossover (NCR-TBD-0048).", method: "5-Why", rootCause: "Counter sensor bracket loosened; no daily verification step.",
       actions: [a("A1", "Containment", "Re-check turns on all discs wound on WM-2 since 2026-09-15", P.supervisor, "2026-09-25", true, "Recheck sheet RS-0925"), a("A2", "Corrective", "Replace bracket; add daily counter verification to WI-PR-210", P.supervisor, "2026-10-15", false)] }),
-    c({ id: "CAPA-TBD-0014", title: "CAPA: oil sampling valve contamination", status: "Implemented", ncrIds: [], sources: [{ type: "inspectionLot", id: "IL-TBD-0362" }], openedOn: "2026-08-18", ownerId: P.qe, implementedOn: "2026-09-20",
+    c({ id: "CAPA-TBD-0014", title: "CAPA: oil sampling valve contamination", status: "Implemented", ncrIds: [], sources: [{ type: "batch", id: "BAT-TBD-OIL-0712" }], openedOn: "2026-08-18", ownerId: P.qe, implementedOn: "2026-09-20",
       problem: "Moisture readings high on two tanker receipts traced to the sampling valve, not the oil.", method: "Fishbone", rootCause: "Sampling valve not flushed before draw.",
       actions: [a("A1", "Corrective", "Flush procedure added to the oil sample instruction", P.qe, "2026-09-15", true, "IP-INC-0033 sample instruction"), a("A2", "Preventive", "Train receiving on the flush step", P.qe, "2026-09-20", true, "Training record TR-0920")],
       effectiveness: { method: "Compare moisture results on the next 5 tanker receipts", checkOn: "2026-10-20" } }),
@@ -492,10 +517,10 @@ function scars(): QtScar[] {
   const pe = (team: string, problem: string, containment: string) => ({ D1: team, D2: problem, D3: containment })
   return [
     s("SCAR-TBD-0009", "VEN-TBD-0104", "SCAR to Hanseong Porcelain & Polymer", ["NCR-TBD-0044"], "2026-10-02", "2026-10-16", true, pe("L. Engstrom (PE QE), N. Brooks (PE QM), vendor QA lead", "Flange gasket seated off-groove on HP-26-0412 serial HP-412-02; oil weep in service.", "Vendor to hold all bushings machined on the same shift; PE holds BAT-TBD-B0301 (RCL-2026-001).")),
-    s("SCAR-TBD-0006", "VEN-TBD-0104", "Bushing sight glass fogging", ["NCR-TBD-0044"], "2026-09-02", "2026-09-30", true, pe("L. Engstrom, vendor QA", "Sight glass fogging on 2 bushings at receiving.", "Vendor to replace glasses on open orders."), { escalations: [{ on: "2026-10-01", text: "Overdue: reminder to vendor QA director" }] }),
+    s("SCAR-TBD-0006", "VEN-TBD-0104", "Bushing sight glass fogging", ["NCR-TBD-0037"], "2026-09-02", "2026-09-30", true, pe("L. Engstrom, vendor QA", "Sight glass fogging on 2 bushings at receiving.", "Vendor to replace glasses on open orders."), { escalations: [{ on: "2026-10-01", text: "Overdue: reminder to vendor QA director" }] }),
     s("SCAR-TBD-0007", "VEN-TBD-0112", "LV bushing terminal crack at receiving", ["NCR-TBD-0046"], "2026-08-15", "2026-09-12", true, pe("L. Engstrom, Tri-State QA", "Cracks at terminal thread root.", "Vendor sorts stock."), { escalations: [{ on: "2026-09-13", text: "Overdue: escalated to Purchasing Manager" }] }),
     s("SCAR-TBD-0008", "VEN-TBD-0112", "LV bushing field cracks, batch TSB-0815", ["NCR-TBD-0045"], "2026-09-11", "2026-10-01", true, pe("L. Engstrom, Tri-State QA", "Field cracks on two pad-mount units.", "Quarantine BAT-TBD-L0815 (RCL-2026-003)."), { escalations: [{ on: "2026-10-02", text: "Second overdue SCAR: vendor quality set to Restricted (≥ 2 open overdue)" }] }),
-    s("SCAR-TBD-0002", "VEN-TBD-0113", "Paint viscosity drift", ["NCR-TBD-0040"], "2026-04-01", "2026-04-29", true, pe("PE QE", "Viscosity out of range.", "Stop use.")),
+    s("SCAR-TBD-0002", "VEN-TBD-0113", "Paint viscosity drift", [], "2026-04-01", "2026-04-29", true, pe("PE QE", "Viscosity out of range.", "Stop use.")),
     s("SCAR-TBD-0003", "VEN-TBD-0113", "Paint adhesion failure", ["NCR-TBD-0040"], "2026-05-13", "2026-06-10", true, pe("PE QE", "Adhesion 2B.", "Stop use.")),
     s("SCAR-TBD-0004", "VEN-TBD-0113", "Paint certificate missing", [], "2026-05-20", "2026-06-17", true, pe("PE QE", "No batch certificate.", "Hold receipts.")),
     s("SCAR-TBD-0005", "VEN-TBD-0111", "Gasket compression set", ["NCR-TBD-0042"], "2026-06-22", "2026-07-20", false, { ...pe("PE QE, Saguaro QA", "Compression set 70%.", "Quarantine BAT-TBD-GS0714."), D4: "Compound mixed below hardness spec on one press.", D5: "Durometer check per batch at the mixer.", D6: "Implemented 2026-07-15; 3 lots verified.", D7: "Mixer recipe locked.", D8: "Closed by PE QM." }, { respondedOn: "2026-07-16", closedOn: "2026-08-30", recovery: { amount: 4200, creditNote: "CN-SGS-0830" } }),
@@ -507,12 +532,12 @@ function scars(): QtScar[] {
 function deviations(): QtDeviation[] {
   const d = (o: Omit<QtDeviation, "activity"> & { activity?: QtDeviation["activity"] }): QtDeviation => ({ activity: [{ at: o.requestedOn, by: "Quality engineer", text: "Requested" }], ...o })
   return [
-    d({ id: "DEV-2026-0011", title: "CRGO lamination 0.243 mm on heat NS-H-78560", type: "Deviation", origin: "Inspection failure", scope: [{ type: "batch", id: "BAT-TBD-C2655" }, { type: "inspectionLot", id: "IL-TBD-0359" }], specReference: "IP-INC-0027 rev C char 2", characteristic: "Lamination thickness", specValue: "0.22 to 0.24 mm", acceptedValue: "≤ 0.245 mm; core loss within guarantee", validUntil: "2026-12-31", validQty: 9000, usedQty: 8100, affectedSerials: ["SN-TBD-CORE-0395", "SN-TBD-CORE-0398"], vendorId: "VEN-TBD-0101", requestedBy: P.qe, requestedOn: "2026-08-25", state: "Approved", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-08-27" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-08-27" }] }),
-    d({ id: "DEV-2026-0012", title: "CTC enamel build 0.048 mm per side", type: "Waiver", origin: "Supplier deviation request", scope: [{ type: "batch", id: "BAT-TBD-CT1003" }], specReference: "IP-INC-0035 rev A char 2", characteristic: "Enamel thickness", specValue: "0.05 to 0.07 mm", acceptedValue: "≥ 0.045 mm", validQty: 3900, usedQty: 0, affectedSerials: [], vendorId: "VEN-TBD-0102", requestedBy: P.qe, requestedOn: "2026-10-08", state: "Requested", approvals: [] }),
-    d({ id: "DEV-2026-0013", title: "Paint DFT 118 µm on SN-TBD-5M-0388", type: "Deviation", origin: "Inspection failure", scope: [{ type: "serial", id: "SN-TBD-5M-0388" }], specReference: "IP-PSI-0006 rev A char 4", characteristic: "Paint dry film thickness", specValue: "≥ 125 µm", acceptedValue: "≥ 115 µm with touch-up at site", validQty: 1, usedQty: 0, affectedSerials: ["SN-TBD-5M-0388"], requestedBy: P.qe, requestedOn: "2026-10-08", state: "Requested", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-10-09" }] }),
-    d({ id: "DEV-2026-0009", title: "Radiator fin pitch 52 mm (temporary)", type: "Deviation", origin: "Supplier deviation request", scope: [{ type: "batch", id: "BAT-TBD-R2507" }], specReference: "Drawing RAD-520 rev C", characteristic: "Fin pitch", specValue: "50 ± 1 mm", acceptedValue: "52 ± 1 mm", validUntil: "2026-09-30", usedQty: 36, affectedSerials: [], vendorId: "VEN-TBD-0108", requestedBy: P.qe, requestedOn: "2026-07-01", state: "Expired", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-07-03" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-07-03" }], activity: [{ at: "2026-10-01", by: "System", text: "Auto expiry: validity date passed; further use blocked" }] }),
-    d({ id: "DEV-2026-0010", title: "Use tank plate A36 instead of A572", type: "Deviation", origin: "Supplier deviation request", scope: [{ type: "productionOrder", id: "WO-TBD-0398" }], specReference: "Drawing TANK-20 rev B", characteristic: "Plate material", specValue: "A572 Gr. 50", acceptedValue: "A36", usedQty: 0, affectedSerials: [], vendorId: "VEN-TBD-0106", requestedBy: P.qe, requestedOn: "2026-09-12", state: "Rejected", approvals: [], activity: [{ at: "2026-09-14", by: "Engineering Manager", text: "Rejected: yield strength margin insufficient for vacuum rating" }] }),
-    d({ id: "DEV-2026-0008", title: "Kraft paper density 0.78 g/cm³", type: "Waiver", origin: "Inspection failure", scope: [{ type: "batch", id: "BAT-TBD-K0602" }], specReference: "Material spec RAW-TBD-KRAFT", characteristic: "Apparent density", specValue: "0.80 ± 0.02 g/cm³", acceptedValue: "≥ 0.76 g/cm³", validQty: 900, usedQty: 900, affectedSerials: ["SN-TBD-HVC-0301A", "SN-TBD-HVC-0301B", "SN-TBD-HVC-0301C"], vendorId: "VEN-TBD-0107", requestedBy: P.qe, requestedOn: "2026-02-06", state: "Approved", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-02-07" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-02-07" }], activity: [{ at: "2026-05-07", by: "System", text: "Valid quantity fully used; further use blocked" }] }),
+    d({ id: "DEV-2026-0011", title: "CRGO lamination 0.243 mm on heat NS-H-78560", type: "Use-As-Is (waiver)", valueImpact: 12400, origin: "Inspection failure", scope: [{ type: "batch", id: "BAT-TBD-C2655" }, { type: "inspectionLot", id: "IL-TBD-0359" }], specReference: "IP-INC-0027 rev C char 2", characteristic: "Lamination thickness", specValue: "0.22 to 0.24 mm", acceptedValue: "≤ 0.245 mm; core loss within guarantee", validUntil: "2026-12-31", validQty: 9000, usedQty: 8100, affectedSerials: ["SN-TBD-CORE-0395", "SN-TBD-CORE-0398"], vendorId: "VEN-TBD-0101", requestedBy: P.qe, requestedOn: "2026-08-25", state: "Approved", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-08-27" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-08-27" }, { role: "Controller", by: P.controller, on: "2026-08-28" }] }),
+    d({ id: "DEV-2026-0012", title: "CTC enamel build 0.048 mm per side", type: "Use-As-Is (waiver)", valueImpact: 18200, origin: "Supplier deviation request", scope: [{ type: "batch", id: "BAT-TBD-CT1003" }], specReference: "IP-INC-0035 rev A char 2", characteristic: "Enamel thickness", specValue: "0.05 to 0.07 mm", acceptedValue: "≥ 0.045 mm", validQty: 3900, usedQty: 0, affectedSerials: [], vendorId: "VEN-TBD-0102", requestedBy: P.qe, requestedOn: "2026-10-08", state: "Requested", approvals: [] }),
+    d({ id: "DEV-2026-0013", title: "Paint DFT 118 µm on SN-TBD-5M-0388", type: "Customer-Approved Concession", customerRequired: true, valueImpact: 2100, origin: "Inspection failure", scope: [{ type: "serial", id: "SN-TBD-5M-0388" }], specReference: "IP-PSI-0006 rev A char 4", characteristic: "Paint dry film thickness", specValue: "≥ 125 µm", acceptedValue: "≥ 115 µm with touch-up at site", validQty: 1, usedQty: 0, affectedSerials: ["SN-TBD-5M-0388"], requestedBy: P.qe, requestedOn: "2026-10-08", state: "Requested", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-10-09" }] }),
+    d({ id: "DEV-2026-0009", title: "Radiator fin pitch 52 mm (temporary)", type: "Temporary Process Deviation", valueImpact: 3600, origin: "Supplier deviation request", scope: [{ type: "batch", id: "BAT-TBD-R2507" }], specReference: "Drawing RAD-520 rev C", characteristic: "Fin pitch", specValue: "50 ± 1 mm", acceptedValue: "52 ± 1 mm", validUntil: "2026-09-30", usedQty: 36, affectedSerials: [], vendorId: "VEN-TBD-0108", requestedBy: P.qe, requestedOn: "2026-07-01", state: "Expired", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-07-03" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-07-03" }], activity: [{ at: "2026-10-01", by: "System", text: "Auto expiry: validity date passed; further use blocked" }] }),
+    d({ id: "DEV-2026-0010", title: "Use tank plate A36 instead of A572", type: "Use-As-Is (waiver)", origin: "Supplier deviation request", scope: [{ type: "productionOrder", id: "WO-TBD-0398" }], specReference: "Drawing TANK-20 rev B", characteristic: "Plate material", specValue: "A572 Gr. 50", acceptedValue: "A36", usedQty: 0, affectedSerials: [], vendorId: "VEN-TBD-0106", requestedBy: P.qe, requestedOn: "2026-09-12", state: "Rejected", approvals: [], activity: [{ at: "2026-09-14", by: "Engineering Manager", text: "Rejected: yield strength margin insufficient for vacuum rating" }] }),
+    d({ id: "DEV-2026-0008", title: "Kraft paper density 0.78 g/cm³", type: "Use-As-Is (waiver)", customerRequired: true, customerEvidence: "Midland Plains concession letter MPG-CL-0207.pdf (ref MPG-2026-0207)", valueImpact: 1200, origin: "Inspection failure", scope: [{ type: "batch", id: "BAT-TBD-K0602" }], specReference: "Material spec RAW-TBD-KRAFT", characteristic: "Apparent density", specValue: "0.80 ± 0.02 g/cm³", acceptedValue: "≥ 0.76 g/cm³", validQty: 900, usedQty: 900, affectedSerials: ["SN-TBD-HVC-0301A", "SN-TBD-HVC-0301B", "SN-TBD-HVC-0301C"], vendorId: "VEN-TBD-0107", requestedBy: P.qe, requestedOn: "2026-02-06", state: "Approved", approvals: [{ role: "Quality Manager", by: P.qm, on: "2026-02-07" }, { role: "Engineering Manager", by: P.engMgr, on: "2026-02-07" }], activity: [{ at: "2026-05-07", by: "System", text: "Valid quantity fully used; further use blocked" }] }),
   ]
 }
 
@@ -656,10 +681,10 @@ export const COQ = [
   { month: "Aug", scrap: 12800, rework: 26600, warranty: 8800 }, { month: "Sep", scrap: 24300, rework: 34100, warranty: 15400 }, { month: "Oct", scrap: 6100, rework: 11200, warranty: 31850 },
 ]
 /** Rolling 90-day lot acceptance by vendor (design values). */
-export const VENDOR_LOTS: { vendorId: string; lots: number; accepted: number }[] = [
-  { vendorId: "VEN-TBD-0101", lots: 14, accepted: 14 }, { vendorId: "VEN-TBD-0102", lots: 11, accepted: 11 }, { vendorId: "VEN-TBD-0103", lots: 4, accepted: 4 },
-  { vendorId: "VEN-TBD-0104", lots: 6, accepted: 5 }, { vendorId: "VEN-TBD-0105", lots: 9, accepted: 9 }, { vendorId: "VEN-TBD-0107", lots: 8, accepted: 8 },
-  { vendorId: "VEN-TBD-0108", lots: 7, accepted: 6 }, { vendorId: "VEN-TBD-0111", lots: 5, accepted: 4 }, { vendorId: "VEN-TBD-0112", lots: 9, accepted: 6 },
+export const VENDOR_LOTS: { vendorId: string; lots: number; accepted: number; streak: number }[] = [
+  { vendorId: "VEN-TBD-0101", lots: 14, accepted: 14, streak: 14 }, { vendorId: "VEN-TBD-0102", lots: 11, accepted: 11, streak: 11 }, { vendorId: "VEN-TBD-0103", lots: 4, accepted: 4, streak: 4 },
+  { vendorId: "VEN-TBD-0104", lots: 6, accepted: 5, streak: 2 }, { vendorId: "VEN-TBD-0105", lots: 9, accepted: 9, streak: 9 }, { vendorId: "VEN-TBD-0107", lots: 8, accepted: 8, streak: 8 },
+  { vendorId: "VEN-TBD-0108", lots: 7, accepted: 6, streak: 0 }, { vendorId: "VEN-TBD-0111", lots: 5, accepted: 4, streak: 1 }, { vendorId: "VEN-TBD-0112", lots: 9, accepted: 6, streak: 0 },
 ]
 
 // ============================================================================ root seed
@@ -683,6 +708,10 @@ export interface Seed {
   scanPolicies: ScanPolicy[]
   reprints: Reprint[]
   scanExceptions: ScanException[]
+  /** Rolling 90-day lot acceptance by vendor (design summary) updated by every IQC decision. */
+  vendorLots: VendorLots[]
+  /** No-plan policy Auto-Accept with Warning events (non-QI-required items only). */
+  warnings: AutoAcceptWarning[]
 }
 export function buildSeed(): Seed {
   return {
@@ -690,5 +719,10 @@ export function buildSeed(): Seed {
     recalls: recalls(), genealogy: genealogy(), batches: batches(), serials: serials(), traceExceptions: traceExceptions(),
     dossiers: [{ id: "DOS-TBD-0031", root: "SN-TBD-20M-0301", direction: "backward", createdOn: "2026-08-10", by: P.qm, events: 52, nodes: 24 }],
     printers: printers(), labelTemplates: templates(), scanPolicies: policies(), reprints: reprints(), scanExceptions: scanExceptions(),
+    vendorLots: VENDOR_LOTS.map((v) => ({ ...v })),
+    warnings: [
+      { id: "WRN-TBD-0001", on: "2026-10-05", gate: "IQC", itemId: "CONS-TBD-PAINT", vendorId: "VEN-TBD-0113", subject: { type: "grn", id: "GRN-TBD-0369" }, text: "No active INC plan for CONS-TBD-PAINT (the vendor plan is Obsolete); the item is not QI-required, so the receipt passed to Unrestricted under Auto-Accept with Warning." },
+      { id: "WRN-TBD-0002", on: "2026-09-29", gate: "IQC", itemId: "CONS-TBD-PAINT", vendorId: "VEN-TBD-0113", subject: { type: "grn", id: "GRN-TBD-0366" }, text: "Second paint receipt with no active plan passed under Auto-Accept with Warning." },
+    ],
   }
 }

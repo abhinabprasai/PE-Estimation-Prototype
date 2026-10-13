@@ -79,6 +79,8 @@ export function LeadList() {
     screenId: "OM-LEAD-001/2",
     description: "The first formal record of demand, before the customer master. Answer the repeat-build question before engineering spends an hour.",
     actions: (
+      <>
+      <Button variant="outline" onClick={() => nav("/sales/leads/import")}>Import and inbound review ({db.fx.inbound.filter((c) => !["Accepted", "Merged", "Rejected"].includes(c.status)).length})</Button>
       <div role="radiogroup" aria-label="View" className="inline-flex gap-1 rounded-md border p-1 text-xs">
         {(["board", "register"] as const).map((v) => (
           <button key={v} role="radio" aria-checked={view === v} onClick={() => setSp(v === "board" ? {} : { view: v })} className={cn("h-6 rounded-md px-2", view === v && "bg-secondary font-semibold")}>
@@ -86,6 +88,7 @@ export function LeadList() {
           </button>
         ))}
       </div>
+      </>
     ),
     primary: <Button onClick={() => setOpen(true)}>New lead</Button>,
   }

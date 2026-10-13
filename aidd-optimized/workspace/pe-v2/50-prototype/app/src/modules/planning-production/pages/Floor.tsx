@@ -5,6 +5,7 @@
 // WIP: Kanban mirror by work center (drag disabled: status changes only via confirmations) plus the
 // valuation report reconciling to the GL 1320 balance; drill to orders; export for close step 6c.
 
+import { WipAging } from "../widgets/WipAging"
 import { useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { ArrowDown, ArrowUp, Download } from "lucide-react"
@@ -252,10 +253,12 @@ export function WipBoard() {
           ),
         } : undefined}
       />
+      <div className="mt-6"><WipAging empty={st.empty} /></div>
       <RulesPanel className="mt-6" rules={[
         ["§7", "WIP board: cards = WO operations at each work center with age, priority and hold flags; drag disabled", "DOC:p.77 §7"],
         ["§7", "Valuation: materials, labor and overhead applied, scrap, total WIP per open order; reconciles to GL 1320 (ACC 26.2 step 6)", "DOC:p.77 §7"],
         ["FL-04", "WIP report = GL 1320 + 1325: rework-order balances are reconciled and exported with the order WIP", "DOC:p.179 FL-04 f12"],
+        ["§12", "WIP aging: open order value by age bucket; stalled orders with no confirmation in N days", "DOC:p.82 Book I D §12"],
         ["§7", "Order progress: op-by-op timeline actual vs scheduled; milestone % from milestone-flagged confirmations", "DOC:p.77 §7; p.73 §4"],
       ]} />
     </>

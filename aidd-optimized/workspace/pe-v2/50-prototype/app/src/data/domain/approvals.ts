@@ -28,6 +28,20 @@ export type ApprovalKind =
   | "Price list approval"
   | "Material change"
   | "Bad debt write-off"
+  // Added in the integration pass (module requests); each route is a reading unless a [DOC] source is cited.
+  | "Manual info record price"
+  | "Valuation change"
+  | "Consignment true-up"
+  | "Inspection plan approval"
+  | "Deviation approval"
+  | "Recall partial recovery"
+  | "Final test scrap"
+  | "Reprint approval"
+  | "RMA disposition"
+  | "Warranty extension"
+  | "Sales change order"
+  | "Cancellation fee waiver"
+  | "De-peg"
 
 export interface ApprovalContext {
   amount?: number
@@ -127,6 +141,30 @@ export function routeApproval(kind: ApprovalKind, ctx: ApprovalContext = {}): Ap
       return r(["Materials Manager"], "Owners request, class rules approve", "[DOC:p.245 §3]", { reading: "Class rules are not extracted; routed to Materials Manager" })
     case "Bad debt write-off":
       return r(["Controller"], "Bad debt write-off needs the Controller", "[DOC:pp.176-177 FL-01 field 11]")
+    case "Manual info record price":
+      return r(["Purchasing Manager"], "Manual info record price above 5% delta: Purchasing Manager", "[DOC:p.247]")
+    case "Valuation change":
+      return r(["Materials Manager", "Controller"], "Valuation change: Materials Manager, then Controller (released at the period boundary)", "[Book II §5.4]")
+    case "Consignment true-up":
+      return r(["Controller"], "Consignment true-up to 5215: Controller", "[Book II §14.2]")
+    case "Inspection plan approval":
+      return r(["Quality Manager"], "Inspection plan approved by the Quality Manager", "[QT-R08]")
+    case "Deviation approval":
+      return r(["Quality Manager", "Engineering Manager"], "Deviation: Quality Manager + Engineering Manager", "[DOC:p.215 Book IV §7.3]", { reading: "Controller for value above a threshold is not stated (QT-R27)" })
+    case "Recall partial recovery":
+      return r(["Quality Manager", "Executive"], "Recall closed with partial recovery: Quality Manager + executive", "[QT-R11]")
+    case "Final test scrap":
+      return r(["Controller", "Engineering Manager"], "Scrap after final test: Controller + Engineering Manager", "[QT-R18]")
+    case "Reprint approval":
+      return r(["Quality Manager"], "Serial and nameplate reprint: Quality Manager", "[QT-R31]", { reading: "Approver not stated in the PRD" })
+    case "RMA disposition":
+      return r(["Quality Manager"], "Inspectors propose, Quality Manager approves the disposition", "[DOC:p.253]")
+    case "Warranty extension":
+      return r(["Customer Service Manager"], "Extend warranty with approval", "[DOC:p.215 §7.4]", { reading: "Approver is not stated; routed to Customer Service Manager" })
+    case "Sales change order":
+    case "Cancellation fee waiver":
+    case "De-peg":
+      return r(["Sales Director"], `${kind}: Sales Director`, "[feature list]", { reading: "Approver is not stated for this kind; routed to Sales Director" })
   }
 }
 

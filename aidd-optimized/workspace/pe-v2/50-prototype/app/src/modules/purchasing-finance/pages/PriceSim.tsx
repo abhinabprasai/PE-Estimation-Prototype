@@ -9,17 +9,18 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DialogShell, PageHeader } from "@/components/templates"
-import { ApprovalButton, Chip, ErrorAlert, RulesPanel } from "@/components/patterns"
+import { ApprovalButton, Chip, EmptyState, ErrorAlert, RulesPanel } from "@/components/patterns"
 import type { CustomerId, MaterialId } from "@/data/domain"
 import { CUSTOMERS, MATERIALS, TODAY } from "@/data/shared"
 import { fmtMoney, fmtPct } from "@/lib/format"
 import { useSlice } from "@/store"
 import { simulatePrice, type SimResult } from "../data/logic"
-import { Design, Reading, Section } from "../components/common"
-import { SelectField, TextField } from "../components/bits"
+import { Design, Reading, Section, useDemoState } from "../components/common"
+import { SelectField, SkeletonTable, TextField } from "../components/bits"
 
 export function PriceSim() {
   const s = useSlice("purchasingFinance")
+  const st = useDemoState("PRC-SIM")
   const [sp] = useSearchParams()
   const [f, setF] = useState({
     customerId: (sp.get("customer") ?? "CUS-TBD-0048") as CustomerId,
@@ -45,12 +46,22 @@ export function PriceSim() {
         title="Price simulation"
         description="Explains a price before anyone commits to it: every access the pricing service tried, the row that won, and the margin floor verdict."
         chips={<Design note="The route /pricing/simulate is a design value; the specification names a dialog and /api/v1/pricing/simulate" />}
+        actions={st.menu}
         primary={
-          <Button onClick={run}>
+          <Button onClick={run} disabled={st.loading || !!st.error || st.empty}>
             <Calculator aria-hidden="true" /> Simulate
           </Button>
         }
       />
+      {st.loading && <SkeletonTable cols={3} rows={4} />}
+      {st.error && (
+        <ErrorAlert title="The pricing service could not be reached" action={<Button size="sm" variant="outline" onClick={st.retry}>Retry</Button>}>
+          {st.error}
+        </ErrorAlert>
+      )}
+      {st.empty && <EmptyState title="Nothing to simulate yet">Price lists, customer agreements or item defaults must exist before the pricing service can explain a price. Create them under Price lists and agreements.</EmptyState>}
+      {!st.loading && !st.error && !st.empty && (
+      <>
       <div className="grid max-w-[960px] gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <SelectField id="sim-c" label="Customer" value={f.customerId} onChange={(v) => setF({ ...f, customerId: v as CustomerId })} options={CUSTOMERS.map((c) => ({ value: c.id, label: `${c.name} (${c.currency})` }))} />
         <SelectField id="sim-i" label="Item" value={f.itemId} onChange={(v) => setF({ ...f, itemId: v as MaterialId })} options={MATERIALS.filter((m) => m.listPrice != null || m.type === "FIN").map((m) => ({ value: m.id, label: `${m.id} ${m.description}` }))} />
@@ -62,6 +73,8 @@ export function PriceSim() {
       <p className="text-sm text-muted-foreground">
         {cust?.name}: price list {cust?.priceListId ?? "none"}, incoterms {cust?.incoterms}, currency {cust?.currency}.
       </p>
+      </>
+      )}
       <RulesPanel
         className="max-w-[960px]"
         rules={[

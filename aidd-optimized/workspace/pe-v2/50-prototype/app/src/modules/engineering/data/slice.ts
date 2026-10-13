@@ -5,10 +5,10 @@
 import { defineSlice, type SearchHit, type StoreApi } from "@/store"
 import type { DocLink, DocRef, EcoId, EngineeringRequestId, MaterialId, SalesOrderId, TransmittalId } from "@/data/domain"
 import type {
-  DocRecord, EbomRecord, EcoRecord, EcrRecord, ErRecord, ImportProposal, MbomRecord, Placeholder, PvRecord, SyncConflict, TransmittalRecord, VaultEvent,
+  CadAssembly, DocRecord, EbomRecord, EcoRecord, EcrRecord, ErRecord, ImportProposal, MbomRecord, PdmLink, Placeholder, PvRecord, SyncConflict, TransmittalRecord, VaultEvent,
 } from "./types"
 import {
-  seedConflicts, seedDocuments, seedEboms, seedEcos, seedEcrs, seedMboms, seedPlaceholders, seedProposals, seedPvs, seedRequests, seedTransmittals, seedVaultEvents,
+  seedCad, seedConflicts, seedDocuments, seedEboms, seedEcos, seedEcrs, seedMboms, seedPdm, seedPlaceholders, seedProposals, seedPvs, seedRequests, seedTransmittals, seedVaultEvents,
 } from "./seed"
 import { docStatus, pvOverlaps } from "./logic"
 import { newErFromOrder, markEcrSubmitted, settleCcb } from "./actions"
@@ -27,6 +27,10 @@ export interface EngineeringState {
   vaultEvents: VaultEvent[]
   conflicts: SyncConflict[]
   proposals: ImportProposal[]
+  /** Current vault assemblies per EBOM (CAD vs EBOM comparison). */
+  cad: CadAssembly[]
+  /** ERP document to PDM vault linkage (Book III Part G §4). */
+  pdm: PdmLink[]
   seq: number
 }
 
@@ -69,6 +73,8 @@ export function seed(): EngineeringState {
     vaultEvents: seedVaultEvents(),
     conflicts: seedConflicts(),
     proposals: seedProposals(),
+    cad: seedCad(eboms),
+    pdm: seedPdm(),
     seq: 500,
   }
 }

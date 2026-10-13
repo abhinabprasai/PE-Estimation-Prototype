@@ -5,7 +5,7 @@
 
 import { useMemo, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router"
-import { Copy, FilePlus2, Trash2 } from "lucide-react"
+import { Copy, FilePlus2, Printer, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -19,12 +19,15 @@ import { currentRev, latestRev } from "../data/derive"
 import { GATES, gateOf, type AssignmentScope, type PlanRevision, type PlanType, type QtCharacteristic, type QtPlan, type SamplingMethod } from "../data/types"
 import { ActivityList, NotFound, Pick, Reading, Section, TextField, materialText, report, useDataState, userName, vendorName } from "../components/bits"
 import { fmtBounds } from "../data/derive"
+import { AQL_LEVELS, AQL_VALUES, sampleSizeFor, skipLotQualified } from "../data/intake"
 
 export const PLAN_RULES: [string, string, string][] = [
   ["QM-P1", "Plan types INC / INP / FIN / PSI / RMA map to the gates IQC / IPQC / FQC / OQC / RQC.", "DOC:p.33 §6.2; p.84 E §1"],
   ["QM-P2", "Lifecycle Draft → In Review → Active → Superseded; Obsolete as an exit. An Active plan is immutable: any change is a new revision.", "DOC:p.34 §6.4"],
-  ["QM-P3", "Assignment scope: Item, Item Group, Item + Vendor or Item + Operation; the most specific match wins.", "DOC:p.33 §6.2"],
-  ["QM-P4", `AQL switching: tightened after ${THRESHOLDS.inspectionTightenRejectedOf5} rejected of 5 lots; reduced after ${THRESHOLDS.inspectionReduceAfterAccepted} accepted in a row.`, "DOC:pp.33-35 §6"],
+  ["QM-P3", "Assignment scope: Item, Item Group, Item + Vendor (incoming only) or Item + Operation (in-process only); the most specific match wins, ties go to the newest effective date.", "DOC:p.33 §6.2"],
+  ["QM-P7", "V-QM-01: only one Active plan per type + scope + date; approving a revision that overlaps another plan's Active window is blocked.", "DOC:p.33 §6.2"],
+  ["QM-P4", `AQL switching runs after every incoming decision: tightened after ${THRESHOLDS.inspectionTightenRejectedOf5} of 5 consecutive lots rejected; reduced after ${THRESHOLDS.inspectionReduceAfterAccepted} consecutive accepted, with Quality Manager approval. Sample size derives from lot size + level and the inspector may only increase it.`, "DOC:p.33 §6.2"],
+  ["QM-P8", "Skip-lot: inspect 1 of N lots (default 5) once the vendor rating is at least 98% and at least 10 consecutive lots are accepted; any rejection or NCR revokes it.", "DOC:p.33 §6.2"],
   ["QM-P5", "R-QM-02: a fail on a critical characteristic rejects the whole inspection.", "DOC:p.34 §6.3"],
   ["QM-P6", "Setting Obsolete is blocked when a QI-required item would be left with no plan and the no-plan policy is Block (E-QM-01).", "DOC:p.35 §6.5"],
 ]
@@ -105,6 +108,9 @@ function NewPlanDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
   const [vendorId, setVendorId] = useState("")
   const [operation, setOperation] = useState("")
   const [sampling, setSampling] = useState<SamplingMethod>("AQL Sampling")
+  const [aqlLevel, setAqlLevel] = useState<string>("G2")
+  const [aqlValue, setAqlValue] = useState("1")
+  const scopes = (["Item", "Item Group", ...(type === "INC" ? ["Item + Vendor"] : []), ...(type === "INP" ? ["Item + Operation"] : [])] as AssignmentScope[])
   const items = MATERIALS.filter((m) => ["RAW", "SEMI", "FIN", "SPARE", "CONS"].includes(m.type))
   return (
     <DialogShell
@@ -115,7 +121,7 @@ function NewPlanDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
       confirmLabel="Create Draft"
       wide
       onConfirm={() => {
-        const r = act.create({ name, type, scope, itemId: itemId || undefined, itemGroup, vendorId: vendorId || undefined, operation, sampling })
+        const r = act.create({ name, type, scope, itemId: itemId || undefined, itemGroup, vendorId: vendorId || undefined, operation, sampling, aqlLevel, aqlValue: Number(aqlValue) })
         if (!r.ok) return r.error
         report(r, (id) => `${id} created at Draft`)
         onDone(r.value)
@@ -124,8 +130,8 @@ function NewPlanDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField id="pl-name" label="Plan name" value={name} onChange={setName} placeholder="e.g. HV bushing 145 kV incoming" />
-        <Pick id="pl-type" label="Plan type (gate)" value={type} onChange={setType} options={GATES.map((g) => ({ value: g.planType, label: `${g.planType} · ${g.label}` }))} />
-        <Pick id="pl-scope" label="Assignment scope" value={scope} onChange={setScope} options={["Item", "Item Group", "Item + Vendor", "Item + Operation"] as AssignmentScope[]} />
+        <Pick id="pl-type" label="Plan type (gate)" value={type} onChange={(t) => { setType(t); if ((t !== "INC" && scope === "Item + Vendor") || (t !== "INP" && scope === "Item + Operation")) setScope("Item") }} options={GATES.map((g) => ({ value: g.planType, label: `${g.planType} · ${g.label}` }))} />
+        <Pick id="pl-scope" label="Assignment scope" value={scope} onChange={setScope} options={scopes} />
         {scope === "Item Group" ? (
           <TextField id="pl-group" label="Item group" value={itemGroup} onChange={setItemGroup} />
         ) : (
@@ -134,6 +140,12 @@ function NewPlanDialog({ open, onOpenChange, onDone }: { open: boolean; onOpenCh
         {scope === "Item + Vendor" && <Pick id="pl-vendor" label="Vendor" value={vendorId} onChange={setVendorId} options={VENDORS.map((v) => ({ value: v.id, label: `${v.id} · ${v.name}` }))} />}
         {scope === "Item + Operation" && <TextField id="pl-op" label="Operation" value={operation} onChange={setOperation} placeholder="WC-210 HV Winding, op 0030" />}
         <Pick id="pl-sampling" label="Sampling" value={sampling} onChange={setSampling} options={["100%", "AQL Sampling", "Skip-Lot", "Fixed Sample Size"] as SamplingMethod[]} />
+        {sampling === "AQL Sampling" && (
+          <>
+            <Pick id="pl-level" label="Inspection level (default G2)" value={aqlLevel} onChange={setAqlLevel} options={[...AQL_LEVELS]} />
+            <Pick id="pl-aql" label="AQL value" value={aqlValue} onChange={setAqlValue} options={AQL_VALUES.map((v) => ({ value: String(v), label: String(v) }))} />
+          </>
+        )}
       </div>
     </DialogShell>
   )
@@ -184,6 +196,14 @@ export function PlanDetail() {
               <Button variant="outline" onClick={() => report(act.copy(p.id), (nid) => (nav(`/quality/inspection-plans/${nid}`), `Copied to ${nid} (Draft)`))}>
                 <Copy aria-hidden="true" /> Copy plan
               </Button>
+              {p.revisions.every((r) => r.status === "Draft") && (
+                <Button variant="outline" onClick={() => report(act.remove(p.id), () => (nav("/quality/inspection-plans"), `${p.id} deleted`))}>
+                  <Trash2 aria-hidden="true" /> Delete draft
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer aria-hidden="true" /> Export PDF
+              </Button>
             </>
           ),
           chips: review ? <Reading id="QT-R09" /> : undefined,
@@ -204,6 +224,7 @@ export function PlanDetail() {
         tabs={[
           { id: "chars", label: "Characteristics", count: last.characteristics.length, content: <CharGrid plan={p} rev={last} editable={last.status === "Draft"} /> },
           { id: "revs", label: "Revisions", count: p.revisions.length, content: <RevisionCompare plan={p} /> },
+          { id: "sampling", label: "Sampling", content: <SamplingPanel plan={p} /> },
           {
             id: "used",
             label: "Where used",
@@ -466,6 +487,66 @@ function RevisionCompare({ plan }: { plan: QtPlan }) {
           </TableBody>
         </Table>
       </Section>
+    </div>
+  )
+}
+
+// ============================================================================ sampling rules (AQL switching, skip-lot, sample size)
+export function SamplingPanel({ plan }: { plan: QtPlan }) {
+  const s = useSlice("qualityTrace")
+  const [lot, setLot] = useState("500")
+  const cur = currentRev(plan)
+  const decided = s.lots.filter((l) => l.planId === plan.id && l.decision && !l.skipped).sort((a, b) => ((a.decidedOn ?? "") + a.id < (b.decidedOn ?? "") + b.id ? -1 : 1))
+  const last5 = decided.slice(-5)
+  const vendor = plan.vendorId ? s.vendorLots.find((v) => v.vendorId === plan.vendorId) : undefined
+  const skip = skipLotQualified(vendor)
+  const n = Number(lot) > 0 ? Number(lot) : 1
+  const a = cur.aql
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <Section title="Sample size from lot size and level">
+        <div className="flex flex-wrap items-end gap-3">
+          <TextField id="sz-lot" label="Lot size" type="number" value={lot} onChange={setLot} />
+          <p className="pb-2 text-sm">
+            {cur.sampling === "AQL Sampling" && a ? (
+              <>Sample of <strong className="tabular">{sampleSizeFor(n, a.level, a.state)}</strong> (level {a.level}, {a.state}). The inspector may only increase it.</>
+            ) : cur.sampling === "100%" ? (
+              <>Every unit: <strong className="tabular">{n}</strong>.</>
+            ) : cur.sampling === "Fixed Sample Size" ? (
+              <>Fixed sample of <strong className="tabular">{Math.min(n, cur.fixedSize ?? 3)}</strong>.</>
+            ) : (
+              <>Skip-lot inspects a sample of <strong className="tabular">{sampleSizeFor(n)}</strong> on the lots it does inspect.</>
+            )}{" "}
+            <Reading id="QT-R25" />
+          </p>
+        </div>
+      </Section>
+      {cur.sampling === "AQL Sampling" && a && (
+        <Section title="AQL switching">
+          <p className="text-sm">
+            State <strong>{a.state}</strong>, AQL {a.value}, level {a.level}, switching {a.switching ? "on" : "off"}.
+          </p>
+          <p className="text-sm text-muted-foreground">Last {last5.length} decided lots: {last5.map((l) => `${l.id} ${l.decision}`).join(", ") || "none yet"}.</p>
+          {a.reduceEligible && (
+            <div className="flex items-center gap-2 text-sm">
+              <span>{THRESHOLDS.inspectionReduceAfterAccepted} consecutive lots accepted: Reduced inspection can be approved.</span>
+              <Button size="sm" onClick={() => report(act.approveReduced(plan.id), "Reduced inspection approved")}>Approve reduced</Button>
+            </div>
+          )}
+        </Section>
+      )}
+      {cur.sampling === "Skip-Lot" && (
+        <Section title="Skip-lot qualification">
+          <p className="text-sm">
+            Inspect 1 of {cur.skipLot?.n ?? 5} lots once the vendor rating is at least 98% and at least {THRESHOLDS.inspectionReduceAfterAccepted} consecutive lots are accepted. A rejection or an NCR revokes it.
+          </p>
+          <p className="text-sm">
+            {plan.vendorId ? `${vendorName(plan.vendorId)}: ` : "Vendor of each receipt: "}
+            {vendor ? `rating ${(skip.rating * 100).toFixed(1)}%, ${skip.streak} consecutive accepted. ` : "no lots yet. "}
+            <strong>{skip.qualified ? "Qualified: skipping applies" : "Not qualified: every lot is inspected"}</strong>
+          </p>
+        </Section>
+      )}
     </div>
   )
 }

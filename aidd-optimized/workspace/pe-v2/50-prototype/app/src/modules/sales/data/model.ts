@@ -14,6 +14,7 @@
 export { TODAY, OPEN_PERIOD } from "@/data/shared/org"
 import { materialById } from "@/data/shared/materials"
 import type { CustExt, Ib, Lead, Reallocation, Rma, SupplyOption, AsBuiltLine } from "./ext-model"
+import type { FxData } from "../fx/model"
 
 // Roles: the app-wide role union lives in the shared domain (src/data/domain/roles.ts); FL-09 uses
 // these nine of them. The "Acting as" switcher in the app shell lists every PRD role.
@@ -353,6 +354,8 @@ export interface DB {
   ib: Ib[]
   asBuilt: Record<string, AsBuiltLine[]>
   spareStock: Record<string, { qty: number; leadWeeks?: number }>
+  /** Feature-list additions (fx/model.ts): lead import, billing plan, ETO cost, kits, shipments, change orders ... */
+  fx: FxData
   seq2: { lead: number; opp: number; cus: number; qt: number; rma: number; ib: number; rea: number; ncr: number; rwo: number; cmr: number; rcp: number; ext: number }
 }
 

@@ -62,7 +62,7 @@ export function InspectionQueues() {
       id: "age", header: "Age", value: (l) => lotAge(l, TODAY), sortable: true, align: "right", mono: true,
       cell: (l) => <span className={cn(lotOverdue(l, TODAY) && "font-semibold text-destructive")}>{lotAge(l, TODAY)} d{lotOverdue(l, TODAY) ? ` (SLA ${l.slaDays} d)` : ""}</span>,
     },
-    { id: "state", header: "Decision", value: stateText, filterable: true, cell: (l) => <span>{stateText(l)}{l.disposition ? ` · ${l.disposition}` : ""}</span> },
+    { id: "state", header: "Decision", value: stateText, filterable: true, cell: (l) => <span className="inline-flex items-center gap-2">{stateText(l)}{l.disposition ? ` · ${l.disposition}` : ""}{l.conditional && <Chip kind="flag" note={`Restriction: ${l.conditional.note}`}>Conditional</Chip>}</span> },
     { id: "stock", header: "Stock", value: (l) => s.batches.find((b) => b.id === l.batchId)?.stock ?? "", cell: (l) => { const b = s.batches.find((x) => x.id === l.batchId); return b ? <StatusBadge kind="stock" status={b.stock} size="sm" /> : null } },
   ]
   const queues: { id: Queue; label: string; count: number }[] = [
@@ -155,8 +155,10 @@ export function InspectionDetail() {
           chips: (
             <>
               <NoList text={l.decision ? `${l.decision}${l.disposition ? ` · ${l.disposition}` : ""}` : "Open"} />
+              {l.conditional && <Chip kind="flag" note={`Restriction: ${l.conditional.note} Scope: ${l.conditional.scope}`}>Conditional</Chip>}
+              {l.conditional && <Reading id="QT-R28" />}
               {l.adHoc && <Chip kind="flag" note="No-plan policy Manual Inspection: Quality Manager sign-off mandatory">Manual inspection</Chip>}
-              {lotOverdue(l, TODAY) && <Chip kind="flag">Over SLA ({l.slaDays} d)</Chip>}
+              {lotOverdue(l, TODAY) && <Chip kind="flag">Over SLA ({l.slaDays} {l.gate === "RQC" ? "business d" : "d"})</Chip>}
               {decided && <Chip kind="design" note="Results are permanent once decided">Read-only</Chip>}
             </>
           ),
@@ -191,7 +193,8 @@ export function InspectionDetail() {
             <KV k="Inspector">{userName(l.inspectorId)}</KV>
             <KV k="Opened">{`${l.createdOn} · ${lotAge(l, TODAY)} d`}</KV>
             <KV k="Results">{`${recorded} of ${chars.length} recorded`}</KV>
-            <KV k="Decision">{l.decision ? `${l.decision} ${l.decidedOn} by ${userName(l.decidedBy)}` : "Open"}</KV>
+            <KV k="Decision">{l.decision ? `${l.decision}${l.conditional ? " (Conditional)" : ""} ${l.decidedOn} by ${userName(l.decidedBy)}` : "Open"}</KV>
+            {l.conditional && <KV k="Restriction">{`${l.conditional.note} Scope: ${l.conditional.scope}.${l.conditional.expiresOn ? ` Expires ${l.conditional.expiresOn}${l.conditional.expiresOn < TODAY ? " (expired)" : ""}.` : ""}`}</KV>}
           </>
         }
         tabs={[
@@ -215,11 +218,16 @@ function Execute({ l, chars, s }: { l: InspectionLot; chars: QtCharacteristic[];
   const [size, setSize] = useState(String(l.sampleSize))
   const decided = !!l.decision
   const needsSample = l.gate === "IQC" && !l.samplePulled && !decided
+  // SP-05 needs the batch AND the inspector badge: the badge is read first and held until the batch scan completes the pull.
+  const [badgeRead, setBadgeRead] = useState("")
   const pull = (code: string): ScanOutcome => {
     const badge = USERS.find((u) => u.badge?.toUpperCase() === code.trim().toUpperCase())
-    if (badge) return { ok: true, message: `Badge ${badge.badge} (${badge.name}) read. Now scan batch ${l.batchId}.` }
-    const r = act.pullSample(l.id, code)
-    return r.ok ? { ok: true, message: `Sample of ${l.sampleSize} pulled from ${l.batchId}. T03 recorded.` } : { ok: false, expected: `batch label ${l.batchId}`, next: "Scan the batch label on the QI Hold stock, then record results.", message: r.error }
+    if (badge) {
+      setBadgeRead(badge.badge ?? "")
+      return { ok: true, message: `Badge ${badge.badge} (${badge.name}) read. Now scan batch ${l.batchId}.` }
+    }
+    const r = act.pullSample(l.id, code, badgeRead)
+    return r.ok ? { ok: true, message: `Sample of ${l.sampleSize} pulled from ${l.batchId} on badge ${badgeRead}. T03 recorded.` } : { ok: false, expected: badgeRead ? `batch label ${l.batchId}` : "the inspector badge first, then the batch label", next: badgeRead ? "Scan the batch label on the QI Hold stock, then record results." : "Scan your badge (SP-05 reads the badge and the batch together).", message: r.error }
   }
   const bind = (code: string): ScanOutcome => {
     const r = act.bindInstrument(l.id, code)
@@ -232,9 +240,9 @@ function Execute({ l, chars, s }: { l: InspectionLot; chars: QtCharacteristic[];
           {l.gate === "IQC" && (
             <Section title="SP-05 QI sample pull">
               {needsSample ? (
-                <ScanField scanPoint="SP-05" expected={`Scan batch ${l.batchId} (badge then batch)`} onScan={pull} label="Batch label or inspector badge" />
+                <ScanField scanPoint="SP-05" expected={badgeRead ? `Badge ${badgeRead} read; scan batch ${l.batchId}` : `Scan your badge, then batch ${l.batchId}`} onScan={pull} label="Inspector badge, then batch label" />
               ) : (
-                <p className="text-sm">Sample of {l.sampleSize} pulled {l.samplePulled?.on} by {userName(l.samplePulled?.by)}.</p>
+                <p className="text-sm">Sample of {l.sampleSize} pulled {l.samplePulled?.on} by {userName(l.samplePulled?.by)}{l.samplePulled?.badge ? `, badge ${l.samplePulled.badge}` : ""}.</p>
               )}
               <div className="flex items-end gap-2">
                 <TextField id="sample-size" label="Sample size (increase only)" type="number" value={size} onChange={setSize} />
@@ -261,6 +269,8 @@ function Execute({ l, chars, s }: { l: InspectionLot; chars: QtCharacteristic[];
           </Section>
         </div>
       )}
+      {l.adHoc && !decided && <AdHocRowForm lotId={l.id} />}
+      {l.adHoc && !chars.length && <p className="text-sm text-muted-foreground">Manual inspection (no plan): the table starts empty. Add the tests to run as ad-hoc rows; each is flagged Ad-Hoc and reportable.</p>}
       <Table>
         <TableHeader className="bg-table-head">
           <TableRow>
@@ -297,6 +307,30 @@ function Execute({ l, chars, s }: { l: InspectionLot; chars: QtCharacteristic[];
         )}
       </Section>
     </div>
+  )
+}
+
+function AdHocRowForm({ lotId }: { lotId: string }) {
+  const [name, setName] = useState("")
+  const [type, setType] = useState<QtCharacteristic["charType"]>("Attributive")
+  const [min, setMin] = useState("")
+  const [max, setMax] = useState("")
+  return (
+    <Section title="Add an ad-hoc test row">
+      <div className="flex flex-wrap items-end gap-3">
+        <TextField id="adhoc-name" label="Test" value={name} onChange={setName} placeholder="e.g. Ratio check" />
+        <Pick id="adhoc-type" label="Type" value={type} onChange={setType} options={["Attributive", "Quantitative"] as QtCharacteristic["charType"][]} />
+        {type === "Quantitative" && (
+          <>
+            <TextField id="adhoc-min" label="Min" type="number" value={min} onChange={setMin} />
+            <TextField id="adhoc-max" label="Max" type="number" value={max} onChange={setMax} />
+          </>
+        )}
+        <Button variant="outline" size="sm" onClick={() => report(act.addAdHocRow(lotId, { name, charType: type, min: min === "" ? undefined : Number(min), max: max === "" ? undefined : Number(max) }), "Ad-hoc row added") && (setName(""), setMin(""), setMax(""))}>
+          Add row
+        </Button>
+      </div>
+    </Section>
   )
 }
 
@@ -404,10 +438,16 @@ function Links({ l, s }: { l: InspectionLot; s: QualityTraceState }) {
 function DecideDialog({ l, open, decision, anyFail, onClose, role, s }: { l: InspectionLot; open: boolean; decision: Decision; anyFail: boolean; onClose: () => void; role: string; s: QualityTraceState }) {
   const [disp, setDisp] = useState<Disposition | "">(decision === "Accepted" && anyFail ? "Use as is under deviation" : "")
   const moves = l.gate === "IQC" || l.gate === "RQC"
-  const consequence =
+  const [cond, setCond] = useState(false)
+  const [cNote, setCNote] = useState("")
+  const [cScope, setCScope] = useState("")
+  const [cExp, setCExp] = useState("")
+  const consequence = cond && decision === "Accepted"
+    ? `${l.id} is Accepted with a restriction (Conditional badge on the record, the queue and the genealogy evidence). ${moves && l.batchId ? `Batch ${l.batchId} moves QI Hold → Unrestricted; the restriction travels with it. ` : ""}Only the Quality Manager can release conditionally.`
+    :
     decision === "Accepted"
-      ? `${l.id} is Accepted${disp ? ` (${disp})` : ""}. ${moves && l.batchId ? `Batch ${l.batchId} moves QI Hold → Unrestricted. ` : ""}${l.gate === "IPQC" ? "The operation may complete. " : l.gate === "OQC" ? "The CoC is generated and PGI is enabled. " : ""}T0${l.gate === "IQC" ? "3" : "8"} is written to the genealogy; results become permanent.`
-      : `${l.id} is Rejected (${disp || "choose a disposition"}). ${moves && l.batchId ? `Batch ${l.batchId} moves to Blocked. ` : ""}${l.gate === "IQC" ? "The vendor rating takes the hit. " : l.gate === "OQC" ? "The shipment stays blocked. " : ""}Create the NCR next.`
+      ? `${l.id} is Accepted${disp ? ` (${disp})` : ""}. ${moves && l.batchId ? `Batch ${l.batchId} moves QI Hold → Unrestricted. ` : ""}${l.gate === "IPQC" ? "The operation may complete. " : l.gate === "OQC" ? "The CoC is generated and PGI is enabled. " : ""}${l.gate === "IQC" ? "T03" : l.gate === "RQC" ? "T12" : "T08"} is written to the genealogy; results become permanent.`
+      : `${l.id} is Rejected (${disp || "choose a disposition"}). ${moves && l.batchId ? `Batch ${l.batchId} moves to Blocked. ` : ""}${l.gate === "IQC" ? "The vendor rating is updated (lot acceptance and skip-lot streak). " : l.gate === "OQC" ? "The shipment stays blocked. " : ""}Create the NCR next.`
   return (
     <DialogShell
       open={open}
@@ -418,8 +458,8 @@ function DecideDialog({ l, open, decision, anyFail, onClose, role, s }: { l: Ins
       destructive={decision === "Rejected"}
       requireReason={decision === "Rejected" || !!l.adHoc}
       onConfirm={(reason) => {
-        const r = act.decide(l.id, decision, disp || undefined, reason)
-        return report(r, `${l.id} ${decision}`) ? null : (r as { error: string }).error
+        const r = act.decide(l.id, decision, disp || undefined, reason, cond && decision === "Accepted" ? { note: cNote, scope: cScope, expiresOn: cExp || undefined } : undefined)
+        return report(r, `${l.id} ${decision}${cond && decision === "Accepted" ? " (Conditional)" : ""}`) ? null : (r as { error: string }).error
       }}
     >
       <div className="flex flex-col gap-2 text-sm">
@@ -431,6 +471,23 @@ function DecideDialog({ l, open, decision, anyFail, onClose, role, s }: { l: Ins
             {l.deviationId ? <DocLinkText r={{ type: "deviation", id: l.deviationId }} /> : <strong>(none linked yet)</strong>}.
           </p>
         ) : null}
+        {decision === "Accepted" && (
+          <div className="flex flex-col gap-2 rounded-md border p-3">
+            <label className="flex min-h-8 items-center gap-2 font-medium">
+              <input type="checkbox" className="size-4" checked={cond} onChange={(e) => setCond(e.target.checked)} />
+              Conditional pass (accept with a restriction)
+              <Reading id="QT-R28" />
+            </label>
+            {cond && (
+              <>
+                <p className="text-muted-foreground">A conditional pass is a Quality Manager release (you are acting as {role}). The restriction note and what it covers are mandatory.</p>
+                <TextField id="c-note" label="Restriction note" value={cNote} onChange={setCNote} placeholder="What the material may and may not be used for" />
+                <TextField id="c-scope" label="Restriction covers" value={cScope} onChange={setCScope} placeholder="Work order, customer or quantity" />
+                <TextField id="c-exp" label="Expires on (optional)" type="date" value={cExp} onChange={setCExp} />
+              </>
+            )}
+          </div>
+        )}
         {l.adHoc && <p>Manual inspection: only the Quality Manager may sign off (acting as {role}).</p>}
         {s.batches.find((b) => b.id === l.batchId) && (
           <p className="inline-flex items-center gap-2">

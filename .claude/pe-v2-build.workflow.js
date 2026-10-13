@@ -2,11 +2,13 @@ export const meta = {
   name: 'pe-v2-full-prototype-build',
   description: 'Build all remaining PRD screens across 7 module groups, verify each against the PRD, integrate, walk all 11 flows, fix and confirm coverage',
   phases: [
-    { title: 'Build', detail: '7 module groups in parallel, each in its own folder', model: 'opus' },
-    { title: 'Verify', detail: 'independent PRD-fidelity check per group, then gap fix', model: 'opus' },
-    { title: 'Integrate', detail: 'full build, cross-module seams', model: 'opus' },
-    { title: 'Walk', detail: 'one walker per flow FL-01..FL-11', model: 'opus' },
-    { title: 'Fix & confirm', detail: 'apply walk findings, final build and coverage critic', model: 'opus' },
+    { title: 'Build', detail: '7 module groups in parallel, each in its own folder', model: 'sonnet' },
+    { title: 'Verify', detail: 'independent PRD-fidelity check per group, then gap fix', model: 'sonnet' },
+    { title: 'Feature map', detail: 'map the user feature list to screens and groups', model: 'sonnet' },
+    { title: 'Feature build', detail: 'build feature-list gaps per group, verify', model: 'sonnet' },
+    { title: 'Integrate', detail: 'full build, cross-module seams', model: 'sonnet' },
+    { title: 'Walk', detail: 'one walker per flow FL-01..FL-11', model: 'sonnet' },
+    { title: 'Fix & confirm', detail: 'apply walk findings, final build and coverage critic', model: 'sonnet' },
   ],
 }
 
@@ -14,6 +16,8 @@ const ROOT = '/Users/leapfrog/Documents/PE V2 PRD/aidd-optimized'
 const WS = ROOT + '/workspace/pe-v2'
 const APP = WS + '/50-prototype/app'
 const M = 'opus'
+const MS = 'sonnet' // user decision 2026-10-12: Opus weekly limit hit; remaining stages run on Sonnet
+const OPUS_FIXED = ['sales', 'materials', 'engineering', 'planning-production']
 
 const COMMON = `You are acting as an AIDD prototype-engineer on project pe-v2. Repo root: ${ROOT}. The app is ${APP} (Vite + React + TS + Tailwind v4 + shadcn/ui, client-side mock data only). The user decided on a FULL-PRD prototype that is KEPT as a deliverable (see the end of ${WS}/PROJECT_CONFIG.md). Domain fidelity is the bar: exact PRD status names, thresholds, roles, postings and scan points. Styling stays token-driven and provisional (shadcn plus ${WS}/30-design-language/skills-md/tokens.md); don't hand-style.
 
@@ -106,7 +110,7 @@ Cite evidence as file:line and [DOC:p.n]. List only real gaps; a reading the bui
 
 YOUR GROUP: ${g.key}. You own ONLY ${APP}/src/modules/${g.key}/. An independent verifier found these gaps. Fix every one that is real; if one is not real, say why. Gaps:
 ${JSON.stringify(v.gaps, null, 1)}
-Finish with a type-check clean for your files. Return a short summary: fixed / disputed / remaining.`, { label: 'fix:' + g.key, phase: 'Verify', model: M }).then(f => ({ group: g.key, gaps: v.gaps.length, fix: f })) : ({ group: g.key, gaps: 0, fix: 'none needed' }),
+Finish with a type-check clean for your files. Return a short summary: fixed / disputed / remaining.`, { label: 'fix:' + g.key, phase: 'Verify', model: OPUS_FIXED.includes(g.key) ? M : MS }).then(f => ({ group: g.key, gaps: v.gaps.length, fix: f })) : ({ group: g.key, gaps: 0, fix: 'none needed' }),
 )
 
 const batch1 = await runGroups(GROUPS.slice(0, 4))
@@ -120,22 +124,68 @@ if (okGroups < 5) {
   return { stopped: true, groups: groupResults }
 }
 
+const FL_FILE = WS + '/00-inputs/feature-list-2026-10.md'
+phase('Feature map')
+const MAP_SCHEMA = { type: 'object', properties: {
+  groups: { type: 'array', items: { type: 'object', properties: {
+    key: { type: 'string' },
+    features: { type: 'array', items: { type: 'string' }, description: 'feature-list rows this group must build or complete, each with its route' },
+  }, required: ['key', 'features'] } },
+  registry_added: { type: 'number' },
+}, required: ['groups'] }
+const fmap = await agent(`${COMMON}
+
+The user has supplied a FEATURE LIST: ${FL_FILE}. Read it in full. Together with the PRD, it now defines the prototype's scope: every row must end up visible and working in the prototype. Rows marked target-state (Book IX) are later-phase but still in scope; build them after the High and Medium rows.
+You are the FEATURE MAPPER, and you may edit shared files (registry, nav, module registry).
+1. Compare every feature-list row with the screen registry (src/data/screens.ts) and with what is actually built in src/modules/*.
+2. For every row that has no registry entry (components, global shell, dashboards, system states, dialogs, config pages, reports, print outputs, mobile flows, target-state modules), add one: id, title, route, archetype, module, wave, flows, built:false. Give it a placeholder route, so navigation shows it. Add sidebar nav for the new modules: Home & dashboards, Inventory operations, Print outputs, and the Book IX target-state modules grouped under one "Target state (phased)" section.
+3. Create these new module group folders, following APP-ARCHITECTURE.md (routes.tsx, pages/, data/slice.ts, README.md with its feature rows) and register them:
+   - shell: global shell features, system states, notification center, profile, SSO and MFA states, error pages, role dashboards, print outputs / document previews, the bespoke-component gallery;
+   - inventory-ops: mobile counts, warehouse tasks, the supervisor board, GRN STP delta, period-close additions, IC recon;
+   - target-state: every Book IX module.
+   Then update APP-ARCHITECTURE.md.
+4. Run "npm run build"; it must pass.
+5. Return, for every group, the feature rows it must still build or complete. The groups are: sales, materials, engineering, planning-production, quality-trace, purchasing-finance, admin, shell, inventory-ops, target-state. A row counts as complete only if the existing screen really covers its scope text; otherwise list it with the missing parts.`, { label: 'feature-map', phase: 'Feature map', model: MS, schema: MAP_SCHEMA })
+
+phase('Feature build')
+const featGroups = (fmap && fmap.groups ? fmap.groups : []).filter(g => g.features && g.features.length)
+log('Feature-list work: ' + featGroups.map(g => g.key + ' ' + g.features.length).join(', '))
+const runFeat = (gs) => pipeline(gs,
+  (g) => agent(`${COMMON}
+
+FEATURE LIST: ${FL_FILE}. YOUR GROUP: ${g.key}. You own ONLY ${APP}/src/modules/${g.key}/ (read its README.md first). Build or complete EVERY one of these feature-list rows so its scope text is visibly and functionally present. Use the shared templates and patterns, put each one at its registry route, and claim it as built:
+${g.features.map(f => '- ' + f).join('\n')}
+Give each one realistic seeded data, the nine states where relevant (normal, empty, loading, validation, authorization, conflict, offline, degraded, read-only), and working primary actions. Kiosk and mobile views go on KioskPage at the device sizes named in the list. If you need a shared change, write it under "Requests to foundation" in your README and work around it. Finish with a type-check clean for your files.`, { label: 'feat:' + g.key, phase: 'Feature build', model: MS }),
+  (r, g) => agent(`${COMMON}
+
+INDEPENDENT FEATURE VERIFIER for group ${g.key}. Do NOT edit files. Check every row below against the code: is its full scope text present and working, at a claimed registry route? Report only real gaps, with file evidence.
+${g.features.map(f => '- ' + f).join('\n')}`, { label: 'feat-verify:' + g.key, phase: 'Feature build', model: MS, schema: GAP_SCHEMA }),
+  (v, g) => (v && v.gaps && v.gaps.length) ? agent(`${COMMON}
+
+YOUR GROUP: ${g.key}. You own ONLY ${APP}/src/modules/${g.key}/. Fix every real gap the feature verifier found (feature list: ${FL_FILE}):
+${JSON.stringify(v.gaps, null, 1)}
+Finish with a type-check clean for your files. Return fixed / disputed / remaining.`, { label: 'feat-fix:' + g.key, phase: 'Feature build', model: MS }) : 'none needed',
+)
+const featA = await runFeat(featGroups.slice(0, 5))
+const featB = await runFeat(featGroups.slice(5))
+log('Feature build done: ' + [...featA, ...featB].filter(Boolean).length + '/' + featGroups.length + ' groups')
+
 phase('Integrate')
 const integration = await agent(`${COMMON}
 
-All 7 module groups have finished building in parallel. You are the INTEGRATOR, and you may now edit shared files. Steps:
+All module groups have finished building, including the feature-list work (feature list: ${WS}/00-inputs/feature-list-2026-10.md). You are the INTEGRATOR, and you may now edit shared files. Steps:
 1. Run "npm run build" in ${APP} and fix every TypeScript and build error, in any file.
 2. Act on every "Requests to foundation" in src/modules/*/README.md: implement it, or mark it declined with a reason.
 3. Check that cross-module event wiring is consistent: every emitted event has its consumers registered, and the hero thread SO-2026-00301 runs lead → quote → SO → engineering request → EBOM → MBOM → PR/PO → production order → final test → delivery → RMA → recall with consistent IDs.
 4. Check the screen registry: every one of the 83 buildable entries is claimed as built (INV-RETURN is a redirect). List any that are not.
 5. Run "npm run build" again; it must pass. Start "npm run dev" briefly to confirm it boots, then stop it.
-Update ${WS}/50-prototype/build-notes.md with an Integration section. Return: build pass/fail, unbuilt registry entries, requests handled, and seams fixed.`, { label: 'integrate', phase: 'Integrate', model: M })
+Update ${WS}/50-prototype/build-notes.md with an Integration section. Return: build pass/fail, unbuilt registry entries, requests handled, and seams fixed.`, { label: 'integrate', phase: 'Integrate', model: MS })
 
 phase('Walk')
-const FLOWS = ['FL-01 MTS order to cash', 'FL-02 ETO quote to cash', 'FL-03 procure to pay', 'FL-04 plan to produce', 'FL-05 RMA and warranty', 'FL-06 period close', 'FL-07 intercompany', 'FL-08 recall', 'FL-09 sales order to delivery', 'FL-10 design to source', 'FL-11 end-to-end traceability']
-const walks = await parallel(FLOWS.map(fl => () => agent(`${COMMON}
+const FLOWS = ['Feature-list Prototype A sales order to delivery FL-01/09', 'Feature-list Prototype B engineering to procurement FL-10', 'Feature-list Prototype C plan to produce incl kiosk FL-04', 'Feature-list Prototype G ETO quote to cash FL-02: lead with prior-build search, quote datasheet, SO milestone strip, engineering request, transmittal approval loop, milestone invoice request', 'FL-01 MTS order to cash', 'FL-02 ETO quote to cash', 'FL-03 procure to pay', 'FL-04 plan to produce', 'FL-05 RMA and warranty', 'FL-06 period close', 'FL-07 intercompany', 'FL-08 recall', 'FL-09 sales order to delivery', 'FL-10 design to source', 'FL-11 end-to-end traceability']
+const walks = await parallel(FLOWS.map((fl, wi) => () => agent(`${COMMON}
 
-You are a FLOW WALKER for ${fl}. Do NOT edit files. Read the flow's reference file in ${WS}/40-models/as-is/ and its flow card, then trace the flow end to end through the app source: every step's screen, action, store transition, event hand-off, posting and scan point. Trace through the code paths; if it helps, you may start "npm run dev" on a port other than 5174 and stop it afterwards. Answer: can a user complete this flow end to end in the prototype? List every break, missing step, wrong status or wrong threshold. For each, give the owning module group (sales, materials, engineering, planning-production, quality-trace, purchasing-finance, admin, or shared), the files, and a concrete fix.`, { label: 'walk:' + fl.split(' ')[0], phase: 'Walk', model: M, schema: ISSUE_SCHEMA })))
+You are a FLOW WALKER for ${fl}. Do NOT edit files. Read the flow's reference file in ${WS}/40-models/as-is/ and its flow card, then trace the flow end to end through the app source: every step's screen, action, store transition, event hand-off, posting and scan point. Trace through the code paths; if it helps, you may start "npm run dev" on a port other than 5174 and stop it afterwards. Answer: can a user complete this flow end to end in the prototype? List every break, missing step, wrong status or wrong threshold. For each, give the owning module group (sales, materials, engineering, planning-production, quality-trace, purchasing-finance, admin, or shared), the files, and a concrete fix.`, { label: 'walk:' + (fl.startsWith('Feature-list') ? 'Proto-' + fl.split(' ')[2] : fl.split(' ')[0]), phase: 'Walk', model: MS, schema: ISSUE_SCHEMA })))
 
 const allIssues = walks.filter(Boolean).flatMap((w, i) => (w.issues || []).map(x => ({ flow: FLOWS[i], ...x })))
 log(allIssues.length + ' flow issues found across ' + walks.filter(Boolean).length + ' walks')
@@ -145,11 +195,11 @@ const fixes = allIssues.length ? await agent(`${COMMON}
 
 You are the INTEGRATION FIXER, and you may edit any file. Fix every issue the flow walkers found, so each flow is completable end to end. Where a fix needs a PRD rule the PRD doesn't state, show it as a reading and log it. Issues:
 ${JSON.stringify(allIssues, null, 1)}
-Then run "npm run build" (it must pass) and update build-notes.md with a "Flow walk fixes" section. Return fixed / not fixed with reasons.`, { label: 'fix:flows', phase: 'Fix & confirm', model: M }) : 'no issues'
+Then run "npm run build" (it must pass) and update build-notes.md with a "Flow walk fixes" section. Return fixed / not fixed with reasons.`, { label: 'fix:flows', phase: 'Fix & confirm', model: MS }) : 'no issues'
 
 const critic = await agent(`${COMMON}
 
-You are the COMPLETENESS CRITIC. Do NOT edit files except ${WS}/50-prototype/coverage.md, which you regenerate from the registry: every one of the 84 entries with its built status, plus a per-flow row with completable yes/no. Run "npm run build" and report the result. Then ask: what is still missing? Look for screens claimed as built that are actually thin stubs, flows not completable, PRD status lists not represented, postings #17-#38, scan points SP-01..21 and trace events T01..T13 that appear nowhere, and approval rows from W.4 that are unreachable. Be specific and honest: a thin screen is a finding.`, { label: 'critic', phase: 'Fix & confirm', model: M, schema: { type: 'object', properties: {
+You are the COMPLETENESS CRITIC. Measure against BOTH the PRD and the user's feature list ${WS}/00-inputs/feature-list-2026-10.md: every feature row must be present. Do NOT edit files except ${WS}/50-prototype/coverage.md, which you regenerate from the registry: every registry entry (PRD screens plus feature-list rows) with its built status, plus a per-flow row with completable yes/no. Run "npm run build" and report the result. Then ask: what is still missing? Look for screens claimed as built that are actually thin stubs, flows not completable, PRD status lists not represented, postings #17-#38, scan points SP-01..21 and trace events T01..T13 that appear nowhere, and approval rows from W.4 that are unreachable. Be specific and honest: a thin screen is a finding.`, { label: 'critic', phase: 'Fix & confirm', model: MS, schema: { type: 'object', properties: {
   build_passes: { type: 'boolean' }, built_count: { type: 'number' }, total_buildable: { type: 'number' },
   flows_completable: { type: 'array', items: { type: 'string' } }, flows_not_completable: { type: 'array', items: { type: 'string' } },
   thin_or_missing: { type: 'array', items: { type: 'string' } },

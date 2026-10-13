@@ -1,11 +1,11 @@
 // App shell: prototype banner, entity context bar (screen id, record, acting role, search, reset)
 // and the sidebar over all PRD modules, grouped by module group. Navigation is generated from the
-// screen registry, so every one of the 84 entries is reachable from day one; module `nav` entries
+// screen registry (84 PRD entries plus the feature-list entries), so every entry is reachable from day one; module `nav` entries
 // add shortcuts. Foundation-owned.
 
 import { useState, type ReactNode } from "react"
 import { Link, useLocation } from "react-router"
-import { BarChart3, ChevronRight, Circle, CircleCheck, CircleDashed, Inbox, LayoutTemplate, type LucideIcon } from "lucide-react"
+import { BarChart3, Bell, ChevronRight, Circle, CircleCheck, CircleDashed, Inbox, LayoutTemplate, UserRound, type LucideIcon } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -27,11 +27,15 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { ROLE_GROUPS, type Role } from "@/data/domain"
-import { GROUPS } from "@/data/modules"
+import { SECTIONS } from "@/data/modules"
 import { SCREENS, screenForPath, type Built } from "@/data/screens"
 import { OPEN_PERIOD, TODAY, defaultUserFor } from "@/data/shared"
 import { fmtDate } from "@/lib/format"
-import { store, useRole } from "@/store"
+import { store, useRole, useSlice } from "@/store"
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb"
+import { LEGAL_ENTITIES } from "@/data/shared"
+import { crumbsFor } from "@/modules/shell/lib/crumbs"
+import { shellActions } from "@/modules/shell/data/actions"
 import { GlobalSearch } from "./GlobalSearch"
 import { useModules } from "./modules-context"
 import { cn } from "@/lib/utils"
@@ -73,6 +77,71 @@ function RoleSwitcher() {
   )
 }
 
+/** Entity selector (every screen carries it, ACC section 2). The choice lives in the shell slice. */
+function EntitySelector() {
+  const sh = useSlice("shell")
+  return (
+    <div className="flex items-center gap-2">
+      <label htmlFor="entity-select" className="text-sm whitespace-nowrap">
+        Entity
+      </label>
+      <Select value={sh.entityId} onValueChange={(v) => shellActions.setEntity(v)}>
+        <SelectTrigger id="entity-select" className="w-48 bg-background text-foreground">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {LEGAL_ENTITIES.map((e) => (
+            <SelectItem key={e.id} value={e.id}>
+              {e.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+/** Notification bell with the unread count, and the profile link. */
+function BellAndProfile() {
+  const sh = useSlice("shell")
+  const [role] = useRole()
+  const unread = sh.notifications.filter((n) => !n.dismissed && !n.read).length
+  const critical = sh.notifications.some((n) => !n.dismissed && !n.read && n.severity === "Critical")
+  return (
+    <div className="flex items-center gap-1">
+      <Button asChild variant="outline" size="icon" className="relative text-foreground" aria-label={`Notifications, ${unread} unread${critical ? ", including critical" : ""}`}>
+        <Link to="/notifications">
+          <Bell aria-hidden="true" />
+          {unread > 0 && <span className="tabular absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-xs font-semibold text-destructive-foreground">{unread}</span>}
+        </Link>
+      </Button>
+      <Button asChild variant="outline" size="icon" className="text-foreground" aria-label={`Profile and preferences, ${defaultUserFor(role).name}`}>
+        <Link to="/profile">
+          <UserRound aria-hidden="true" />
+        </Link>
+      </Button>
+    </div>
+  )
+}
+
+function Crumbs() {
+  const loc = useLocation()
+  const trail = crumbsFor(loc.pathname)
+  if (trail.length < 2) return null
+  return (
+    <Breadcrumb className="print:hidden">
+      <BreadcrumbList>
+        {trail.map((c, i) => (
+          <span key={i} className="contents">
+            {i > 0 && <BreadcrumbSeparator />}
+            <BreadcrumbItem>{c.to && i < trail.length - 1 ? <BreadcrumbLink asChild><Link to={c.to}>{c.label}</Link></BreadcrumbLink> : <BreadcrumbPage>{c.label}</BreadcrumbPage>}</BreadcrumbItem>
+          </span>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
+  )
+}
+
 function ContextBar() {
   const loc = useLocation()
   const [confirm, setConfirm] = useState(false)
@@ -80,7 +149,7 @@ function ContextBar() {
   const record = decodeURIComponent(loc.pathname.split("/").filter(Boolean).at(-1) ?? "")
   const showRecord = /[A-Z]{2,}-/.test(record)
   return (
-    <header className="sticky top-0 z-20 flex min-h-12 flex-wrap items-center gap-4 bg-primary px-6 py-2 text-primary-foreground">
+    <header className="sticky top-0 z-20 flex min-h-12 print:hidden flex-wrap items-center gap-4 bg-primary px-6 py-2 text-primary-foreground">
       <SidebarTrigger className="text-primary-foreground" />
       <span className="font-semibold">PE Transformer ERP</span>
       {screen && (
@@ -94,7 +163,9 @@ function ContextBar() {
       </span>
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <GlobalSearch />
+        <EntitySelector />
         <RoleSwitcher />
+        <BellAndProfile />
         <Button variant="outline" className="text-foreground" onClick={() => setConfirm(true)}>
           Scenario reset
         </Button>
@@ -152,9 +223,9 @@ function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-        {GROUPS.map((g) => {
-          const groupScreens = SCREENS.filter((s) => s.group === g.id)
-          const prdModules = [...new Set(groupScreens.map((s) => s.module))]
+        {SECTIONS.map((g) => {
+          const groupScreens = SCREENS.filter((s) => g.modules.includes(s.module))
+          const prdModules = g.modules.filter((m) => groupScreens.some((s) => s.module === m))
           const extra = modules.flatMap((m) => m.nav)
           return (
             <SidebarGroup key={g.id}>
@@ -224,7 +295,12 @@ export function OfficeLayout({ children }: { children: ReactNode }) {
       <AppSidebar />
       <SidebarInset>
         <ContextBar />
-        <main className="p-6">{children}</main>
+        <main className="p-6">
+          <div className="mb-4">
+            <Crumbs />
+          </div>
+          {children}
+        </main>
       </SidebarInset>
     </SidebarProvider>
   )

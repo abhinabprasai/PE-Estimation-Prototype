@@ -17,14 +17,15 @@ import { TODAY, VENDORS } from "@/data/shared"
 import { addDays } from "@/lib/format"
 import { useSlice } from "@/store"
 import { dev as act } from "../data/actions"
-import type { QtDeviation } from "../data/types"
+import { DEVIATION_TYPES, type QtDeviation } from "../data/types"
+import { DEV_CONTROLLER_THRESHOLD, devApprovers, devNeedsCustomer } from "../data/derive"
 import { ActivityList, DocLinkText, NoList, NotFound, Pick, Reading, Section, Stat, TextField, report, useDataState, userName, vendorName } from "../components/bits"
 
 export const DEV_RULES: [string, string, string][] = [
   ["QM-D1", "A deviation (before the fact) or waiver (after the fact) names its scope, the specification versus the accepted value, and validity by date or by quantity.", "DOC:p.265 QM-DEV-001"],
-  ["QM-D2", "The Quality Manager and the Engineering Manager approve, with expiry.", "DOC:p.265 QM-DEV-001"],
+  ["QM-D2", "The Quality Manager and the Engineering Manager approve, with expiry; the Controller approves as well when the value impact passes the threshold. Types: Use-As-Is (waiver), Temporary Process Deviation, Customer-Approved Concession.", "DOC:p.265 QM-DEV-001; p.215 Book IV §7.3"],
   ["QM-D3", "Auto expiry: past the validity date, or once the quantity is used up, further use is blocked.", "DOC:p.265 QM-DEV-001"],
-  ["QM-D4", "Acceptances are traceable and disclosed on the as-built record of every affected serial; a waiver on customer serials needs the customer evidence.", "DOC:p.265; Book IV §7.3"],
+  ["QM-D4", "Acceptances are traceable and disclosed on the as-built record of every affected serial; affected serials and batches are written as genealogy evidence rows. Customer approval evidence (attachment + reference) is mandatory when the customer flag or contract requires it.", "DOC:p.265; p.215 Book IV §7.3"],
 ]
 
 const remaining = (d: QtDeviation) => (d.validQty ? d.validQty - d.usedQty : undefined)
@@ -86,7 +87,7 @@ export function DeviationList() {
 
 function NewDeviation({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: (id: string) => void }) {
   const s = useSlice("qualityTrace")
-  const [o, setO] = useState({ title: "", type: "Deviation" as QtDeviation["type"], origin: "Inspection failure" as QtDeviation["origin"], scope: "", specReference: "", characteristic: "", specValue: "", acceptedValue: "", validUntil: addDays(TODAY, 60), validQty: "", vendorId: "", serials: "" })
+  const [o, setO] = useState({ title: "", type: "Use-As-Is (waiver)" as QtDeviation["type"], customerRequired: "", valueImpact: "", origin: "Inspection failure" as QtDeviation["origin"], scope: "", specReference: "", characteristic: "", specValue: "", acceptedValue: "", validUntil: addDays(TODAY, 60), validQty: "", vendorId: "", serials: "" })
   const set = (k: keyof typeof o) => (v: string) => setO({ ...o, [k]: v })
   const scopeOptions = [
     ...s.lots.filter((l) => !l.decision || l.decision === "Rejected").map((l) => ({ value: `inspectionLot:${l.id}`, label: `${l.id} · inspection ${l.batchId ?? l.serials[0] ?? ""}` })),
@@ -97,7 +98,7 @@ function NewDeviation({ open, onClose, onDone }: { open: boolean; onClose: () =>
       open={open}
       onOpenChange={(x) => !x && onClose()}
       title="Request deviation or waiver"
-      consequence="Creates the request; the Quality Manager and the Engineering Manager approve it with expiry before it can be used."
+      consequence="Creates the request; the Quality Manager and the Engineering Manager approve it with expiry (and the Controller above the value threshold) before it can be used."
       confirmLabel="Request"
       wide
       onConfirm={() => {
@@ -105,6 +106,7 @@ function NewDeviation({ open, onClose, onDone }: { open: boolean; onClose: () =>
         const r = act.create({
           title: o.title, type: o.type, origin: o.origin, scope: o.scope ? [{ type, id } as DocRef] : [], specReference: o.specReference, characteristic: o.characteristic, specValue: o.specValue, acceptedValue: o.acceptedValue,
           validUntil: o.validUntil || undefined, validQty: o.validQty ? Number(o.validQty) : undefined, affectedSerials: o.serials.split(/[ ,]+/).filter(Boolean) as QtDeviation["affectedSerials"], vendorId: (o.vendorId || undefined) as QtDeviation["vendorId"],
+          customerRequired: o.customerRequired === "Yes", valueImpact: o.valueImpact ? Number(o.valueImpact) : undefined,
         })
         if (!r.ok) return r.error
         report(r, (x) => `${x} requested`)
@@ -114,7 +116,9 @@ function NewDeviation({ open, onClose, onDone }: { open: boolean; onClose: () =>
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <TextField id="dv-title" label="Title" value={o.title} onChange={set("title")} />
-        <Pick id="dv-type" label="Type" value={o.type} onChange={set("type")} options={["Deviation", "Waiver"]} />
+        <Pick id="dv-type" label="Type" value={o.type} onChange={set("type")} options={DEVIATION_TYPES} />
+        <Pick id="dv-cust" label="Customer flag or contract requires approval" value={o.customerRequired} onChange={set("customerRequired")} options={["Yes", "No"]} placeholder="No" />
+        <TextField id="dv-val" label="Value impact (USD)" type="number" value={o.valueImpact} onChange={set("valueImpact")} hint={`Above ${DEV_CONTROLLER_THRESHOLD.toLocaleString("en-US")} the Controller also approves (QT-R27)`} />
         <Pick id="dv-origin" label="Origin" value={o.origin} onChange={set("origin")} options={["Inspection failure", "Supplier deviation request"]} />
         <Pick id="dv-scope" label="Scope" value={o.scope} onChange={set("scope")} options={scopeOptions} />
         <TextField id="dv-ref" label="Specification reference" value={o.specReference} onChange={set("specReference")} />
@@ -154,7 +158,7 @@ export function DeviationDetail() {
             <>
               <NoList text={d.state} />
               {blocked && <Chip kind="block">Further use blocked</Chip>}
-              {d.state === "Requested" && <Reading id="QT-R08" />}
+              {d.state === "Requested" && <><Reading id="QT-R08" /><Reading id="QT-R27" /></>}
             </>
           ),
           primary: d.state === "Requested" ? <Button onClick={() => setDlg("approve")}>Approve with expiry</Button> : d.state === "Approved" && !blocked ? <Button onClick={() => setDlg("use")}>Record use</Button> : undefined,
@@ -170,7 +174,7 @@ export function DeviationDetail() {
             <KV k="Quantity">{d.validQty ? `${d.usedQty} used of ${d.validQty}` : `${d.usedQty} used`}</KV>
             <KV k="Vendor">{vendorName(d.vendorId) || "None"}</KV>
             <KV k="Requested">{`${d.requestedOn} by ${userName(d.requestedBy)}`}</KV>
-            <KV k="Approvals">{`${d.approvals.length} of 2`}</KV>
+            <KV k="Approvals">{`${d.approvals.length} of ${devApprovers(d).length}`}</KV>
           </>
         }
         tabs={[
@@ -202,7 +206,7 @@ export function DeviationDetail() {
             id: "evidence", label: "Customer evidence",
             content: (
               <Section title="Customer evidence slot">
-                {d.customerEvidence ? <p className="text-sm">{d.customerEvidence}</p> : <p className="text-sm text-muted-foreground">{d.type === "Waiver" && d.affectedSerials.length ? "Required before approval: the waiver covers customer serials." : "Not attached."}</p>}
+                {d.customerEvidence ? <p className="text-sm">{d.customerEvidence}</p> : <p className="text-sm text-muted-foreground">{devNeedsCustomer(d) ? "Required before approval: the customer flag or contract requires the customer's approval (attachment + reference)." : "Not attached."}</p>}
                 {d.state === "Requested" && (
                   <div className="flex items-end gap-2">
                     <TextField id="dv-ev" label="Evidence file" value={ev} onChange={setEv} placeholder="Customer concession letter.pdf" />
@@ -220,7 +224,7 @@ export function DeviationDetail() {
                   <TableRow><TableHead>Role</TableHead><TableHead>By</TableHead><TableHead>On</TableHead></TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(["Quality Manager", "Engineering Manager"] as const).map((r) => {
+                  {devApprovers(d).map((r) => {
                     const a = d.approvals.find((x) => x.role === r)
                     return (
                       <TableRow key={r}>
@@ -242,7 +246,7 @@ export function DeviationDetail() {
         open={dlg === "approve"}
         onOpenChange={(o) => !o && setDlg(null)}
         title={`Approve ${d.id}`}
-        consequence={`Records your approval. With both the Quality Manager and the Engineering Manager, ${d.id} becomes Approved, valid ${d.validUntil ? `until ${d.validUntil}` : `for ${d.validQty} units`}; it then expires automatically.`}
+        consequence={`Records your approval. With every required approver (${devApprovers(d).join(", ")}), ${d.id} becomes Approved, valid ${d.validUntil ? `until ${d.validUntil}` : `for ${d.validQty} units`}; it then expires automatically.`}
         confirmLabel="Approve"
         onConfirm={() => {
           const r = act.approve(d.id)

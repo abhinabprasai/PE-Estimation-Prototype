@@ -23,6 +23,7 @@ import { applyMch, computeNew, createMch, discardMch, readField, validateMchRow,
 import type { MchRecord } from "../data/types"
 import { MatLink, MaterialStatus, NoStatusList, Reading, Section, TypeBadge, userName, useListState } from "../components/common"
 import { run } from "../components/run"
+import { ValuationActions, ValuationWizard } from "./MchValuation"
 
 const EDITABLE = FIELD_DEFS.filter((f) => f.cls !== 3)
 
@@ -33,9 +34,22 @@ export function MchWizard() {
   const preset = sp.get("materials")?.split(",").filter(Boolean) ?? []
   const presetField = sp.get("field") ?? ""
   const openId = sp.get("mch")
+  const [variant, setVariant] = useState<"standard" | "valuation">(presetField === "method" || sp.get("variant") === "valuation" ? "valuation" : "standard")
   return (
     <div className="flex flex-col gap-6">
-      <Wizard key={round} preset={preset} presetField={presetField} onDone={(id) => (setRound((r) => r + 1), setSp({ mch: id }))} />
+      <div role="group" aria-label="Kind of change" className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant={variant === "standard" ? "secondary" : "outline"} aria-pressed={variant === "standard"} onClick={() => setVariant("standard")}>
+          Field change
+        </Button>
+        <Button size="sm" variant={variant === "valuation" ? "secondary" : "outline"} aria-pressed={variant === "valuation"} onClick={() => setVariant("valuation")}>
+          Valuation change (§5.4)
+        </Button>
+      </div>
+      {variant === "standard" ? (
+        <Wizard key={round} preset={preset} presetField={presetField} onDone={(id) => (setRound((r) => r + 1), setSp({ mch: id }))} />
+      ) : (
+        <ValuationWizard key={`v${round}`} preset={preset} onDone={(id) => (setRound((r) => r + 1), setSp({ mch: id }))} />
+      )}
       <MchRegister openId={openId} onOpen={(id) => setSp({ mch: id })} />
       {openId && s.mchs.some((c) => c.id === openId) && <MchRecordPanel c={s.mchs.find((c) => c.id === openId)!} />}
       <RulesPanel
@@ -305,7 +319,7 @@ function MchRecordPanel({ c }: { c: MchRecord }) {
       action={
         <span className="flex flex-wrap items-center gap-2">
           <span className="rounded-md border px-2 py-0.5 text-xs font-normal">Stage: {c.stage}</span>
-          {c.fieldClass === 2 && (c.stage === "Draft" || c.stage === "In approval") && (
+          {c.fieldClass === 2 && !c.valuation && (c.stage === "Draft" || c.stage === "In approval") && (
             <ApprovalButton kind="Material change" subject={{ type: "material", id: c.id }} title={`${c.id}: ${c.title} (${c.rows.length} rows)`} variant="default" stay />
           )}
           {c.fieldClass === 1 && c.stage === "Draft" && (
@@ -313,7 +327,7 @@ function MchRecordPanel({ c }: { c: MchRecord }) {
               Apply now
             </Button>
           )}
-          {c.stage === "Scheduled" && (
+          {c.stage === "Scheduled" && !c.valuation && (
             <Button size="sm" variant="outline" onClick={() => run(applyMch(c.id, true), `${c.id} applied now`)}>
               Apply now (before {c.effective})
             </Button>
@@ -333,6 +347,7 @@ function MchRecordPanel({ c }: { c: MchRecord }) {
         Class {c.fieldClass} · {c.mode} · {c.apply === "Immediate" ? "Immediate" : `Effective ${c.effective}`} · Reason: {c.reason}
         {c.ecoRef && ` · ${c.ecoRef}`}
       </p>
+      {c.valuation && <ValuationActions c={c} />}
       {c.fieldKey === "sellable" && c.rows.some((r) => r.new === "Yes") && (
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           Sellable ON where the type default is OFF is governed: Sales Admin and Materials Manager approve it as a Class 2 change (§3.12, §4.4). <Reading id="RD-MM-28" />

@@ -8,3 +8,5 @@ export const def: ModuleDef = { group: "planning-production", routes, nav, built
 /** CTP-DLG for other groups: render <PromiseDialog id="CTP-TBD-0402" open onOpenChange={...} /> on a
  *  quote or order line (README request R-1). */
 export { PromiseDialog } from "./pages/Planning"
+/** Per-line CTP chip for quote and order lines (sales module, README request R-1). */
+export { CtpLineChip, type CtpLineChipProps } from "./widgets/CtpLineChip"

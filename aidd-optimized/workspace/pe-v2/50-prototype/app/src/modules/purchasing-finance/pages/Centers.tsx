@@ -4,52 +4,24 @@
 // analyst drafts, Controller approves (H §6). Rule-7 fallbacks land on CO-R4.
 import { useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router"
-import { Ban, FolderTree, MoveRight } from "lucide-react"
+import { Ban, FolderTree, MoveRight, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DetailPage, DialogShell, ListPage } from "@/components/templates"
 import { Chip, KV, RulesPanel, StatusBadge, type Column } from "@/components/patterns"
 import type { CostCenterId } from "@/data/domain"
-import { COST_CENTERS, PROFIT_CENTERS, TODAY, USERS, WAREHOUSES, WORK_CENTERS } from "@/data/shared"
+import { PROFIT_CENTERS, TODAY, USERS, WAREHOUSES, WORK_CENTERS } from "@/data/shared"
 import { fmtDate, fmtMoney } from "@/lib/format"
 import { useSlice } from "@/store"
-import { centerAction } from "../data/actions"
+import { decideCenterChange, draftCenterChange } from "../data/actions"
 import type { PurchasingFinanceState } from "../data/slice"
+import type { CenterChangeKind, CenterDraft } from "../data/types"
 import { CsvButton, report, Section, useDemoState } from "../components/common"
 import { DetailFrame, RecLink, SelectField, TextField, userName } from "../components/bits"
+import { useRole } from "@/store"
 
-interface Center {
-  id: CostCenterId
-  name: string
-  parentId?: CostCenterId
-  postable: boolean
-  entityId: string
-  defaultProfitCenterId?: string
-  managerId?: string
-  status: "Active" | "Blocked" | "Inactive"
-  validFrom: string
-  validTo?: string
-  depth: number
-}
-export function allCenters(s: PurchasingFinanceState): Center[] {
-  const base = [...COST_CENTERS, ...s.addedCenters].map((c) => {
-    const o = s.centerOverlay[c.id]
-    return { ...c, managerId: o?.managerId ?? ("managerId" in c ? c.managerId : undefined), status: o?.status ?? c.status, parentId: o?.parentId ?? c.parentId, depth: 0 }
-  })
-  const depth = (c: (typeof base)[number]): number => (c.parentId ? 1 + depth(base.find((x) => x.id === c.parentId) ?? { ...c, parentId: undefined }) : 0)
-  // order as a tree: roots, then their children
-  const out: Center[] = []
-  const walk = (parent: string | undefined) =>
-    base
-      .filter((c) => c.parentId === parent)
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .forEach((c) => {
-        out.push({ ...c, depth: depth(c) } as Center)
-        walk(c.id)
-      })
-  walk(undefined)
-  return out
-}
+export { allCenters, type Center } from "../data/centers"
+import { allCenters, type Center } from "../data/centers"
 const whereUsed = (s: PurchasingFinanceState, id: string) => {
   const wcs = WORK_CENTERS.filter((w) => w.costCenterId === id).map((w) => w.id)
   const whs = WAREHOUSES.filter((w) => w.costCenterId === id).map((w) => w.id)
@@ -58,11 +30,119 @@ const whereUsed = (s: PurchasingFinanceState, id: string) => {
   return { wcs, whs, prs, cycles, total: wcs.length + whs.length + prs.length + cycles.length }
 }
 
+/** Pending drafts: the Controlling analyst drafts, the Controller (cost centers) or the CFO (profit centers) approves [DOC:p.115 §6]. */
+function DraftsPanel({ drafts, title = "Drafts waiting for approval" }: { drafts: CenterDraft[]; title?: string }) {
+  const s = useSlice("purchasingFinance")
+  const [role] = useRole()
+  const [rej, setRej] = useState<CenterDraft | null>(null)
+  if (!drafts.length) return null
+  return (
+    <Section title={`${title} (${drafts.filter((d) => d.status === "Draft").length})`}>
+      <Table>
+        <TableHeader className="bg-table-head">
+          <TableRow>
+            <TableHead>Draft</TableHead>
+            <TableHead>Center</TableHead>
+            <TableHead>Change</TableHead>
+            <TableHead>Effective</TableHead>
+            <TableHead>Drafted by</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {drafts.map((d) => {
+            const approver = d.kind === "New profit center" ? "CFO" : "Controller"
+            return (
+              <TableRow key={d.id} className="h-8 text-[13px]">
+                <TableCell className="font-mono">{d.id}</TableCell>
+                <TableCell className="font-mono">{d.centerId}</TableCell>
+                <TableCell>
+                  {d.kind}
+                  {d.input.name ? `: ${d.input.name}` : ""}
+                  {d.input.parentId ? ` under ${d.input.parentId}` : ""}
+                  {d.input.managerId && d.kind === "Maintain" ? `: ${userName(d.input.managerId)}` : ""}
+                </TableCell>
+                <TableCell>{fmtDate(d.input.effective)}</TableCell>
+                <TableCell>
+                  {userName(d.draftedBy)} {fmtDate(d.draftedOn)}
+                </TableCell>
+                <TableCell>
+                  {d.status}
+                  {d.status !== "Draft" && ` by ${userName(d.decidedBy)}${d.reason ? `: ${d.reason}` : ""}`}
+                </TableCell>
+                <TableCell>
+                  {d.status === "Draft" && (
+                    <span className="flex gap-1">
+                      <Button size="sm" disabled={role !== approver} title={role !== approver ? `Switch Acting as to ${approver}` : undefined} onClick={() => report(decideCenterChange(d.id, "Approved", "", whereUsed(s, d.centerId).total), `${d.id} approved and applied`)}>
+                        Approve
+                      </Button>
+                      <Button size="sm" variant="outline" disabled={role !== approver} onClick={() => setRej(d)}>
+                        Reject
+                      </Button>
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+      <DialogShell open={!!rej} onOpenChange={(o) => !o && setRej(null)} requireReason title={`Reject ${rej?.id}`} confirmLabel="Reject" consequence="The draft is kept as Rejected with your reason; nothing changes in the master." onConfirm={(r) => report(decideCenterChange(rej!.id, "Rejected", r), `${rej!.id} rejected`)} />
+    </Section>
+  )
+}
+
+function NewCenterDialog({ kind, open, onClose }: { kind: "cost" | "profit"; open: boolean; onClose: () => void }) {
+  const s = useSlice("purchasingFinance")
+  const [f, setF] = useState({ id: "", name: "", parentId: "", postable: "yes", pc: "PC-900", floor: "", scope: "", effective: "2026-11-01", managerId: "" })
+  const sums = allCenters(s).filter((c) => !c.postable)
+  return (
+    <DialogShell
+      open={open}
+      onOpenChange={(o) => !o && onClose()}
+      title={kind === "cost" ? "Draft a new cost center" : "Draft a new profit center"}
+      confirmLabel="Submit draft"
+      consequence={`Creates a draft for the ${kind === "cost" ? "Controller" : "CFO"} to approve. The ${kind === "cost" ? "cost" : "profit"} center exists only after approval. Controlling analyst drafts.`}
+      onConfirm={() =>
+        report(
+          draftCenterChange(f.id.trim(), kind === "cost" ? "New cost center" : "New profit center", {
+            name: f.name,
+            effective: f.effective,
+            ...(kind === "cost" ? { parentId: (f.parentId || undefined) as CostCenterId | undefined, postable: f.postable === "yes", defaultProfitCenterId: f.postable === "yes" ? f.pc : undefined, managerId: f.managerId || undefined } : { scope: f.scope, priceFloorPct: f.floor ? Number(f.floor) : undefined }),
+          }),
+          (id) => `${id} drafted`,
+        )
+      }
+    >
+      <TextField id="nc-id" label={kind === "cost" ? "Cost center id (CC-1234)" : "Profit center id (PC-500)"} value={f.id} onChange={(v) => setF({ ...f, id: v })} />
+      <TextField id="nc-name" label="Name" value={f.name} onChange={(v) => setF({ ...f, name: v })} />
+      {kind === "cost" ? (
+        <>
+          <SelectField id="nc-par" label="Parent summary node" value={f.parentId} onChange={(v) => setF({ ...f, parentId: v })} options={sums.map((x) => ({ value: x.id, label: `${x.id} ${x.name}` }))} />
+          <SelectField id="nc-post" label="Node" value={f.postable} onChange={(v) => setF({ ...f, postable: v })} options={[{ value: "yes", label: "Postable leaf" }, { value: "no", label: "Summary node" }]} />
+          {f.postable === "yes" && <SelectField id="nc-pc" label="Default profit center" value={f.pc} onChange={(v) => setF({ ...f, pc: v })} options={[...PROFIT_CENTERS, ...s.addedProfitCenters].map((p) => ({ value: p.id, label: `${p.id} ${p.name}` }))} />}
+          <SelectField id="nc-mgr" label="Manager (owner)" value={f.managerId} onChange={(v) => setF({ ...f, managerId: v })} options={USERS.map((u) => ({ value: u.id, label: `${u.name} (${u.roles[0]})` }))} />
+        </>
+      ) : (
+        <>
+          <TextField id="nc-scope" label="Scope" value={f.scope} onChange={(v) => setF({ ...f, scope: v })} />
+          <TextField id="nc-floor" label="Price floor % (leave blank if none stated)" value={f.floor} onChange={(v) => setF({ ...f, floor: v })} />
+        </>
+      )}
+      <TextField id="nc-eff" type="date" label="Effective from" value={f.effective} onChange={(v) => setF({ ...f, effective: v })} />
+    </DialogShell>
+  )
+}
+
 export function CenterList({ kind }: { kind: "cost" | "profit" }) {
   const s = useSlice("purchasingFinance")
   const st = useDemoState(kind === "cost" ? "CO-CC-001" : "CO-PC-001")
   const nav = useNavigate()
+  const [newDlg, setNewDlg] = useState(false)
   const centers = useMemo(() => allCenters(s), [s])
+  const profits = [...PROFIT_CENTERS, ...s.addedProfitCenters.map((p) => ({ id: p.id, name: p.name, scope: p.scope, status: p.status, priceFloorPct: p.priceFloorPct }))]
+  const drafts = s.centerDrafts.filter((d) => (kind === "cost" ? d.kind !== "New profit center" : d.kind === "New profit center"))
   const ccCols: Column<Center>[] = [
     { id: "id", header: "Cost center", value: (r) => r.id, mono: true, cell: (r) => <span style={{ paddingLeft: `${r.depth * 16}px` }} className="font-mono">{r.id}</span> },
     { id: "name", header: "Name", value: (r) => r.name, cell: (r) => <span className={r.postable ? undefined : "font-semibold"}>{r.name}</span> },
@@ -72,7 +152,7 @@ export function CenterList({ kind }: { kind: "cost" | "profit" }) {
     { id: "valid", header: "Valid", value: (r) => r.validFrom, cell: (r) => `${fmtDate(r.validFrom)} to ${r.validTo ? fmtDate(r.validTo) : "open"}` },
     { id: "status", header: "Status", value: (r) => r.status, filterable: true, cell: (r) => <StatusBadge kind="costCenter" status={r.status} size="sm" /> },
   ]
-  const pcCols: Column<(typeof PROFIT_CENTERS)[number]>[] = [
+  const pcCols: Column<(typeof profits)[number]>[] = [
     { id: "id", header: "Profit center", value: (r) => r.id, mono: true },
     { id: "name", header: "Name", value: (r) => r.name },
     { id: "scope", header: "Scope", value: (r) => r.scope },
@@ -91,18 +171,28 @@ export function CenterList({ kind }: { kind: "cost" | "profit" }) {
         <Button variant="outline" onClick={() => nav(kind === "cost" ? "/controlling/profit-centers" : "/controlling/cost-centers")}>
           <FolderTree aria-hidden="true" /> {kind === "cost" ? "Profit centers" : "Cost centers"}
         </Button>
-        <CsvButton filename={`${kind}-centers.csv`} rows={kind === "cost" ? centers.map((c) => ({ Id: c.id, Name: c.name, Parent: c.parentId, Postable: c.postable ? "yes" : "no", PC: c.defaultProfitCenterId, Status: c.status })) : PROFIT_CENTERS.map((p) => ({ Id: p.id, Name: p.name, Floor: p.priceFloorPct, Status: p.status }))} />
+        <Button onClick={() => setNewDlg(true)}>
+          <Plus aria-hidden="true" /> {kind === "cost" ? "Draft new cost center" : "Draft new profit center"}
+        </Button>
+        <CsvButton filename={`${kind}-centers.csv`} rows={kind === "cost" ? centers.map((c) => ({ Id: c.id, Name: c.name, Parent: c.parentId, Postable: c.postable ? "yes" : "no", PC: c.defaultProfitCenterId, Status: c.status })) : profits.map((p) => ({ Id: p.id, Name: p.name, Floor: p.priceFloorPct, Status: p.status }))} />
       </>
     ),
   }
   if (kind === "profit")
     return (
+      <>
       <ListPage
         header={header}
-        table={{ rows: st.empty ? [] : PROFIT_CENTERS, columns: pcCols, rowId: (r) => r.id, rowHref: (r) => `/controlling/profit-centers/${r.id}`, loading: st.loading, error: st.error, onRetry: st.retry, densityKey: "CO-PC-001", empty: { title: "No profit centers", body: "Profit centers are seeded in wave 1." } }}
+        table={{ rows: st.empty ? [] : profits, columns: pcCols, rowId: (r) => r.id, rowHref: (r) => `/controlling/profit-centers/${r.id}`, loading: st.loading, error: st.error, onRetry: st.retry, densityKey: "CO-PC-001", empty: { title: "No profit centers", body: "Profit centers are seeded in wave 1." } }}
       />
+      <div className="mt-4 flex flex-col gap-4">
+        <DraftsPanel drafts={drafts} />
+      </div>
+      <NewCenterDialog kind="profit" open={newDlg} onClose={() => setNewDlg(false)} />
+      </>
     )
   return (
+    <>
     <ListPage
       header={header}
       table={{
@@ -119,6 +209,11 @@ export function CenterList({ kind }: { kind: "cost" | "profit" }) {
         empty: { title: "No cost centers", body: "Cost centers are seeded in wave 1." },
       }}
     />
+    <div className="mt-4 flex flex-col gap-4">
+      <DraftsPanel drafts={drafts} />
+    </div>
+    <NewCenterDialog kind="cost" open={newDlg} onClose={() => setNewDlg(false)} />
+    </>
   )
 }
 
@@ -140,6 +235,7 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
   const [f, setF] = useState({ parentId: c.parentId ?? "", managerId: c.managerId ?? "", effective: "2026-11-01" })
   const wu = whereUsed(s, c.id)
   const hist = s.centerOverlay[c.id]?.history ?? []
+  const drafts = s.centerDrafts.filter((d) => d.centerId === c.id)
   const children = allCenters(s).filter((x) => x.parentId === c.id)
   const spend = s.journal.filter((j) => j.costCenterId === c.id && j.period === "2026-09").reduce((t, j) => t + j.amount, 0)
   return (
@@ -154,11 +250,11 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
             <>
               {menu}
               <Button variant="outline" onClick={() => setDlg("Move")}>
-                <MoveRight aria-hidden="true" /> Move
+                <MoveRight aria-hidden="true" /> Draft move
               </Button>
               {c.status === "Active" && (
                 <Button variant="outline" onClick={() => setDlg("Block")}>
-                  <Ban aria-hidden="true" /> Block for posting
+                  <Ban aria-hidden="true" /> Draft block for posting
                 </Button>
               )}
               {c.status === "Blocked" && (
@@ -176,7 +272,7 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
               </Button>
             </>
           ),
-          primary: c.status !== "Inactive" ? <Button onClick={() => setDlg("Maintain")}>Maintain</Button> : undefined,
+          primary: c.status !== "Inactive" ? <Button onClick={() => setDlg("Maintain")}>Draft maintenance</Button> : undefined,
         }}
         status={{ kind: "costCenter", value: c.status }}
         summary={
@@ -209,6 +305,12 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
                 </ul>
               </Section>
             ),
+          },
+          {
+            id: "drafts",
+            label: "Drafts",
+            count: drafts.length,
+            content: drafts.length ? <DraftsPanel drafts={drafts} title="Drafts for this center" /> : <p className="text-sm text-muted-foreground">No drafts. A change is drafted by the Controlling analyst and approved by the Controller before it applies.</p>,
           },
           {
             id: "history",
@@ -255,10 +357,11 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
         open={!!dlg}
         onOpenChange={(o) => !o && setDlg(null)}
         destructive={dlg === "Deactivate"}
-        title={`${dlg} ${c.id}`}
-        confirmLabel={dlg ?? ""}
+        title={`Draft: ${dlg} ${c.id}`}
+        confirmLabel="Submit draft"
         consequence={
-          dlg === "Block"
+          `Creates a draft for the Controller to approve; nothing changes until it is approved (Controlling analyst drafts). If approved: ` +
+          (dlg === "Block"
             ? `New postings to ${c.id} are refused; postings that slip through land on CO-R4.`
             : dlg === "Deactivate"
               ? wu.total
@@ -268,9 +371,9 @@ function CcBody({ c, menu }: { c: Center; menu: React.ReactNode }) {
                 ? "Moves the center under the new parent from the effective date; rollups change from then and history is kept."
                 : dlg === "Unblock"
                   ? "Postings are accepted again."
-                  : "Updates the owner; recorded with its effective date."
+                  : "Updates the owner; recorded with its effective date.")
         }
-        onConfirm={() => report(centerAction(c.id, dlg!, { parentId: (f.parentId || undefined) as CostCenterId | undefined, managerId: f.managerId || undefined, effective: f.effective, whereUsed: dlg === "Deactivate" ? wu.total : 0 }), `${c.id}: ${dlg} recorded`)}
+        onConfirm={() => report(draftCenterChange(c.id, dlg as CenterChangeKind, { parentId: (f.parentId || undefined) as CostCenterId | undefined, managerId: f.managerId || undefined, effective: f.effective, whereUsed: dlg === "Deactivate" ? wu.total : 0 }), (id) => `${id} drafted for approval`)}
       >
         <TextField id="cc-eff" type="date" label="Effective from" value={f.effective} onChange={(v) => setF({ ...f, effective: v })} />
         {dlg === "Move" && (
@@ -286,7 +389,7 @@ export function ProfitCenterDetail() {
   const { id = "" } = useParams()
   const s = useSlice("purchasingFinance")
   const st = useDemoState("CO-PC-002")
-  const p = PROFIT_CENTERS.find((x) => x.id === id)
+  const p = [...PROFIT_CENTERS, ...s.addedProfitCenters].find((x) => x.id === id)
   return (
     <DetailFrame loading={st.loading} error={st.error} onRetry={st.retry} found={!!p} title={id} screenId="CO-CC/PC-001/2" back={{ label: "Profit centers", to: "/controlling/profit-centers" }}>
       {() => (

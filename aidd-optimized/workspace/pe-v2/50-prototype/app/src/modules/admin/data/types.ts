@@ -3,11 +3,16 @@
 // the words used are design values listed in the README (AR-1).
 
 import type { DocRef, FiscalPeriodStatus, LegalEntityId, Role, UserId } from "@/data/domain"
-import type { Severity } from "./catalog"
+import type { Approver, Rule, Severity } from "./catalog"
+export type { Approver, Rule }
 
 // ---------------------------------------------------------------- workflow definitions (WF-DEF)
 export interface DefStep {
   role: Role
+  /** How the approver is resolved: role (default), named user or derived owner [DOC:p.216 §7.7]. */
+  approver?: Approver
+  /** Conditional step, present only when this rule fires. */
+  when?: string
   slaHours: number
   escalateTo: Role
   parallel?: boolean
@@ -20,7 +25,8 @@ export interface DefVersion {
   effectiveFrom: string
   effectiveTo?: string
   trigger: string
-  conditions: string[]
+  /** Condition rules in the rule grammar: field, operator, value [DOC:p.216 §7.7]. */
+  rules: Rule[]
   steps: DefStep[]
   terminalActions: string[]
   changedBy: UserId
@@ -49,6 +55,12 @@ export interface InstDecision {
 }
 export interface InstStep {
   role: Role
+  /** Named-user resolution: only this user decides the step (or their delegate). */
+  approverUser?: UserId
+  /** Derived owner the seat stands for, shown beside the role. */
+  derived?: string
+  /** Steps of a parallel run open together and all must approve (CCB votes) [DOC:p.10 W.1]. */
+  parallel?: boolean
   slaHours: number
   escalateTo: Role
   openedAt?: string
@@ -93,6 +105,7 @@ export type InstEffect =
   | { type: "taxRate"; rateId: string }
   | { type: "taxAdjustment"; reconId: string }
   | { type: "sodGrant"; sodId: string }
+  | { type: "seriesChange"; seriesId: string; changeId: string }
 
 // ---------------------------------------------------------------- delegation and audit
 export interface Delegation {
@@ -183,6 +196,8 @@ export interface Incident {
   responseDue: string
   state: "Open" | "Acknowledged" | "Resolved"
   onCall: Role
+  /** Pages sent to the on-call role: failed close-critical jobs page, they are never just logged [DOC:p.190 Part D §5]. */
+  paged?: { at: string; to: Role; reason: string }[]
 }
 
 // ---------------------------------------------------------------- fiscal periods (INV-CONFIG-PERIOD)
@@ -297,6 +312,17 @@ export interface Setting {
   design?: boolean
   versions: SettingVersion[]
 }
+export interface SeriesVersion {
+  format: string
+  /** Next number to issue from the effective date; never lower than the number in force (no duplicates). */
+  next: number
+  effectiveFrom: string
+  by: UserId
+  note: string
+  state: "Pending approval" | "Scheduled" | "Rejected"
+  requestId?: string
+  changeId: string
+}
 export interface NumberSeries {
   id: string
   object: string
@@ -304,4 +330,18 @@ export interface NumberSeries {
   next: number
   gapFree: boolean
   source: string
+  /** Proposed changes under change control (history of approved ones stays here too). */
+  changes: SeriesVersion[]
+}
+
+// ---------------------------------------------------------------- reconciliation reports (OPS-INT)
+export interface ReconRun {
+  id: string
+  interfaceId: string
+  at: string
+  by: UserId | "Scheduler"
+  result: "Clean" | "Exceptions"
+  exceptions: number
+  finding: string
+  incidentId?: string
 }

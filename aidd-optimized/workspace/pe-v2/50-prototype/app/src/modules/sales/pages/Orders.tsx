@@ -1,11 +1,11 @@
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useState } from "react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Chip,
@@ -25,6 +25,16 @@ import {
 } from "../components/common"
 import { useStore } from "../data/store"
 import { LIFECYCLE, PRODUCTS, TODAY, listDate, money, openQty, orderValue, product, type SalesOrder } from "../data/model"
+import { CtpLineChip, PromiseDialog } from "@/modules/planning-production"
+import { useSlice } from "@/store"
+import type { MaterialId } from "@/data/domain"
+import { AtpPartialDialog } from "./fx/AtpPartial"
+import { CancelDialog, ChangeOrderDialog, RepriceDialog } from "./fx/ChangeCancelReprice"
+import { CreditDecisionDialog } from "./fx/CreditDepeg"
+import { KitExplodeDialog } from "./fx/KitExplode"
+import { MilestoneStrip, PriceSourceBadge, ReadinessChips, WaterfallPopover } from "../components/fx"
+import { billingPlanOf, isEtoLine, orderReadiness, priceWaterfall } from "../fx/derive"
+import { StateBar, useFxState } from "./fx/kit"
 
 export function OrderList() {
   const { db } = useStore()
@@ -159,72 +169,24 @@ function CreditPanel({ o }: { o: SalesOrder }) {
   )
 }
 
-function CtpDialog({ o, open, onOpenChange }: { o: SalesOrder; open: boolean; onOpenChange: (b: boolean) => void }) {
-  const { actions } = useStore()
-  const [secs, setSecs] = useState(900)
-  useEffect(() => {
-    if (!open) return
-    setSecs(900)
-    const t = setInterval(() => setSecs((s) => Math.max(0, s - 1)), 1000)
-    return () => clearInterval(t)
-  }, [open])
-  const decided = o.lines[0].schedules[0].status !== "Open"
-  const run = (d: "accept" | "decline" | "review") => {
-    const r = actions.ctpDecide(o.id, d)
-    if (!r.ok) toast.error(r.error)
-    else onOpenChange(false)
-  }
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>CTP-DLG Promise dialog · {o.id}</DialogTitle>
-          <DialogDescription>Capable-to-promise result for line 10, 1 × FIN-TBD-7500MTO. Seeded result; no planning engine runs in this prototype.</DialogDescription>
-        </DialogHeader>
-        <dl className="grid grid-cols-2 gap-2">
-          <KV k="Feasible date">2026-12-18</KV>
-          <KV k="Binding constraint">
-            Test bay capacity, weeks 47 to 49 <Chip kind="k" id="K-09" note="Finite capacity: the binding constraint can be capacity (Book III controls, C-01)" />
-          </KV>
-          <KV k="Requested date">{o.lines[0].requestedShip}</KV>
-          <KV k="Soft reservation expires in">
-            <span className="tabular" aria-live="off">
-              {String(Math.floor(secs / 60)).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}
-            </span>{" "}
-            (15:00 is a design value)
-          </KV>
-        </dl>
-        <div>
-          <p className="text-sm font-medium">Alternatives (seeded)</p>
-          <ul className="list-disc pl-6 text-sm">
-            <li>Alternative 1: 2026-12-04 with the tank from an alternate supplier; constraint moves to material lead time</li>
-            <li>Alternative 2: 2027-01-08 with no capacity change; no binding constraint inside the horizon</li>
-          </ul>
-        </div>
-        {decided && <p className="text-sm">The promise on this schedule line is already decided ({o.lines[0].schedules[0].status}).</p>}
-        <DialogFooter>
-          <Button variant="outline" onClick={() => run("review")}>
-            Request planner review
-          </Button>
-          <Button variant="outline" onClick={() => run("decline")}>
-            Decline
-          </Button>
-          <Button disabled={decided || secs === 0} onClick={() => run("accept")}>
-            Accept
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+/** Opens the planning module's Promise Dialog for this order's first MTO/ETO line (CTP-DLG, planning request R-1). */
+function CtpHost({ o, open, onOpenChange }: { o: SalesOrder; open: boolean; onOpenChange: (b: boolean) => void }) {
+  const pl = useSlice("planningProduction")
+  const rec = pl.promises.find((p) => p.doc.id === o.id && p.decision !== "Declined" && p.decision !== "Expired")
+  if (!open) return null
+  if (!rec) return <Dialog open onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>No promise check yet</DialogTitle><DialogDescription>Use the CTP chip on an MTO or ETO line to start a promise check for it.</DialogDescription></DialogHeader></DialogContent></Dialog>
+  return <PromiseDialog id={rec.id} open onOpenChange={onOpenChange} />
 }
 
-export function OrderDetail() {
-  const { id = "" } = useParams()
+export function OrderDetail({ forId }: { forId?: string } = {}) {
+  const params = useParams()
+  const id = forId ?? params.id ?? ""
   const [sp, setSp] = useSearchParams()
   const { db, role, actions } = useStore()
   const [err, setErr] = useState<{ msg: string; field?: string } | null>(null)
   const [atpOpen, setAtpOpen] = useState(false)
-  const [atpChoice, setAtpChoice] = useState<"later" | "split" | "backorder">("split")
+  const [chg, setChg] = useState<"change" | "cancel" | "reprice" | "kit" | "credit" | null>(null)
+  const st = useFxState()
   const [stub, setStub] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
   const o = db.orders.find((x) => x.id === id)
@@ -284,6 +246,15 @@ export function OrderDetail() {
                 Confirm schedule lines ({o.type === "MTS" ? "ATP" : "CTP"})
               </Button>
             )}
+            {o.status === "Draft" && <Button variant="outline" onClick={() => setChg("kit")} disabled={!st.writable}>Add kit line</Button>}
+            {["Confirmed", "In Fulfillment", "Partially Shipped"].includes(o.status) && (
+              <>
+                <Button variant="outline" onClick={() => setChg("change")} disabled={!st.writable} title={st.why || undefined}>Change order</Button>
+                <Button variant="outline" onClick={() => setChg("reprice")} disabled={!st.writable}>Reprice</Button>
+              </>
+            )}
+            {["Confirmed", "In Fulfillment", "Partially Shipped", "Credit Hold"].includes(o.status) && <Button variant="outline" onClick={() => setChg("cancel")} disabled={!st.writable}>Cancel order or line</Button>}
+            {o.status === "Credit Hold" && appr?.kind === "Credit Release" && <Button variant="outline" onClick={() => setChg("credit")}>Credit decision</Button>}
             {o.status === "Shipped" && (
               <Button variant="outline" onClick={() => {
                 const r = actions.simulateInvoice(o.id)
@@ -300,6 +271,22 @@ export function OrderDetail() {
           </>
         }
       />
+      <div className="mb-4 flex flex-col gap-3">
+        <StateBar st={st} />
+        <ReadinessChips chips={orderReadiness(db, o)} />
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Link className="text-link underline" to={`/sales/billing-plan?so=${o.id}`}>Billing plan</Link>
+          {db.fx.etoCost[o.id] && <Link className="text-link underline" to={`/sales/eto-cost?so=${o.id}`}>ETO cost panel (estimate against committed, actual and EAC)</Link>}
+          {db.fx.changes.some((c) => c.soId === o.id) && <Link className="text-link underline" to="/sales/dialogs/change-cancel-reprice">{db.fx.changes.filter((c) => c.soId === o.id).length} change order(s)</Link>}
+          {db.fx.kitLines.some((k) => k.docId === o.id) && <span>Kit lines: {db.fx.kitLines.filter((k) => k.docId === o.id).map((k) => `${k.lineNo} ${k.kitId}`).join(", ")}</span>}
+        </div>
+        {o.type === "ETO" && (
+          <section aria-label="ETO milestone strip" className="rounded-lg border p-3">
+            <h2 className="mb-2 text-sm font-semibold">ETO milestones: six slices of the contract</h2>
+            <MilestoneStrip plan={billingPlanOf(db, o)} soId={o.id} />
+          </section>
+        )}
+      </div>
       {o.status === "Credit Hold" && (
         <div className="mb-4 rounded-lg border border-status-blocked p-4 text-sm">
           Waiting for Finance credit release. Sales roles cannot release credit holds (R-2).{" "}
@@ -413,11 +400,21 @@ export function OrderDetail() {
                   <TableCell className="tabular text-right">{l.qty}</TableCell>
                   <TableCell className="tabular text-right">{money(l.unitPrice, o.currency)}</TableCell>
                   <TableCell>
-                    <span className="rounded-md border px-1 text-xs">{l.priceSource}</span>
-                    {l.priceSource === "Quotation" && <span className="ml-1 text-xs text-muted-foreground">frozen</span>}
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="rounded-md border px-1 text-xs">{l.priceSource}{l.priceSource === "Quotation" && <span className="ml-1 text-muted-foreground">frozen</span>}</span>
+                      {(() => {
+                        const wf = priceWaterfall(l.item, l.unitPrice, l.priceSource, o.currency, { eto: isEtoLine(l.item), ce: db.fx.etoCost[o.id]?.ceId })
+                        return <><PriceSourceBadge source={wf.source} /><WaterfallPopover steps={wf.steps} source={wf.source} currency={o.currency} label={`${o.id} line ${l.no}`} /></>
+                      })()}
+                    </div>
                   </TableCell>
                   <TableCell>{l.requestedShip}</TableCell>
-                  <TableCell>{l.promisedShip ?? "Not promised"}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-col items-start gap-1">
+                      {l.promisedShip ?? "Not promised"}
+                      {(o.type === "MTO" || o.type === "ETO") && !terminal && <CtpLineChip doc={{ type: "salesOrder", id: o.id }} line={l.no} itemId={l.item as MaterialId} qty={l.qty} customerId={o.customerId} orderType={o.type} requestedDate={l.requestedShip} />}
+                    </div>
+                  </TableCell>
                   <TableCell>{l.warehouse}</TableCell>
                   <TableCell>
                     <StatusBadge entity="soline" status={l.status} />
@@ -483,50 +480,13 @@ export function OrderDetail() {
         ))}
       </ul>
 
-      <Dialog open={atpOpen} onOpenChange={setAtpOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Partial availability (ATP)</DialogTitle>
-            <DialogDescription>
-              ATP ran per line. {shortfalls.map((s) => `Line ${s.line}: ${s.avail} available of ${s.qty} (${s.item}).`).join(" ")} Choose how to confirm the short quantity. <Chip kind="oq" id="OQ-32" note="Confirm runs on an order that is already Confirmed after credit release" />
-            </DialogDescription>
-          </DialogHeader>
-          <fieldset className="space-y-2">
-            <legend className="sr-only">Option</legend>
-            {(
-              [
-                ["later", "Accept later date", "Confirm the full quantity on the later date (Oct 30, 2026, incoming stock from production order)."],
-                ["split", "Split line", "Confirm what is available now; a second schedule line takes the rest at the later date with the Backorder flag."],
-                ["backorder", "Backorder", "Allocate what is available; the rest stays Open on a backordered schedule line with no confirmed date."],
-              ] as const
-            ).map(([v, t, d]) => (
-              <label key={v} className="flex items-start gap-2 rounded-md border p-2">
-                <input type="radio" name="atp" value={v} checked={atpChoice === v} onChange={() => setAtpChoice(v)} className="mt-1" />
-                <span>
-                  <span className="font-medium">{t}</span>
-                  <span className="block text-xs text-muted-foreground">{d}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAtpOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                const r = actions.confirmATP(o.id, atpChoice)
-                setAtpOpen(false)
-                if (!r.ok) setErr({ msg: r.error })
-                else toast.success("Schedule lines confirmed.")
-              }}
-            >
-              Apply
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {o.ctpSeed && <CtpDialog o={o} open={ctpOpen} onOpenChange={(b) => setSp(b ? { ctp: "1" } : {})} />}
+      <AtpPartialDialog so={o} open={atpOpen} onOpenChange={setAtpOpen} />
+      <ChangeOrderDialog so={o} open={chg === "change"} onOpenChange={(x) => !x && setChg(null)} />
+      <CancelDialog so={o} open={chg === "cancel"} onOpenChange={(x) => !x && setChg(null)} />
+      <RepriceDialog so={o} open={chg === "reprice"} onOpenChange={(x) => !x && setChg(null)} />
+      <KitExplodeDialog docType="salesOrder" docId={o.id} open={chg === "kit"} onOpenChange={(x) => !x && setChg(null)} />
+      {appr?.kind === "Credit Release" && <CreditDecisionDialog approval={appr} open={chg === "credit"} onOpenChange={(x) => !x && setChg(null)} />}
+      <CtpHost o={o} open={ctpOpen} onOpenChange={(b) => setSp(b ? { ctp: "1" } : {})} />
       <Dialog open={!!stub} onOpenChange={() => setStub(null)}>
         <DialogContent>
           <DialogHeader>

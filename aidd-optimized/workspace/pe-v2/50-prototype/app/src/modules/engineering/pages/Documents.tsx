@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useParams } from "react-router"
 import { FileText, Lock } from "lucide-react"
+import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +18,7 @@ import { DetailPage, DialogShell, ListPage } from "@/components/templates"
 import type { DocRef } from "@/data/domain"
 import { fmtDate } from "@/lib/format"
 import { useCore, useRole, useSlice } from "@/store"
+import { RenditionPreview, isUnreleased } from "../Rendition"
 import { DetailState, NoPostings, RefLink, StatePreview, useAct, useActDialog, useScreenState } from "../components"
 import { canSeeDoc, currentRev, docStatus, EAR_FLAG_USERS, hasEarFlag, releasedRev, userName, whereUsedDoc } from "../data/logic"
 import * as act from "../data/actions"
@@ -149,6 +151,8 @@ function DocBody({ d }: { d: DocRecord }) {
   const emOnly = isEM ? undefined : "The Engineering Manager does this (switch Acting as)"
   const used = whereUsedDoc(s, d.id)
   const terminal = status === "Obsolete"
+  const [revSel, setRevSel] = useState<string | undefined>()
+  const shown = d.revisions.find((v) => v.rev === revSel) ?? r
 
   let primary = null
   if (status === "WIP" && !r.checkedOutBy) primary = <Button onClick={() => run((x, c) => act.checkOut(x, c, d.id), `Rev ${r.rev} checked out`)}>Check out</Button>
@@ -169,6 +173,7 @@ function DocBody({ d }: { d: DocRecord }) {
             <>
               {r.checkedOutBy && <Chip kind="hold" note={`Since ${fmtDate(r.checkedOutSince)}`}>Checked out by {userName(r.checkedOutBy)}</Chip>}
               {d.security === "Restricted" && <Chip kind="block" note="Export-controlled: visible only to users with the EAR flag; this view is logged">Restricted</Chip>}
+              {isUnreleased(r) && <Chip kind="block" note="Every unreleased rendition (WIP, In Review) is watermarked NOT FOR MANUFACTURE (feature list ENG-DOC-002)">NOT FOR MANUFACTURE</Chip>}
               {rel && rel !== r && <Chip kind="change" note="Consumers keep seeing the released revision until the new one releases">Rev {rel.rev} in use</Chip>}
             </>
           ),
@@ -194,6 +199,22 @@ function DocBody({ d }: { d: DocRecord }) {
           </>
         }
         tabs={[
+          {
+            id: "rendition", label: "Rendition",
+            content: (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label htmlFor="rend-rev">Revision shown</Label>
+                  <Select value={revSel ?? r.rev} onValueChange={setRevSel}>
+                    <SelectTrigger id="rend-rev" size="sm" className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>{[...d.revisions].reverse().map((v) => <SelectItem key={v.rev} value={v.rev}>Rev {v.rev} ({v.status})</SelectItem>)}</SelectContent>
+                  </Select>
+                  {r.status === "In Review" && <Button asChild variant="outline" size="sm"><Link to={`/engineering/redline-review?doc=${d.id}`}>Open redline review</Link></Button>}
+                </div>
+                <RenditionPreview doc={d} rev={shown} markups={shown.redlines} className="max-w-3xl" />
+              </div>
+            ),
+          },
           {
             id: "revs", label: "Revisions", count: d.revisions.length,
             content: (

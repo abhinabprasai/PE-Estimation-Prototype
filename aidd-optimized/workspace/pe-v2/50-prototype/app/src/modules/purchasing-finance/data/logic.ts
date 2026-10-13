@@ -4,6 +4,7 @@
 
 import type { AvlEntry, CustomerId, ISODate, MaterialId, Vendor } from "@/data/domain"
 import { routeApproval, THRESHOLDS } from "@/data/domain"
+import { store } from "@/store"
 import { AVL, CUSTOMERS, MATERIALS, PROFIT_CENTERS, TODAY, VENDORS } from "@/data/shared"
 import type { PurchasingFinanceState } from "./slice"
 import type { CeRec, IndexRec, LlrRec, PoRec, SurchargeRec, VarianceRow, VarianceType } from "./types"
@@ -32,7 +33,7 @@ export const vendorName = (s: PurchasingFinanceState, id?: string) => vendorOf(s
 export function allAvl(s: PurchasingFinanceState): (AvlEntry & { leadDays?: number; note?: string })[] {
   return [...AVL, ...s.avlAdded].map((a) => {
     const o = s.avlOverlay[a.id]
-    return o ? { ...a, status: o.status ?? a.status, priceBasis: o.priceBasis ?? a.priceBasis, leadDays: o.leadDays, note: o.note } : a
+    return o ? { ...a, rank: o.rank ?? a.rank, status: o.status ?? a.status, priceBasis: o.priceBasis ?? a.priceBasis, leadDays: o.leadDays, note: o.note } : a
   })
 }
 
@@ -44,6 +45,76 @@ export function vendorEligibility(v: Vendor | undefined): { ok: boolean; needsOv
   if (v.quality === "Disqualified") return { ok: false, needsOverride: false, reason: `${v.name} is Disqualified; new POs are hard-blocked (C-32).` }
   if (v.quality === "Restricted") return { ok: true, needsOverride: true, reason: `${v.name} is Restricted; a new PO needs a Purchasing Manager override (C-32).` }
   return { ok: true, needsOverride: false }
+}
+
+/** QI-critical item (reading OQ-PF-18): the master carries no flag, so an item that is received into QI
+ *  Hold under a batch or serial profile is treated as QI-critical for E-PUR-02 [DOC Book II Vendor Qualification Required]. */
+export const isQiCritical = (itemId?: string) => {
+  const m = MATERIALS.find((x) => x.id === itemId)
+  return !!m && (m.batchFlag || !!m.serialProfileId)
+}
+/** E-PUR-02: only AVL vendors with Qualified status may appear on POs for a QI-critical item. Null when fine. */
+export function qualifiedSourceBlocker(s: PurchasingFinanceState, vendorId: string, itemId: string): string | null {
+  if (!isQiCritical(itemId)) return null
+  const row = allAvl(s).find((a) => a.vendorId === vendorId && a.itemId === itemId)
+  if (row?.status === "Qualified") return null
+  return `E-PUR-02: ${itemId} is QI-critical and ${vendorName(s, vendorId)} is ${row ? `AVL ${row.status}` : "not on the AVL"}; only Qualified AVL vendors may appear on POs. Start AVL qualification or an RFQ.`
+}
+
+/** E-DTS-01: a design at Concept or Preliminary / RFQ Package may go out for quotation only; a PO is blocked
+ *  unless a long-lead release covers it [DOC:p.208 §3.1]. Reads the engineering request pegged through the SO. */
+export function designReleaseBlocker(p: Pick<PoRec, "llrId" | "lines">): string | null {
+  if (p.llrId || !store.hasSlice("engineering")) return null
+  const reqs = (store.getSlice("engineering" as never) as unknown as { requests?: { id: string; soId: string; releaseLevel: string }[] }).requests ?? []
+  for (const l of p.lines) {
+    if (l.peg?.type !== "salesOrder") continue
+    const er = reqs.find((r) => r.soId === l.peg!.id)
+    if (er && (er.releaseLevel === "Concept" || er.releaseLevel === "Preliminary / RFQ Package"))
+      return `Line ${l.no}: design ${er.id} is at ${er.releaseLevel}: RFQs are allowed but POs are blocked until a long-lead release or Approved for Purchase (E-DTS-01).`
+  }
+  return null
+}
+
+/** AVL price basis as a number (reading OQ-PF-19): the AVL basis is text, so the reference is the awarded
+ *  price when the basis records an award, else the vendor's last PO price for the item. */
+export function avlBasisPrice(s: PurchasingFinanceState, vendorId: string, itemId: string, excludePo?: string): { price: number; from: string } | undefined {
+  const row = allAvl(s).find((a) => a.vendorId === vendorId && a.itemId === itemId)
+  const m = row?.priceBasis.match(/^Award (\S+): ([\d.]+) \//)
+  if (m) return { price: Number(m[2]), from: `award ${m[1]}` }
+  const prior = s.purchaseOrders
+    .filter((q) => q.id !== excludePo && q.vendorId === vendorId && q.status !== "Cancelled" && q.status !== "Draft")
+    .sort((a, b) => b.createdOn.localeCompare(a.createdOn))
+    .flatMap((q) => q.lines.filter((l) => l.itemId === itemId).map((l) => ({ price: l.price, from: `last PO ${q.id}` })))[0]
+  return prior
+}
+/** Unit price deviating more than 5% from the AVL basis flags an approval note [DOC:p.104 §5.2]. */
+export function priceDeviations(s: PurchasingFinanceState, p: Pick<PoRec, "id" | "vendorId" | "lines">) {
+  const out: { line: number; itemId: string; price: number; basis: number; from: string; pct: number }[] = []
+  for (const l of p.lines) {
+    if (l.status === "Cancelled") continue
+    const b = avlBasisPrice(s, p.vendorId, l.itemId, p.id)
+    if (!b || !b.price) continue
+    const pct = ((l.price - b.price) / b.price) * 100
+    if (Math.abs(pct) > THRESHOLDS.poPriceDeviationPct) out.push({ line: l.no, itemId: l.itemId, price: l.price, basis: b.price, from: b.from, pct: Math.round(pct * 10) / 10 })
+  }
+  return out
+}
+export const deviationNote = (d: ReturnType<typeof priceDeviations>) =>
+  d.length ? `Price deviation above ${THRESHOLDS.poPriceDeviationPct}% from the AVL basis: ${d.map((x) => `line ${x.line} ${x.pct > 0 ? "+" : ""}${x.pct}% vs ${x.basis} (${x.from})`).join("; ")}` : ""
+
+/** Standard subcontract cost per unit: the service's own standard, or the item standard less the
+ *  provided material per unit [DOC Part A §8.1 SPV; template #35] (reading OQ-PF-20). */
+export function subcontractStd(s: PurchasingFinanceState, p: Pick<PoRec, "provided">, l: { itemId: string; qty: number; price: number }) {
+  const mt = material(l.itemId)
+  const std = stdOf(s, l.itemId)
+  if (std == null) return l.price
+  if (mt?.type === "SERV" || mt?.type === "NSTK") return std
+  const provided = (p.provided ?? []).reduce((t, x) => t + x.qty * (stdOf(s, x.itemId) ?? 0), 0)
+  return Math.max(0, Math.round((std - provided / (l.qty || 1)) * 100) / 100)
+}
+export function providedValue(s: PurchasingFinanceState, p: Pick<PoRec, "provided">, l: { qty: number }, receivedQty: number) {
+  const provided = (p.provided ?? []).reduce((t, x) => t + x.qty * (stdOf(s, x.itemId) ?? 0), 0)
+  return Math.round(provided * (receivedQty / (l.qty || 1)) * 100) / 100
 }
 
 // ------------------------------------------------------------------ materials and money
@@ -208,4 +279,12 @@ export const ceComponents = (c: CeRec) => [
 export function nextId(s: PurchasingFinanceState, prefix: string, width = 4) {
   s.seq += 1
   return `${prefix}${String(s.seq).padStart(width, "0")}`
+}
+
+/** CVA exception list (Part A §8.4): an item with no standard ever released goes on the list as
+ *  "No standard — costing run required" and an alert goes to the Cost accountant. Idempotent per item. */
+export function noStandardException(s: PurchasingFinanceState, itemId: MaterialId, source: import("@/data/domain").DocRef, on: ISODate) {
+  if (stdOf(s, itemId) != null || s.cvaExceptions.some((x) => x.itemId === itemId)) return
+  s.seq += 1
+  s.cvaExceptions.push({ id: `CVX-L${s.seq}`, itemId, text: "No standard — costing run required", source, on, alertTo: "Cost accountant" })
 }

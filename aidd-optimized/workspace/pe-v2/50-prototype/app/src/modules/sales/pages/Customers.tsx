@@ -23,6 +23,7 @@ import { AUTO_HOLD_EXEMPTABLE, CUSTOMER_CLASSES, type CustAddress, type CustCont
 import {
   FIN_ROLES, activateCustomer, activationCheck, addAddress, addContact, createCustomer, setAutoHoldExempt, setCreditLimit, setCustomerClass, setCustomerStatus, setPriceList, setPriorityClass, setRiskClass, toggleCreditHold, userName,
 } from "../data/ext-actions"
+import { TaxTab } from "./fx/CustomerTax"
 import { A, ActivityList, Reading, Section, StatPill } from "../components/ext"
 
 const RULES: [string, string, string][] = [
@@ -360,15 +361,7 @@ export function CustomerDetail() {
           {
             id: "tax",
             label: "Tax",
-            content: (
-              <Section title="Tax">
-                <dl className="grid grid-cols-2 gap-4">
-                  <KV k="Tax exempt">{x.taxExempt ? "Yes (certificate on file)" : "No"}</KV>
-                  <KV k="Nexus">{x.nexus.join(", ")}</KV>
-                </dl>
-                <p className="text-xs text-muted-foreground">Tax determination happens in ACC on the invoice request; this tab holds the customer-side flags only.</p>
-              </Section>
-            ),
+            content: <TaxTab custId={c.id} />,
           },
           {
             id: "history",

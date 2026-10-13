@@ -1,6 +1,7 @@
 // FL-09 sales slice actions. Every action is atomic: it runs on a clone and either commits the whole
 // clone or throws and changes nothing (R-13 falls out of this). Since the foundation pass the clone
 // and commit are done by the root store (src/store/core.ts); the action bodies are unchanged.
+import { ruleIdFor } from "../fx/model"
 import { huPackagingCost } from "./packaging"
 import { useMemo, type ReactNode } from "react"
 import { ProtoError, store, useRole, useSlice, type Result } from "@/store"
@@ -25,7 +26,7 @@ import {
 export { ProtoError }
 export type { Result }
 
-const ATP_LATER_DATE: Record<string, { date: string; constraint: string }> = {
+export const ATP_LATER_DATE: Record<string, { date: string; constraint: string }> = {
   "FIN-TBD-2500PM": { date: "2026-10-30", constraint: "incoming stock from production order" },
 }
 export const HORIZON_DAYS = 7 // design value: the horizon length is not stated in the specification
@@ -52,7 +53,7 @@ function nextSO(db: DB) {
   return id
 }
 
-function runCreditCheck(db: DB, o: SalesOrder, when: string): CreditCheck {
+export function runCreditCheck(db: DB, o: SalesOrder, when: string): CreditCheck {
   const c = db.customers.find((x) => x.id === o.customerId)!
   const value = orderValue(o)
   const check: CreditCheck = {
@@ -403,7 +404,8 @@ export function makeActions(mutate: <T>(fn: (db: DB) => T) => Result<T>, getRole
               else if (["Confirmed", "Allocated/Pegged"].includes(s.status) && !s.deliveryId) laterExists = true
             }
           if (!due.length) continue
-          const id = `DLV-TBD-${String(db.seq.dlv++).padStart(4, "0")}`
+          let id = `DLV-TBD-${String(db.seq.dlv++).padStart(4, "0")}`
+          while (db.deliveries.some((x) => x.id === id)) id = `DLV-TBD-${String(db.seq.dlv++).padStart(4, "0")}`
           const rule = laterExists ? "Split, elective: schedules more than 7 days apart" : "Grouped: same ship-to and Incoterms, all schedules due in the horizon"
           const d: Delivery = {
             id,
@@ -413,14 +415,14 @@ export function makeActions(mutate: <T>(fn: (db: DB) => T) => Result<T>, getRole
             incoterms: o.incoterms,
             status: "Planned",
             rule,
-            ruleId: "RULE-TBD",
+            ruleId: ruleIdFor(rule),
             refs: due.map((x) => ({ soId: o.id, line: x.line, sched: x.s.no, qty: x.s.confQty ?? x.s.reqQty })),
             flags: { supply: "passed", credit: "not passed", quality: "not passed", documents: "not passed" },
             permits: [],
             freight: null,
             freightPaidBy: o.freightTerms,
             warehouse: "WH-TBD-01 Fargo, ND",
-            activity: [act(role, `Delivery created at Planned by on-demand delivery creation. Grouped by: ${rule} (RULE-TBD)`)],
+            activity: [act(role, `Delivery created at Planned by on-demand delivery creation. Grouped by: ${rule} (${ruleIdFor(rule)})`)],
           }
           for (const x of due) {
             x.s.status = "Delivery Due"
@@ -553,8 +555,15 @@ export function makeActions(mutate: <T>(fn: (db: DB) => T) => Result<T>, getRole
       mutate((db) => {
         const d = findDelivery(db, dlvId)
         if (["PGI", "Delivered/Closed"].includes(d.status)) throw new ProtoError("The load plan is locked after PGI.")
+        const prevCarrier = d.carrier
         Object.assign(d, f)
         d.flags.documents = f.carrier.trim() && f.pro.trim() ? "passed" : "not passed"
+        const sh = db.fx.ship[d.id]
+        if (sh && f.carrier.trim() && f.carrier.trim() !== prevCarrier) {
+          sh.tender = "Tendered"
+          sh.rejectedReason = undefined
+          sh.carrierHistory.push(act(getRole(), `Carrier ${prevCarrier ? `changed ${prevCarrier} → ` : "set to "}${f.carrier.trim()} on the load plan; tendered`))
+        }
         d.activity.push(act(getRole(), `Load plan saved: ${f.equipment || "equipment not set"}, dock door ${f.door || "-"}, slot ${f.slot || "-"}, carrier ${f.carrier || "not recorded"}, ${f.pro || "PRO/BOL not recorded"}. Documents flag: ${d.flags.documents} (Reading OQ-32)`))
       }),
     loadScan: (dlvId: string, code: string) =>

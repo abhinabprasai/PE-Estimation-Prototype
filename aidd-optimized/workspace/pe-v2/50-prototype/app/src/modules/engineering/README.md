@@ -2,7 +2,7 @@
 
 > **What this is.** The owner's guide for `src/modules/engineering/`. Engineering: the PRD's Engineering (6) and CAD and Documents (4) modules.
 >
-> **Where it stands.** Module pass, 11 October 2026. All ten screens are built and claimed "full" in `routes.tsx`; the type-check is clean for this folder. The PDM connector (IF-17) is mocked in the slice.
+> **Where it stands.** Feature pass, 12 October 2026. All ten PRD screens and all ten feature-list screens (below) are built and claimed "full" in `routes.tsx`; the type-check is clean for this folder. The PDM connector (IF-17) is mocked in the slice.
 >
 > **What we need from you.** Build the screens below inside this folder only. Anything you need outside it goes under "Requests to foundation" at the end.
 
@@ -56,6 +56,32 @@ Event catalog: `src/store/events.ts`. Add a module-only event by augmentation in
 - C-14: a Released EBOM is immutable; offer "raise ECR" instead of Edit.
 - MBOM-TRF and CAD-IMP routes are design values (the entries say "wizard from a released EBOM" and "wizard inside the EBOM editor").
 
+
+## Feature-list entries (added 12 October 2026)
+
+The user's feature list (`00-inputs/feature-list-2026-10.md`) is part of the prototype's scope together with the PRD. The feature mapper registered the rows below in `src/data/screens-features.ts`. Each has a placeholder route today. Build it at that path with `screenId` and a `built` claim, as for any registry screen. Routes, archetypes and ids marked FX- are design values. Rows that are a tab or panel of a screen you already own (for example Material Detail views, the RMA detail tabs, the Customer tax tab) have no entry: they are in the "Feature rows" list below and count as scope of that screen.
+
+| Screen ID | Title | Route | Archetype | Wave | Flows | Feature-list section | Built |
+|---|---|---|---|---|---|---|---|
+| FX-ENG-RELEASE | EBOM review and release package | `/engineering/dialogs/ebom-release` | Dialog (design value) | W3 | FL-02, FL-10 | Engineering & BOM | full |
+| FX-ENG-COPYFROM | EBOM Copy From and base-design picker | `/engineering/dialogs/copy-from` | Dialog (design value) | W3 | FL-10 | Engineering & BOM | full |
+| FX-ENG-COMPARE | Compare revisions view | `/engineering/compare-revisions` | Detail (design value) | W3 | FL-10 | Engineering & BOM | full |
+| FX-ENG-MASSREPLACE | Mass replace component dialog | `/engineering/dialogs/mass-replace` | Dialog (design value) | W3 | FL-10 | Engineering & BOM | full |
+| FX-ENG-WHEREUSED | Where-Used explorer | `/engineering/where-used` | Workbench (design value) | W3 | FL-10, FL-08 | Engineering & BOM | full |
+| FX-ENG-ITEMS | Engineering items view | `/engineering/items` | List (design value) | W3 | - | Engineering & BOM | full |
+| FX-ENG-REPORTS | Engineering reports (five) | `/engineering/reports`, `/engineering/reports/:id` | Dashboard (design value) | W3 | - | Engineering & BOM | full |
+| FX-DOC-REDLINE | PDF redline review layer | `/engineering/redline-review` | Detail (design value) | W3 | FL-02 | CAD & Document Control | full |
+| FX-CAD-COMPARE | CAD vs EBOM structure comparison | `/engineering/cad-compare` | Detail (design value) | W3 | - | CAD & Document Control | full |
+| FX-CAD-PDM | PDM linkage states | `/engineering/pdm-linkage` | Detail (design value) | W3 | - | CAD & Document Control | full |
+
+### Feature-row notes (12 October 2026)
+
+- Every FX page takes `?state=loading|empty|validation|denied|conflict|offline|degraded|readonly|error` (State preview control) for the nine states plus a service error; real actions also raise validation and conflict messages.
+- The dialog entries are components in `dialogs.tsx` (opened from the EBOM editor: Review release package, Copy From, Mass replace; Where-Used opens Mass replace) and pages in `pages/Dialogs.tsx` showing each dialog inline and as a modal.
+- ENG-BOM-002: added the Sales kits tab and the Sales kit usage block in the context panel [DOC:p.256 §6.1], the shared Compare view, and the keyboard grid contract (Enter next row, Shift+Enter previous, Tab next cell, Esc cancels, Enter past the last row lands on Add a line).
+- ENG-DOC-001/2: new Rendition tab; every unreleased rendition (WIP, In Review) carries the NOT FOR MANUFACTURE watermark and a header chip, a Released one the RELEASED stamp, an Obsolete one OBSOLETE. Redline pins are placed on the PDF at /engineering/redline-review.
+- ENG-REQ-001: verified the back-scheduled due date (promised ship minus production lead minus long-lead, edit with schedule-impact warning and an "Edited" chip) and added the release-level path strip Concept to Released for Production.
+- The change cycle report holds eight pre-seed released changes in `data/extra.ts` and average design hours per type: both shown with Design value chips.
 
 ## Hero thread through this module
 

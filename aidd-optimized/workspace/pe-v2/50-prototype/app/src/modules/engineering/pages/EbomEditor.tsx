@@ -5,7 +5,7 @@
 
 import { useMemo, useState, type KeyboardEvent } from "react"
 import { Link, useNavigate, useParams } from "react-router"
-import { Download, FilePlus2, ListChecks } from "lucide-react"
+import { FilePlus2, ListChecks } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -22,7 +22,9 @@ import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useSlice } from "@/store"
 import { DetailState, Item, NoPostings, RefLink, useAct, useActDialog, useScreenState } from "../components"
-import { docStatus, itemInfo, levelLabels, pickableMaterials, userName, validateEbom } from "../data/logic"
+import { docStatus, itemInfo, kitMemberships, kitStandard, kitsForDesign, levelLabels, pickableMaterials, revisionPool, userName, validateEbom } from "../data/logic"
+import { RevisionCompare } from "../RevisionCompare"
+import { CopyFromDialog, EbomReleaseDialog, MassReplaceDialog } from "../dialogs"
 import { ROUTINGS } from "../data/reference"
 import * as act from "../data/actions"
 import type { EbomLineX, EbomRecord } from "../data/types"
@@ -50,7 +52,7 @@ function Editor({ e }: { e: EbomRecord }) {
   const [node, setNode] = useState<number | undefined>(undefined)
   const [line, setLine] = useState<number | undefined>(e.lines[0]?.no)
   const [showVal, setShowVal] = useState(false)
-  const [dlg, setDlg] = useState<null | "placeholder" | "submit" | "comment">(null)
+  const [dlg, setDlg] = useState<null | "placeholder" | "submit" | "comment" | "package" | "copy" | "mass">(null)
   const editable = e.status === "Draft"
   const labels = useMemo(() => levelLabels(e.lines), [e.lines])
   const validation = useMemo(() => validateEbom(s, e), [s, e])
@@ -62,6 +64,7 @@ function Editor({ e }: { e: EbomRecord }) {
   const ops = (ROUTINGS.find((r) => r.materialId === e.parentItemId && r.status === "Released") ?? ROUTINGS[0]).ops
   const placeholders = e.lines.filter((l) => itemInfo(s, l.componentId).placeholder)
   const mboms = s.mboms.filter((m) => m.ebomId === e.id)
+  const kits = useMemo(() => kitsForDesign(s, e), [s, e])
 
   let primary = null
   if (e.status === "Draft") primary = <Button onClick={() => setDlg("submit")}>Submit for review</Button>
@@ -93,7 +96,10 @@ function Editor({ e }: { e: EbomRecord }) {
               <Button variant="outline" disabled={!editable} title={editable ? undefined : "Import adds lines to a Draft EBOM only"} onClick={() => nav(`/engineering/boms/${e.id}/import`)}>Import</Button>
               {e.status === "Released" && <Button variant="outline" onClick={() => nav(`/engineering/mbom-transform/new/${e.id}`)}>Transform to MBOM</Button>}
               {e.status === "In Review" && <Button variant="ghost" onClick={() => setDlg("comment")}>Comment</Button>}
-              <Button variant="ghost" onClick={() => nav("/engineering/boms")}>Copy From…</Button>
+              {(e.status === "Draft" || e.status === "In Review") && <Button variant="outline" onClick={() => setDlg("package")}>Review release package</Button>}
+              <Button variant="ghost" disabled={!editable} title={editable ? undefined : "Copy From fills a Draft EBOM"} onClick={() => setDlg("copy")}>Copy From…</Button>
+              <Button variant="ghost" onClick={() => setDlg("mass")}>Mass replace…</Button>
+              <Button variant="ghost" asChild><Link to={`/engineering/where-used?item=${e.parentItemId}`}>Where-used</Link></Button>
             </>
           ),
         }}
@@ -151,6 +157,7 @@ function Editor({ e }: { e: EbomRecord }) {
             ),
           },
           { id: "compare", label: "Compare revisions", count: e.priorRevs.length, content: <Compare s={s} e={e} /> },
+          { id: "kits", label: "Sales kits", count: kits.length, content: <KitPanel s={s} e={e} kits={kits} /> },
           {
             id: "review", label: "Review comments", count: e.reviewNotes.length + e.lines.reduce((n, l) => n + (l.comments?.length ?? 0), 0),
             content: (
@@ -188,6 +195,9 @@ function Editor({ e }: { e: EbomRecord }) {
       <DialogShell open={dlg === "submit"} onOpenChange={(o) => !o && setDlg(null)} title={`Submit ${e.id} rev ${e.rev} for review`} confirmLabel="Submit for review"
         consequence={`Runs Validate; with no errors the EBOM moves to In Review and locks. ${errors.length ? `Validate currently finds ${errors.length} error${errors.length > 1 ? "s" : ""}.` : "Validate currently passes."}`}
         onConfirm={() => runD((d, c) => act.submitEbom(d, c, e.id), `${e.id} In Review`)} />
+      <EbomReleaseDialog open={dlg === "package"} onOpenChange={(o) => !o && setDlg(null)} ebomId={e.id} />
+      <CopyFromDialog open={dlg === "copy"} onOpenChange={(o) => !o && setDlg(null)} target={e.id} erId={e.engineeringRequestId} />
+      <MassReplaceDialog open={dlg === "mass"} onOpenChange={(o) => !o && setDlg(null)} initialFrom={e.lines[0]?.componentId as MaterialId | undefined} />
       <CommentDialog open={dlg === "comment"} onClose={() => setDlg(null)} e={e} line={line} />
     </>
   )
@@ -232,16 +242,29 @@ function LineGrid({ s, e, rows, labels, ops, editable, active, onActive }: { s: 
   const run = useAct()
   const docs = s.documents.filter((d) => docStatus(d) !== "Obsolete")
   const upd = (no: number, patch: Partial<EbomLineX>) => run((d, c) => act.updateLine(d, c, e.id, no, patch))
-  // Keyboard-first: Enter moves to the same column on the next row; Tab moves to the next cell.
+  // Keyboard-first grid contract: Enter = same column, next row (Shift+Enter previous row); Tab / Shift+Tab =
+  // next / previous cell; Esc = cancel the edit and put the old value back. Past the last row, Enter lands on
+  // the add-a-line field, so a whole structure can be keyed without the mouse.
   const onKey = (ev: KeyboardEvent<HTMLInputElement>, row: number, col: string) => {
+    if (ev.key === "Escape") {
+      ev.currentTarget.value = ev.currentTarget.defaultValue
+      ev.currentTarget.blur()
+      return
+    }
     if (ev.key !== "Enter") return
     ev.preventDefault()
-    const nextEl = document.querySelector<HTMLInputElement>(`[data-grid="${e.id}"][data-row="${row + 1}"][data-col="${col}"]`)
-    ;(nextEl ?? document.querySelector<HTMLInputElement>(`[data-grid="${e.id}"][data-col="add-component"]`))?.focus()
+    const at = (r: number) => document.querySelector<HTMLInputElement>(`[data-grid="${e.id}"][data-row="${r}"][data-col="${col}"]`)
+    if (ev.shiftKey) {
+      at(row - 1)?.focus()
+      return
+    }
+    ;(at(row + 1) ?? document.querySelector<HTMLInputElement>(`[data-grid="${e.id}"][data-col="add-component"]`))?.focus()
   }
   if (!rows.length) return <EmptyState title="No lines under this node">{editable ? "Add a component below, or create a placeholder part." : "This node has no child lines."}</EmptyState>
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="flex flex-col gap-1">
+    {editable && <p className="text-xs text-muted-foreground" id={`${e.id}-keys`}>Keyboard: Enter next row, Shift+Enter previous row, Tab next cell, Esc cancels the edit. After the last row Enter jumps to Add a line.</p>}
+    <div className="overflow-x-auto rounded-lg border" aria-describedby={editable ? `${e.id}-keys` : undefined}>
       <Table>
         <TableHeader className="bg-table-head">
           <TableRow>
@@ -295,6 +318,7 @@ function LineGrid({ s, e, rows, labels, ops, editable, active, onActive }: { s: 
           })}
         </TableBody>
       </Table>
+    </div>
     </div>
   )
 }
@@ -353,6 +377,7 @@ function ContextPanel({ s, e, line, editable, onMove }: { s: EngineeringState; e
   const usedInM = s.mboms.filter((x) => x.lines.some((l) => l.componentId === line.componentId))
   const ph = s.placeholders.find((p) => p.id === line.componentId)
   const parents = e.lines.filter((l) => l.no !== line.no && l.parent == null)
+  const memberships = kitMemberships(s, line.componentId)
   return (
     <section aria-label="Context panel" className="flex flex-col gap-4 rounded-lg border p-4 text-sm">
       <div>
@@ -388,6 +413,13 @@ function ContextPanel({ s, e, line, editable, onMove }: { s: EngineeringState; e
         </ul>
       </div>
       <div>
+        <h3 className="mb-2 font-semibold">Sales kit usage ({memberships.length})</h3>
+        {memberships.length ? (
+          <ul className="flex flex-col gap-1">{memberships.map((m) => <li key={m.ebom.id}><RefLink r={{ type: "ebom", id: m.ebom.id }} /> <span className="font-mono text-xs">{m.ebom.parentItemId}</span> × {fmtNumber(m.line.qty, 2)} <StatusBadge kind="ebom" status={m.ebom.status} size="sm" /></li>)}</ul>
+        ) : <p className="text-muted-foreground">Not a member of any sales kit.</p>}
+        <p className="mt-1 text-xs text-muted-foreground">Where used from any component lists its kit memberships [DOC:p.256 §6.1].</p>
+      </div>
+      <div>
         <h3 className="mb-2 font-semibold">Alternates</h3>
         {line.alternates?.length ? <ul className="flex flex-col gap-1">{line.alternates.map((a) => <li key={a.componentId}><span className="font-mono">{a.componentId}</span> rank {a.rank}: {a.condition}</li>)}</ul> : <p className="text-muted-foreground">None. MRP never auto-substitutes; a planner selects alternates.</p>}
         {editable && (
@@ -411,54 +443,47 @@ function ContextPanel({ s, e, line, editable, onMove }: { s: EngineeringState; e
   )
 }
 
-function Compare({ s, e }: { s: EngineeringState; e: EbomRecord }) {
-  const options = [...e.priorRevs.map((r) => ({ key: `rev:${r.rev}`, label: `${e.id} rev ${r.rev} (Superseded)`, lines: r.lines })), ...s.eboms.filter((x) => x.id !== e.id && x.parentItemId === e.parentItemId).map((x) => ({ key: `ebom:${x.id}`, label: `${x.id} rev ${x.rev} (${x.status})`, lines: x.lines }))]
-  const [k, setK] = useState(options[0]?.key ?? "")
-  const base = options.find((o) => o.key === k)
-  if (!base) return <EmptyState title="Nothing to compare">This EBOM has no earlier revision and no other EBOM shares its parent item.</EmptyState>
-  const nos = [...new Set([...base.lines.map((l) => l.no), ...e.lines.map((l) => l.no)])].sort((a, b) => a - b)
-  const rows = nos.map((no) => {
-    const a = base.lines.find((l) => l.no === no)
-    const b = e.lines.find((l) => l.no === no)
-    const kind = !a ? "Added" : !b ? "Removed" : a.componentId !== b.componentId || a.qty !== b.qty || a.refDes !== b.refDes || a.scrapPct !== b.scrapPct ? "Changed" : "Same"
-    return { no, a, b, kind }
-  })
-  const csv = () => {
-    const text = ["Find #,Change,Was,Now", ...rows.filter((r) => r.kind !== "Same").map((r) => `${r.no},${r.kind},"${r.a ? `${r.a.componentId} x ${r.a.qty} ${r.a.refDes ?? ""}` : ""}","${r.b ? `${r.b.componentId} x ${r.b.qty} ${r.b.refDes ?? ""}` : ""}"`)].join("\n")
-    const url = URL.createObjectURL(new Blob([text], { type: "text/csv" }))
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${e.id}-rev${e.rev}-compare.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-  const tint = { Added: "bg-status-passed-tint", Removed: "bg-status-draft-tint", Changed: "bg-status-pending-tint", Same: "" } as const
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Label>Compare rev {e.rev} with</Label>
-        <Select value={k} onValueChange={setK}>
-          <SelectTrigger size="sm" className="w-80" aria-label="Compare with"><SelectValue /></SelectTrigger>
-          <SelectContent>{options.map((o) => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}</SelectContent>
-        </Select>
-        <Button variant="outline" size="sm" onClick={csv}><Download aria-hidden="true" />Export change evidence (CSV)</Button>
+function KitPanel({ s, e, kits }: { s: EngineeringState; e: EbomRecord; kits: ReturnType<typeof kitsForDesign> }) {
+  if (e.usage === "Sales")
+    return (
+      <div className="flex max-w-3xl flex-col gap-2 text-sm">
+        <p className="rounded-md bg-muted px-4 py-2">{e.id} is a sales kit: its header {e.parentItemId} is a material of type KIT, non-stocked and non-valuated by default. A kit is sold as a line on an order and is never transformed to an MBOM.</p>
+        <p>Report-only cost rollup (sum of component standards): <span className="tabular font-medium">{fmtMoney(kitStandard(s, e))}</span> <Chip kind="design" note="A kit has no cost of its own; this sum is for the Costing view only">Report only</Chip></p>
       </div>
+    )
+  if (!kits.length) return <EmptyState title="No sales kit carries this design">Commissioning kits, recommended-spares packages and installation hardware sets that include this design's components appear here.</EmptyState>
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm text-muted-foreground">Sales kits (commissioning, recommended spares, installation hardware) that carry components of this design. A change to a shared component also changes what these kits sell [DOC:p.256 §6.1].</p>
       <div className="overflow-x-auto rounded-lg border">
         <Table>
-          <TableHeader className="bg-table-head"><TableRow><TableHead>Find #</TableHead><TableHead>Change</TableHead><TableHead>Was</TableHead><TableHead>Now (rev {e.rev})</TableHead></TableRow></TableHeader>
+          <TableHeader className="bg-table-head"><TableRow><TableHead>Kit EBOM</TableHead><TableHead>Kit item</TableHead><TableHead>Status</TableHead><TableHead>Shared components</TableHead><TableHead className="text-right">Report-only standard</TableHead></TableRow></TableHeader>
           <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.no} className={cn("h-8 text-[13px]", tint[r.kind as keyof typeof tint])}>
-                <TableCell className="font-mono">{r.no}</TableCell>
-                <TableCell className="font-medium">{r.kind}</TableCell>
-                <TableCell>{r.a ? `${r.a.componentId} × ${fmtNumber(r.a.qty, 2)} ${r.a.uom}${r.a.refDes ? ` · ${r.a.refDes}` : ""}` : ""}</TableCell>
-                <TableCell>{r.b ? `${r.b.componentId} × ${fmtNumber(r.b.qty, 2)} ${r.b.uom}${r.b.refDes ? ` · ${r.b.refDes}` : ""}` : ""}</TableCell>
+            {kits.map(({ kit, shared, sameFamily }) => (
+              <TableRow key={kit.id} className="h-8 text-[13px]">
+                <TableCell><RefLink r={{ type: "ebom", id: kit.id }} /></TableCell>
+                <TableCell><span className="font-mono">{kit.parentItemId}</span><span className="block text-xs text-muted-foreground">{kit.title}</span></TableCell>
+                <TableCell><StatusBadge kind="ebom" status={kit.status} size="sm" /></TableCell>
+                <TableCell className="font-mono text-xs">{shared.length ? shared.map((l) => l.componentId).join(", ") : sameFamily ? "Same product family" : ""}</TableCell>
+                <TableCell className="tabular text-right">{fmtMoney(kitStandard(s, kit))}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground">Added, Removed and Changed rows are labelled in words as well as tinted. This is the change-evidence document for ECO review.</p>
+    </div>
+  )
+}
+
+function Compare({ s, e }: { s: EngineeringState; e: EbomRecord }) {
+  const pool = useMemo(() => revisionPool(s, e.parentItemId), [s, e.parentItemId])
+  const cur = `${e.id}@${e.rev}`
+  const [from, setFrom] = useState(() => (e.priorRevs[0] ? `${e.id}@${e.priorRevs[0].rev}` : (pool.find((o) => o.key !== cur)?.key ?? "")))
+  const [to, setTo] = useState(cur)
+  return (
+    <div className="flex flex-col gap-2">
+      <RevisionCompare options={pool} fromKey={from} toKey={to} onFrom={setFrom} onTo={setTo} />
+      <p className="text-xs text-muted-foreground">The same view stands alone at <Link className="text-link underline" to={`/engineering/compare-revisions?ebom=${e.id}`}>Compare revisions</Link>.</p>
     </div>
   )
 }

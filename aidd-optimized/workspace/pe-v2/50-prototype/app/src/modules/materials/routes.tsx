@@ -16,6 +16,18 @@ import { EoReserve } from "./pages/EoReserve"
 import { DataQuality } from "./pages/DataQuality"
 import { CountDetail, CountList } from "./pages/Counts"
 import { SafetyStock } from "./pages/SafetyStock"
+import { LifecycleDialogsPage, MaterialDialogsPage } from "./pages/DialogPages"
+import { ChangeRegister, ChangeRegisterDetail } from "./pages/ChangeRegister"
+import { Duplicates } from "./pages/Duplicates"
+import { Import } from "./pages/Import"
+import { BatchDetail, BatchList } from "./pages/Batches"
+import { SpecialStock } from "./pages/SpecialStock"
+import { ConsignmentSettlement } from "./pages/ConsignmentSettlement"
+import { PlantSourcing } from "./pages/PlantSourcing"
+import { ReportDetail, ReportsIndex } from "./pages/Reports"
+import { CreateFlow } from "./pages/CreateFlow"
+import { SsExceptions } from "./pages/SsExceptions"
+import { SsStatistical } from "./pages/SsStatistical"
 
 export const routes: ModuleRoute[] = [
   { path: "/inventory/items", element: <MaterialList />, screenId: "MM-MAT-001" },
@@ -35,6 +47,23 @@ export const routes: ModuleRoute[] = [
   { path: "/inventory/counting/count-documents", element: <CountList />, screenId: "INV-COUNT-DOC" },
   { path: "/inventory/counting/count-documents/:id", element: <CountDetail />, screenId: "INV-COUNT-DOC" },
   { path: "/inventory/planning/safety-stock", element: <SafetyStock />, screenId: "INV-PLAN-SAFETY" },
+  // Feature-list screens (12 October 2026); routes are design values
+  { path: "/inventory/dialogs/material", element: <MaterialDialogsPage />, screenId: "FX-MM-DIALOGS" },
+  { path: "/inventory/dialogs/lifecycle", element: <LifecycleDialogsPage />, screenId: "FX-MM-LIFECYCLE" },
+  { path: "/materials/change-register", element: <ChangeRegister />, screenId: "FX-MM-MCHREG" },
+  { path: "/materials/change-register/:id", element: <ChangeRegisterDetail />, screenId: "FX-MM-MCHREG" },
+  { path: "/materials/duplicates", element: <Duplicates />, screenId: "FX-MM-DUPES" },
+  { path: "/materials/import", element: <Import />, screenId: "FX-MM-IMPORT" },
+  { path: "/inventory/batches", element: <BatchList />, screenId: "FX-MM-BATCH" },
+  { path: "/inventory/batches/:id", element: <BatchDetail />, screenId: "FX-MM-BATCH" },
+  { path: "/inventory/special-stock", element: <SpecialStock />, screenId: "FX-MM-SPECIAL" },
+  { path: "/inventory/consignment-settlement", element: <ConsignmentSettlement />, screenId: "FX-MM-CONSIGN" },
+  { path: "/materials/plant-sourcing", element: <PlantSourcing />, screenId: "FX-MM-PLANTSRC" },
+  { path: "/materials/reports", element: <ReportsIndex />, screenId: "FX-MM-REPORTS" },
+  { path: "/materials/reports/:id", element: <ReportDetail />, screenId: "FX-MM-REPORTS" },
+  { path: "/materials/creation-flow", element: <CreateFlow />, screenId: "FX-MM-CREATEFLOW" },
+  { path: "/inventory/safety-stock/exceptions", element: <SsExceptions />, screenId: "FX-MM-SSEXC" },
+  { path: "/inventory/safety-stock/statistical", element: <SsStatistical />, screenId: "FX-MM-SSSTAT" },
   // The registry rows still carry the earlier paths (request R-9); they redirect to the PRD routes.
   { path: "/inventory/counts", element: <Navigate to="/inventory/counting/count-documents" replace />, screenId: "INV-COUNT-DOC" },
   { path: "/inventory/counts/:id", element: <OldCountRedirect />, screenId: "INV-COUNT-DOC" },
@@ -64,4 +93,17 @@ export const built: Partial<Record<string, Built>> = {
   "INV-ITEM-SALES": "full",
   "INV-COUNT-DOC": "full",
   "INV-PLAN-SAFETY": "full",
+  "FX-MM-DIALOGS": "full",
+  "FX-MM-LIFECYCLE": "full",
+  "FX-MM-MCHREG": "full",
+  "FX-MM-DUPES": "full",
+  "FX-MM-IMPORT": "full",
+  "FX-MM-BATCH": "full",
+  "FX-MM-SPECIAL": "full",
+  "FX-MM-CONSIGN": "full",
+  "FX-MM-PLANTSRC": "full",
+  "FX-MM-REPORTS": "full",
+  "FX-MM-CREATEFLOW": "full",
+  "FX-MM-SSEXC": "full",
+  "FX-MM-SSSTAT": "full",
 }

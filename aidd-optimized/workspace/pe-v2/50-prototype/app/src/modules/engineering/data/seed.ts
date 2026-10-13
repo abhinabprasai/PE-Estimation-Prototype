@@ -8,8 +8,8 @@ import type { Activity, DocRef, EbomId, MaterialId, UserId } from "@/data/domain
 import { materialById } from "@/data/shared"
 import { addDays } from "@/lib/format"
 import type {
-  ChecklistRow, DocRecord, DocRevisionX, DocTypeCode, EbomLineX, EbomRecord, EcoRecord, EcrRecord, ErRecord, ImportProposal, MbomLineX, MbomRecord,
-  Placeholder, PvRecord, SecurityClass, SyncConflict, TitleBlock, TransmittalRecord, VaultEvent,
+  CadAssembly, ChecklistRow, DocRecord, DocRevisionX, DocTypeCode, EbomLineX, EbomRecord, EcoRecord, EcrRecord, ErRecord, ImportProposal, ImportProposalLine, MbomLineX, MbomRecord,
+  PdmLink, Placeholder, PvRecord, SecurityClass, SyncConflict, TitleBlock, TransmittalRecord, VaultEvent,
 } from "./types"
 
 export const RAVI: UserId = "USR-TBD-022"
@@ -125,6 +125,7 @@ export function seedEboms(): EbomRecord[] {
     ebom({
       id: "EBOM-00310", parentItemId: "FIN-TBD-7500MTO", rev: "A", status: "Released", title: "EBOM FIN-TBD-7500MTO, stainless tank, Prince Albert", createdOn: "2026-08-05",
       engineeringRequestId: "ER-2026-0389", lines: pad(5200, 1200, 600, 120, 3600, 4800, 4, 4), releasedOn: "2026-08-21", submittedBy: RAVI,
+      cadAhead: "Vault assembly PE-7500-PA-ASM is at B.1; this released rev A was aligned with A.4",
       activity: [A("2026-08-21", "Engineering Manager", "Released")],
     }),
     ebom({
@@ -161,6 +162,22 @@ export function seedEboms(): EbomRecord[] {
       id: "EBOM-00384", parentItemId: "FIN-TBD-5000SS", rev: "A", status: "Draft", title: "EBOM FIN-TBD-5000SS variant, Delta BC 34.5 kV", createdOn: "2026-09-14",
       engineeringRequestId: "ER-2026-0384", lines: pad(7400, 700, 900, 160, 4800, 9800, 3, 6).map((l) => (l.no === 60 ? { ...l, qty: 0 } : l)), assigneeIds: [ELENA], baseDesign: "Variant of EBOM-00288 rev C",
       activity: [A("2026-09-14", "Engineer", "Created as a variant of EBOM-00288 rev C; oil quantity pending tank redesign")],
+    }),
+    // Sales kits: BOM with usage Sales, single level, components only, no phantoms, no nested kits [DOC:p.256 §6.1].
+    ebom({
+      id: "EBOM-00331", parentItemId: "KIT-TBD-COMM20" as MaterialId, rev: "A", status: "Released", usage: "Sales", title: "Commissioning kit, 20 MVA substation transformer", createdOn: "2026-03-02",
+      lines: [L(10, "SPARE-TBD-GSKT20", 1), L(20, "CONS-TBD-PAINT", 4), L(30, "PACK-TBD-DESIC", 6)], releasedOn: "2026-03-20", submittedBy: RAVI, assigneeIds: [RAVI], baseDesign: "New design",
+      activity: [A("2026-03-20", "Engineering Manager", "Released through the standard BOM review path (usage Sales)")],
+    }),
+    ebom({
+      id: "EBOM-00332", parentItemId: "KIT-TBD-SPARES20" as MaterialId, rev: "A", status: "Released", usage: "Sales", title: "Recommended spares package, 20 MVA substation transformer", createdOn: "2026-03-04",
+      engineeringRequestId: "ER-TBD-0301", lines: [L(10, "SPARE-TBD-BSH145", 1), L(20, "SPARE-TBD-OLTCK", 1), L(30, "SPARE-TBD-GSKT20", 2)], releasedOn: "2026-03-26", submittedBy: ELENA, assigneeIds: [ELENA], baseDesign: "New design",
+      activity: [A("2026-03-26", "Engineering Manager", "Released; referenced from the ER-TBD-0301 deliverables (recommended spares package)")],
+    }),
+    ebom({
+      id: "EBOM-00333", parentItemId: "KIT-TBD-HW5000" as MaterialId, rev: "A", status: "Draft", usage: "Sales", title: "Installation hardware set, 5 MVA secondary unit substation", createdOn: "2026-10-05",
+      lines: [L(10, "PACK-TBD-CRATE", 1), L(20, "CONS-TBD-PAINT", 2, { phantom: true, notes: "Grouped hardware (phantom): not allowed in a sales kit" })], assigneeIds: [ELENA],
+      activity: [A("2026-10-05", "Engineer", "Created for the secondary unit substation catalog line")],
     }),
   ]
 }
@@ -260,7 +277,11 @@ export function seedDocuments(): DocRecord[] {
     doc("DOC-TNK-00301", "TNK", "Tank fabrication drawings, 20 MVA main tank", "Internal", "2026-01-23", [rev("DOC-TNK-00301", "TNK", "A", "Superseded", "2026-02-10", ELENA), rev("DOC-TNK-00301", "TNK", "B", "Released", "2026-02-24", ELENA, { titleBlock: TB(ELENA, { sheet: "1 of 9", size: "E", checkedBy: RAVI, approvedBy: HIRO }) })], [fin20, { type: "material", id: "SEMI-TBD-TANK20" }], { engineeringRequestId: "ER-TBD-0301" }),
     doc("DOC-TP-00301", "TP", "Test plan, routine tests IEEE C57.12.90, 20 MVA", "Customer-Shareable", "2026-02-05", [rev("DOC-TP-00301", "TP", "A", "Released", "2026-03-13", RAVI)], [fin20, so301], { engineeringRequestId: "ER-TBD-0301" }),
     doc("DOC-GA-00377", "GA", "General arrangement, 20 MVA phase 2 (bushing change)", "Customer-Shareable", "2026-07-06", [rev("DOC-GA-00377", "GA", "A", "WIP", "2026-07-06", ELENA, { checkedOutBy: ELENA, checkedOutSince: "2026-10-06", titleBlock: TB(ELENA, proj("SO-2026-00377 line 10")) })], [fin20, { type: "salesOrder", id: "SO-2026-00377" }, { type: "ebom", id: "EBOM-TBD-0377" }], { engineeringRequestId: "ER-TBD-0377", activity: [A("2026-10-06", "Engineer", "Checked out by Elena Petrova")] }),
-    doc("DOC-NP-00377", "NP", "Nameplate, 20 MVA phase 2, serials 0377-1 to 0377-3", "Customer-Shareable", "2026-07-06", [rev("DOC-NP-00377", "NP", "A", "In Review", "2026-10-02", ELENA, { titleBlock: TB(ELENA, { scale: "1:1", size: "B" }), redlines: [{ by: HIRO, on: "2026-10-05", text: "Add CSA mark field is not needed (US site); confirm BIL 450 kV on HV line." }] })], [fin20, { type: "salesOrder", id: "SO-2026-00377" }], { engineeringRequestId: "ER-TBD-0377" }),
+    doc("DOC-NP-00377", "NP", "Nameplate, 20 MVA phase 2, serials 0377-1 to 0377-3", "Customer-Shareable", "2026-07-06", [rev("DOC-NP-00377", "NP", "A", "In Review", "2026-10-02", ELENA, { titleBlock: TB(ELENA, { scale: "1:1", size: "B" }), redlines: [
+      { id: "MK-0001", by: HIRO, on: "2026-10-05", text: "Add CSA mark field is not needed (US site); confirm BIL 450 kV on HV line.", page: 1, x: 62, y: 38 },
+      { id: "MK-0002", by: RAVI, on: "2026-10-06", text: "Serial range reads 0377-1 to 0377-3; match the order line.", page: 1, x: 30, y: 62, resolved: true, resolvedBy: ELENA },
+      { id: "MK-0003", by: HIRO, on: "2026-10-07", text: "Impedance tolerance must read +/-7.5% per the quote.", page: 1, x: 82, y: 14 },
+    ] })], [fin20, { type: "salesOrder", id: "SO-2026-00377" }], { engineeringRequestId: "ER-TBD-0377" }),
     doc("DOC-TP-00377", "TP", "Test plan, phase 2 units incl. witness heat run", "Customer-Shareable", "2026-08-12", [rev("DOC-TP-00377", "TP", "A", "WIP", "2026-08-12", RAVI)], [fin20, { type: "salesOrder", id: "SO-2026-00377" }], { engineeringRequestId: "ER-TBD-0377" }),
     doc("DOC-GA-00366", "GA", "General arrangement, 20 MVA, Alma 120 kV - 25 kV", "Customer-Shareable", "2026-08-06", [rev("DOC-GA-00366", "GA", "A", "Released", "2026-09-25", RAVI, { titleBlock: TB(RAVI, { ...proj("SO-2026-00366 line 10"), approvedBy: HIRO, checkedBy: ELENA }) })], [fin20, { type: "salesOrder", id: "SO-2026-00366" }], { engineeringRequestId: "ER-TBD-0366" }),
     doc("DOC-GA-00384", "GA", "General arrangement, 5 MVA, Delta BC 34.5 kV", "Customer-Shareable", "2026-09-15", [rev("DOC-GA-00384", "GA", "A", "WIP", "2026-09-15", ELENA)], [{ type: "material", id: "FIN-TBD-5000SS" }], { engineeringRequestId: "ER-2026-0384" }),
@@ -269,12 +290,12 @@ export function seedDocuments(): DocRecord[] {
     doc("DOC-GA-00402", "GA", "General arrangement, 7.5 MVA pad-mount, Lakeshore North", "Customer-Shareable", "2026-10-07", [rev("DOC-GA-00402", "GA", "A", "WIP", "2026-10-07", RAVI)], [{ type: "material", id: "FIN-TBD-7500MTO" }, { type: "salesOrder", id: "SO-2026-00402" }], { engineeringRequestId: "ER-2026-0402" }),
     doc("DOC-GA-00352", "GA", "General arrangement, 5 MVA, Butte mill switchyard (as-built)", "Customer-Shareable", "2026-05-04", [rev("DOC-GA-00352", "GA", "A", "Released", "2026-05-11", ELENA)], [{ type: "material", id: "FIN-TBD-5000SS" }], { engineeringRequestId: "ER-TBD-0352" }),
     doc("DOC-GA-00288", "GA", "General arrangement, 5 MVA secondary unit substation", "Customer-Shareable", "2025-11-03", [rev("DOC-GA-00288", "GA", "C", "Superseded", "2026-05-08", ELENA), rev("DOC-GA-00288", "GA", "D", "Released", "2026-09-01", ELENA)], [{ type: "material", id: "FIN-TBD-5000SS" }, { type: "ebom", id: "EBOM-00288" }]),
-    doc("DOC-GA-00290", "GA", "General arrangement, 2,500 kVA pad-mount", "Customer-Shareable", "2026-02-02", [rev("DOC-GA-00290", "GA", "A", "Released", "2026-03-02", ELENA), rev("DOC-GA-00290", "GA", "B", "In Review", "2026-10-06", ELENA, { redlines: [{ by: HIRO, on: "2026-10-07", text: "Cover flange plate 16 mm per ECO-2026-0009; update weld symbol W4." }] })], [{ type: "material", id: "FIN-TBD-2500PM" }, { type: "ebom", id: "EBOM-00290" }]),
+    doc("DOC-GA-00290", "GA", "General arrangement, 2,500 kVA pad-mount", "Customer-Shareable", "2026-02-02", [rev("DOC-GA-00290", "GA", "A", "Released", "2026-03-02", ELENA), rev("DOC-GA-00290", "GA", "B", "In Review", "2026-10-06", ELENA, { redlines: [{ id: "MK-0004", by: HIRO, on: "2026-10-07", text: "Cover flange plate 16 mm per ECO-2026-0009; update weld symbol W4.", page: 1, x: 40, y: 34 }] })], [{ type: "material", id: "FIN-TBD-2500PM" }, { type: "ebom", id: "EBOM-00290" }]),
     doc("DOC-GA-00244", "GA", "General arrangement, 2,500 kVA pad-mount (legacy)", "Customer-Shareable", "2023-04-11", [rev("DOC-GA-00244", "GA", "D", "Superseded", "2024-06-14", ELENA)], [{ type: "ebom", id: "EBOM-TBD-0244" }]),
     doc("DOC-GA-00102", "GA", "General arrangement, 50 kVA pole-mount (legacy)", "Customer-Shareable", "2019-09-30", [rev("DOC-GA-00102", "GA", "F", "Obsolete", "2026-01-15", RAVI)], [{ type: "ebom", id: "EBOM-00102" }], { activity: [A("2026-01-15", "Engineering Manager", "Obsoleted; stamped OBSOLETE and excluded from all pick-up points")] }),
     doc("DOC-NP-00296", "NP", "Nameplate, 167 kVA pole-mount", "Customer-Shareable", "2025-03-10", [rev("DOC-NP-00296", "NP", "A", "Released", "2025-07-01", RAVI, { titleBlock: TB(RAVI, { scale: "1:1", size: "A", checkedBy: ELENA, approvedBy: HIRO }) }), rev("DOC-NP-00296", "NP", "B", "In Review", "2026-09-30", RAVI, { titleBlock: TB(RAVI, { scale: "1:1", size: "A" }) })], [{ type: "material", id: "FIN-TBD-0167PL" }, { type: "ebom", id: "EBOM-00296" }]),
     doc("DOC-WI-00410", "WI", "Work instruction: vapor phase drying cycle, 20 MVA active part", "Internal", "2025-10-01", [rev("DOC-WI-00410", "WI", "B", "Superseded", "2026-01-12", GRACE), rev("DOC-WI-00410", "WI", "C", "Released", "2026-03-20", GRACE)], [{ type: "material", id: "FIN-TBD-20MVA" }]),
-    doc("DOC-WI-00415", "WI", "Work instruction: HV bushing installation and torque sequence, 145 kV", "Internal", "2025-10-01", [rev("DOC-WI-00415", "WI", "A", "Superseded", "2026-01-12", GRACE), rev("DOC-WI-00415", "WI", "B", "Released", "2026-03-20", GRACE), rev("DOC-WI-00415", "WI", "C", "In Review", "2026-10-05", GRACE, { redlines: [{ by: HIRO, on: "2026-10-06", text: "Add flange seal inspection step from CAPA-TBD-0015 containment." }] })], [{ type: "material", id: "RAW-TBD-BSH145" }]),
+    doc("DOC-WI-00415", "WI", "Work instruction: HV bushing installation and torque sequence, 145 kV", "Internal", "2025-10-01", [rev("DOC-WI-00415", "WI", "A", "Superseded", "2026-01-12", GRACE), rev("DOC-WI-00415", "WI", "B", "Released", "2026-03-20", GRACE), rev("DOC-WI-00415", "WI", "C", "In Review", "2026-10-05", GRACE, { redlines: [{ id: "MK-0005", by: HIRO, on: "2026-10-06", text: "Add flange seal inspection step from CAPA-TBD-0015 containment.", page: 1, x: 50, y: 55 }] })], [{ type: "material", id: "RAW-TBD-BSH145" }]),
     doc("DOC-TC-00003", "TC", "Terms and conditions template, engineered transformers (US)", "Customer-Shareable", "2025-01-06", [rev("DOC-TC-00003", "TC", "A", "Released", "2025-01-20", PAUL)], []),
     doc("DOC-CERT-00007", "CERT", "Routine test certificate template, IEEE C57.12.90", "Customer-Shareable", "2025-02-11", [rev("DOC-CERT-00007", "CERT", "A", "Superseded", "2025-03-01", PAUL), rev("DOC-CERT-00007", "CERT", "B", "Released", "2026-01-08", PAUL)], []),
     doc("DOC-SCH-00097", "SCH", "Protection relay settings and firmware map (export-controlled)", "Restricted", "2026-04-14", [rev("DOC-SCH-00097", "SCH", "A", "Released", "2026-05-02", RAVI)], [{ type: "material", id: "FIN-TBD-20MVA" }]),
@@ -591,3 +612,39 @@ export function seedProposals(): ImportProposal[] {
 /** All EBOM ids that are Released (for pickers that exclude Obsolete, C-16). */
 export const isUsableEbom = (e: EbomRecord) => e.status !== "Obsolete"
 export type { EbomId }
+
+
+// ============================================================== CAD assemblies (FX-CAD-COMPARE, IF-17)
+export function seedCad(eboms: EbomRecord[]): CadAssembly[] {
+  const e = (id: string) => eboms.find((x) => x.id === id)!
+  const asLine = (l: EbomLineX): ImportProposalLine => ({ findNo: l.no, partNo: l.componentId as string, description: itemDescription(l.componentId), qty: l.qty, refDes: l.refDes })
+  // Phase 2 draft: the vault assembly is at A.3; the engineer last aligned with A.1.
+  const ph2 = e("EBOM-TBD-0377").lines.map(asLine).map((l) => (l.findNo === 42 ? { ...l, qty: 10, refDes: "R1-R10 (ONAF)" } : l)).filter((l) => l.findNo !== 80)
+  ph2.push({ findNo: 98, partNo: "RAW-TBD-CT600", description: "Neutral bushing CT 600:5 MR", qty: 1, refDes: "X0" })
+  // Released 7500 MTO: newer vault revision B.1 changes a radiator count and adds a lifting lug.
+  const mto = e("EBOM-00310").lines.map(asLine).map((l) => (l.partNo === "RAW-TBD-RAD" ? { ...l, qty: l.qty + 2 } : l))
+  mto.push({ findNo: 90, partNo: "RAW-TBD-PLATE", description: "Tank steel plate, A572 Gr. 50, 12 mm (lifting lug blank)", qty: 120 })
+  // Lakeshore: in sync.
+  const lks = e("EBOM-00312").lines.map(asLine)
+  return [
+    { id: "PE-20MVA-PH2-ASM", ebomId: "EBOM-TBD-0377" as never, vaultRev: "A.3", alignedRev: "A.1", vaultTx: "VTX-884213", checkedInAt: "2026-10-09 08:42", lines: ph2 },
+    { id: "PE-7500-PA-ASM", ebomId: "EBOM-00310" as never, vaultRev: "B.1", alignedRev: "A.4", vaultTx: "VTX-884166", checkedInAt: "2026-10-09 06:58", lines: mto },
+    { id: "PE-7500-LKS-ASM", ebomId: "EBOM-00312" as never, vaultRev: "A.1", alignedRev: "A.1", vaultTx: "VTX-883890", checkedInAt: "2026-10-07 17:48", lines: lks },
+  ]
+}
+const itemDescription = (id: string) => materialById(id)?.description ?? id
+
+// ============================================================== PDM linkage (FX-CAD-PDM, Book III Part G §4)
+export function seedPdm(): PdmLink[] {
+  const k = (id: string, documentId: string, x: Partial<PdmLink>): PdmLink => ({ id, documentId: documentId as never, state: "In work (checked out)", activity: [], ...x })
+  return [
+    k("PL-TBD-001", "DOC-TBD-0301-GA", { vaultPath: "$/Transformers/20MVA/OmahaNorth/PE-20MVA-GA.SLDDRW", vaultRev: "C", state: "Released, rendition published", lastEvent: "2026-02-27 11:20", note: "Checksum verified; stamped RELEASED Rev C", activity: [A("2026-02-27", "System", "PDM release approved; rendition published to ERP (checksum verified)")] }),
+    k("PL-TBD-002", "DOC-GA-00377", { vaultPath: "$/Transformers/20MVA/Phase2/PE-20MVA-PH2-GA.SLDDRW", vaultRev: "A.3", state: "In work (checked out)", lastEvent: "2026-10-09 08:40", note: "Checked out in the vault by Elena Petrova; the ERP document shows In-Work (informational). The released rendition is unaffected.", activity: [A("2026-10-06", "System", "Checked out at vault; ERP shows In-Work")] }),
+    k("PL-TBD-003", "DOC-GA-00290", { vaultPath: "$/Transformers/PadMount/2500/PE-2500PM-GA.SLDDRW", vaultRev: "B", state: "Release approved", pdmCo: "PDM-CO-2231", linkedEco: "ECO-2026-0009" as never, lastEvent: "2026-10-08 11:37", note: "PDM release approved; the release set is blocked by a vault rule (broken external reference). ERP ECO tasks must be release-ready first.", activity: [A("2026-10-08", "System", "PDM release approved; waiting on the linked ERP ECO task set")] }),
+    k("PL-TBD-004", "DOC-NP-00296", { vaultPath: "$/Transformers/PoleMount/167/PE-167PL-NP.SLDDRW", vaultRev: "B", state: "Publish failed", lastEvent: "2026-10-09 07:55", note: "Title block mismatch: Checked By empty in CAD properties. Publish blocked until the vault attribute is corrected.", activity: [A("2026-10-09", "System", "Rendition publish failed; queued for retry with alert")] }),
+    k("PL-TBD-005", "DOC-WI-00415", { vaultPath: "$/WorkInstructions/HV-bushing-install.docx", vaultRev: "C", state: "Publish failed", lastEvent: "2026-10-08 15:02", note: "ERP endpoint timeout (HTTP 504). Transport failure: replay delivers it.", activity: [A("2026-10-08", "System", "Rendition publish failed: ERP endpoint timeout; retry queued")] }),
+    k("PL-TBD-006", "DOC-GA-00288", { vaultPath: "$/Transformers/5MVA/SecondaryUnitSub/PE-5000SS-GA.SLDDRW", vaultRev: "D", state: "Change order opened", pdmCo: "PDM-CO-2240", lastEvent: "2026-10-09 09:15", note: "A PDM change order was opened on a released drawing. The connector proposes linking or creating an ERP ECR; the engineer confirms.", activity: [A("2026-10-09", "System", "PDM change order PDM-CO-2240 opened; ECR proposal waiting for the engineer")] }),
+    k("PL-TBD-007", "DOC-GA-00244", { vaultPath: "$/Archive/PadMount/2500/PE-2500PM-LEGACY-GA.SLDDRW", vaultRev: "D", state: "Obsolete in PDM", lastEvent: "2026-10-09 10:02", note: "Marked obsolete in the vault. The ERP document follows only after the where-used sweep.", activity: [A("2026-10-09", "System", "Obsolete in PDM; ERP where-used sweep pending")] }),
+    k("PL-TBD-008", "DOC-TC-00003", { state: "Not linked (ERP only)", note: "Terms and conditions template: authored in the ERP repository, no vault object.", activity: [] }),
+  ]
+}

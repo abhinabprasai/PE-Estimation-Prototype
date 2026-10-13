@@ -7,7 +7,8 @@
 import { defineSlice, store, type SearchHit } from "@/store"
 import type { ApprovalRequestId, DocLink, DocRef, TemplateNo } from "@/data/domain"
 import { LEGAL_ENTITIES } from "@/data/shared"
-import { INTERFACES, W4 } from "./catalog"
+import { INTERFACES, W4_ALL } from "./catalog"
+import { ensureSharedSeeds, wireSalesBridge } from "./queue"
 import { NOW, seedAll } from "./seed"
 import type { WfInstance } from "./types"
 
@@ -42,10 +43,10 @@ function search(s: AdminState): SearchHit[] {
     out.push({ group: "admin", title: i.id, subtitle: `${i.kindLabel} · ${"ref" in i.subject ? i.subject.ref.id : i.subject.loose.id} · ${i.outcome ?? "Pending"}`, route: `/approvals?req=${i.id}`, ref: { type: "approval", id: i.id } })
   for (const a of store.getCore().approvals)
     out.push({ group: "admin", title: a.id, subtitle: `${a.kind} · ${a.subject.id} · ${a.outcome ?? "Pending"}`, route: `/approvals?req=${a.id}`, ref: { type: "approval", id: a.id } })
-  for (const w of W4) out.push({ group: "admin", title: `${w.id} ${w.workflow}`, subtitle: `Workflow definition · owner ${w.owner}`, route: `/configuration/workflows?wf=${w.id}` })
+  for (const w of W4_ALL) out.push({ group: "admin", title: `${w.id} ${w.workflow}`, subtitle: `Workflow definition · owner ${w.owner}`, route: `/configuration/workflows?wf=${w.id}` })
   for (const f of INTERFACES) out.push({ group: "admin", title: `${f.id} ${f.name}`, subtitle: `Interface · ${f.flow}`, route: `/operations/integrations?if=${f.id}` })
   for (const p of s.periods)
-    out.push({ group: "admin", title: p.id, subtitle: `Fiscal period ${p.month} · ${entityName(p.entityId)} · ${p.status}`, route: `/configuration/periods?p=${p.id}`, status: { kind: "fiscalPeriod", value: p.status } })
+    out.push({ group: "admin", title: p.id, subtitle: `Fiscal period ${p.month} · ${entityName(p.entityId)} · ${p.status}`, route: `/inventory/configuration/fiscal-periods?p=${p.id}`, status: { kind: "fiscalPeriod", value: p.status } })
   for (const r of s.runs) out.push({ group: "admin", title: r.id, subtitle: `Job run ${r.jobId} · ${r.state}`, route: `/operations/jobs?run=${r.id}` })
   return out
 }
@@ -63,6 +64,7 @@ export const adminSlice = defineSlice({
   seed,
   search,
   links,
+  afterReset: (api) => queueMicrotask(() => ensureSharedSeeds(api)),
   subscribe: (api) => {
     // Audit trail entries for requests raised on the shared engine (WF-INBOX history).
     api.on("approval.requested", ({ requestId }) =>
@@ -70,6 +72,10 @@ export const adminSlice = defineSlice({
         d.audit.push({ at: NOW, requestId, action: "Raised", by: ctx.userId, role: ctx.role, channel: "In-app" })
       }),
     )
+    // One queue for every W.4 workflow: seed the requests whose documents live in other modules, mirror the FL-09 items
+    // (data/queue.ts). The same seeding runs again from WF-INBOX after a Scenario reset.
+    wireSalesBridge(api)
+    queueMicrotask(() => ensureSharedSeeds(api))
     // Postings made while a period is reopened are tagged Reopened Posting [DOC:p.42 §9.3 step 5].
     api.on("posting.posted", ({ template, amount, currency, source }) =>
       api.mutate("admin", (d) => {

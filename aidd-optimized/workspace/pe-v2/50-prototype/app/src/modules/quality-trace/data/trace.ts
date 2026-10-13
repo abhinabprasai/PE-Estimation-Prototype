@@ -6,12 +6,13 @@
 import type { DocRef, RecordKind } from "@/data/domain"
 import { CUSTOMERS, materialById, vendorById } from "@/data/shared"
 import { effectiveState } from "./chain"
-import type { PopulationRow, PopulationWhere, QtBatch, QtEvent, QtSerial } from "./types"
+import type { PopulationRow, PopulationWhere, QtBatch, QtDeviation, QtEvent, QtSerial } from "./types"
 
 export interface TraceSource {
   genealogy: QtEvent[]
   batches: QtBatch[]
   serials: QtSerial[]
+  deviations?: QtDeviation[]
 }
 export interface TraceNode {
   key: string
@@ -23,6 +24,8 @@ export interface TraceNode {
   doc?: DocRef
   removed?: boolean
   note?: string
+  /** Deviations (approved, or expired but applied) that cover this serial or batch: disclosed on the as-built record [DOC:p.215 Book IV §7.3]. */
+  deviations?: string[]
   depth: number
   children: TraceNode[]
 }
@@ -45,12 +48,23 @@ export function eventsFor(s: TraceSource, id: string) {
   return s.genealogy.filter((e) => e.serial === id || e.batch === id || e.parentSerial === id || e.doc.id === id)
 }
 
+/** Deviations covering a serial or batch; Requested and Rejected ones are not disclosed. */
+export function deviationsFor(s: TraceSource, id: string): QtDeviation[] {
+  return (s.deviations ?? []).filter((d) => (d.state === "Approved" || d.state === "Expired") && (d.affectedSerials.some((x) => x === id) || d.scope.some((x) => x.id === id)))
+}
+/** Every deviation disclosed anywhere in a tree, once each. */
+export function treeDeviations(s: TraceSource, root: TraceNode): QtDeviation[] {
+  const seen = new Map<string, QtDeviation>()
+  for (const n of flatten(root)) for (const d of deviationsFor(s, n.id)) seen.set(d.id, d)
+  return [...seen.values()]
+}
+
 function serialNode(s: TraceSource, id: string, depth: number, extra: Partial<TraceNode> = {}): TraceNode {
   const ser = s.serials.find((x) => x.id === id)
   const m = ser && materialById(ser.materialId)
   return {
     key: `serial:${id}:${depth}`, kind: "serial", id, depth, children: [], doc: { type: "serial", id },
-    label: id, sub: m ? `${m.id} · ${m.description}` : "Serial not on record", status: ser ? { kind: "serial", value: ser.status } : undefined, ...extra,
+    label: id, sub: m ? `${m.id} · ${m.description}` : "Serial not on record", status: ser ? { kind: "serial", value: ser.status } : undefined, deviations: deviationsFor(s, id).map((d) => d.id), ...extra,
   }
 }
 function batchNode(s: TraceSource, id: string, depth: number, note?: string): TraceNode {
@@ -59,7 +73,7 @@ function batchNode(s: TraceSource, id: string, depth: number, note?: string): Tr
   return {
     key: `batch:${id}:${depth}`, kind: "batch", id, depth, children: [], doc: { type: "batch", id }, note,
     label: id, sub: b ? `${m?.description ?? b.materialId}${b.vendorBatch ? ` · vendor batch ${b.vendorBatch}` : ""}${b.heatNo ? ` · heat ${b.heatNo}` : ""}` : "Batch not on record",
-    status: b ? { kind: "stock", value: b.stock } : undefined,
+    status: b ? { kind: "stock", value: b.stock } : undefined, deviations: deviationsFor(s, id).map((d) => d.id),
   }
 }
 

@@ -13,6 +13,14 @@ import { DocDetail, DocList } from "./pages/Documents"
 import { TrDetail, TrList, TrNew } from "./pages/Transmittals"
 import { CadSync } from "./pages/CadSync"
 import { CadImport } from "./pages/CadImport"
+import { CopyFromPage, EbomReleasePage, MassReplacePage } from "./pages/Dialogs"
+import { CompareRevisions } from "./pages/CompareRevisions"
+import { WhereUsed } from "./pages/WhereUsed"
+import { EngineeringItems } from "./pages/Items"
+import { ReportDetail, ReportsHome } from "./pages/Reports"
+import { RedlineReview } from "./pages/Redline"
+import { CadCompare } from "./pages/CadCompare"
+import { PdmLinkage } from "./pages/PdmLinkage"
 
 export const routes: ModuleRoute[] = [
   { path: "/engineering", element: <EngineeringHome />, screenId: "ENG-HOME-001" },
@@ -38,6 +46,18 @@ export const routes: ModuleRoute[] = [
   { path: "/engineering/transmittals/new", element: <TrNew />, screenId: "TR-001" },
   { path: "/engineering/transmittals/:id", element: <TrDetail />, screenId: "TR-001" },
   { path: "/engineering/cad-sync", element: <CadSync />, screenId: "CAD-SYNC" },
+  // Feature-list rows (design-value routes). Dialog entries are pages that show the dialog in each state.
+  { path: "/engineering/dialogs/ebom-release", element: <EbomReleasePage />, screenId: "FX-ENG-RELEASE" },
+  { path: "/engineering/dialogs/copy-from", element: <CopyFromPage />, screenId: "FX-ENG-COPYFROM" },
+  { path: "/engineering/dialogs/mass-replace", element: <MassReplacePage />, screenId: "FX-ENG-MASSREPLACE" },
+  { path: "/engineering/compare-revisions", element: <CompareRevisions />, screenId: "FX-ENG-COMPARE" },
+  { path: "/engineering/where-used", element: <WhereUsed />, screenId: "FX-ENG-WHEREUSED" },
+  { path: "/engineering/items", element: <EngineeringItems />, screenId: "FX-ENG-ITEMS" },
+  { path: "/engineering/reports", element: <ReportsHome />, screenId: "FX-ENG-REPORTS" },
+  { path: "/engineering/reports/:id", element: <ReportDetail />, screenId: "FX-ENG-REPORTS" },
+  { path: "/engineering/redline-review", element: <RedlineReview />, screenId: "FX-DOC-REDLINE" },
+  { path: "/engineering/cad-compare", element: <CadCompare />, screenId: "FX-CAD-COMPARE" },
+  { path: "/engineering/pdm-linkage", element: <PdmLinkage />, screenId: "FX-CAD-PDM" },
 ]
 
 /** Extra sidebar entries (the registry already lists every screen of this group). */
@@ -55,4 +75,14 @@ export const built: Partial<Record<string, Built>> = {
   "TR-001": "full",
   "CAD-SYNC": "full",
   "CAD-IMP": "full",
+  "FX-ENG-RELEASE": "full",
+  "FX-ENG-COPYFROM": "full",
+  "FX-ENG-COMPARE": "full",
+  "FX-ENG-MASSREPLACE": "full",
+  "FX-ENG-WHEREUSED": "full",
+  "FX-ENG-ITEMS": "full",
+  "FX-ENG-REPORTS": "full",
+  "FX-DOC-REDLINE": "full",
+  "FX-CAD-COMPARE": "full",
+  "FX-CAD-PDM": "full",
 }

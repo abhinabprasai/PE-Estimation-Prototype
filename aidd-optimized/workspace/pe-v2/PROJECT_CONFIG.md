@@ -103,3 +103,11 @@ the prototype (the same effect as `demo`), and the user decided it. `designer_en
 `ready-to-code`: the code-ready handoff is still required. The FL-09 build is extended, not replaced.
 The build runs in the PRD's wave order: one shared foundation, then module groups in parallel, then
 an integration pass that walks every flow end to end.
+
+## Feature list input (2026-10-12, from the user)
+
+`00-inputs/feature-list-2026-10.md` was transcribed from the user's sheet "PE Design Estimation -
+Oct 2026 - Completed" (about 250 rows; 2,970 h base, 3,920 h with iteration and buffer). The prototype
+must cover every row, alongside the PRD's 84 screen entries. That includes the Book IX target-state
+modules, which are built after the High and Medium rows. The PRD stays the domain authority; the list
+sets the feature scope.

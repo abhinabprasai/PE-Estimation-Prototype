@@ -1,8 +1,8 @@
 # App architecture for module agents - pe-v2 prototype
 
-> **What this is.** The rules and recipes for building screens in the full-PRD prototype at `50-prototype/app/`. It covers which folder you own, how to add a route, use a page template, seed data, add store state, and send or receive a cross-module event. Six module agents build in parallel, so the contracts below are what keep you out of each other's way.
+> **What this is.** The rules and recipes for building screens in the full-PRD prototype at `50-prototype/app/`. It covers which folder you own, how to add a route, use a page template, seed data, add store state, and send or receive a cross-module event. Ten module groups build in parallel, so the contracts below are what keep you out of each other's way.
 >
-> **Where it stands.** Foundation pass, 11 October 2026. All 84 screen entries are routed: 7 are built (the FL-09 screens and the shared approvals inbox), and the other 77 show a "Not built yet" placeholder. `npm run build` passes with zero TypeScript errors.
+> **Where it stands.** Feature-mapper pass, 12 October 2026. The user's feature list (`00-inputs/feature-list-2026-10.md`) now defines scope together with the PRD. The registry holds 84 PRD entries (all built by the seven original groups) plus 201 feature-list entries (`src/data/screens-features.ts`, `source: "feature-list"`, built "none"), 285 in all. Every entry is routed: built screens render, and the rest show a "Not built yet" placeholder. Three new groups exist as scaffolds: `shell`, `inventory-ops`, `target-state`. `npm run build` passes with zero TypeScript errors.
 >
 > **What we need from you.** Build only inside `src/modules/<your group>/`. When you need a change in a shared file, write it in your group README under "Requests to foundation" and carry on without it.
 
@@ -19,26 +19,32 @@ src/
     planning-production/   OWNER: planning-production agent (Planning 5 + Production 8)
     quality-trace/         OWNER: quality-trace agent (Quality 8 + Traceability 3)
     purchasing-finance/    OWNER: purchasing-finance agent (Purchasing 6 + Costing 8 + Controlling 3)
-    admin/                 OWNER: admin agent (Workflow and Administration 4 + Book VII config 2)
+    admin/                 OWNER: admin agent (Workflow and Administration 4 + Book VII config 2, plus the feature-list config, approvals and notification pages)
+    shell/                 OWNER: shell agent (global shell features, system states, notification center, profile, SSO and MFA states, error pages, role dashboards, print outputs and document previews, the component gallery, flow prototypes and handoff register). Also owns src/app/AppShell.tsx and GlobalSearch.tsx for the shell rows
+    inventory-ops/         OWNER: inventory-ops agent (mobile counts, warehouse tasks, supervisor board, GRN STP delta, period-close additions, IC recon)
+    target-state/          OWNER: target-state agent (every Book IX module, sidebar section "Target state (phased)")
       README.md            what the group owns, spine documents to seed, events, Requests to foundation
       index.ts(x)          exports `def: ModuleDef` (routes, nav, slices, built claims)
       routes.tsx           route array, extra nav entries, `built` claims
       pages/               your screens
       data/slice.ts        your store slice: state type, seed(), search, links, subscribe
       (any other subfolders you need: components/, lib/ ...)
-    registry.ts            SHARED (lists the seven groups; pre-filled)
+    registry.ts            SHARED (lists the ten groups; pre-filled)
   app/                     SHARED: shell, sidebar, role switcher, search, placeholder, /coverage, /dev gallery
   components/ui/           SHARED: shadcn components
   components/patterns/     SHARED: StatusBadge, DataTable, DocumentFlowPanel, ApprovalButton, PostingPreview, ScanField, chips
   components/templates/    SHARED: one page template per archetype
   data/domain/             SHARED: entity types, status catalog, typed IDs, document flow, postings, scans, approval limits, roles
   data/shared/             SHARED: master data and the hero-thread spine
-  data/screens.ts          SHARED: the 84-entry screen registry
-  data/modules.ts          SHARED: group and PRD-module names
+  data/screens.ts          SHARED: the 84-entry PRD screen registry (+ the feature-list entries below)
+  data/screens-features.ts SHARED: the 201 feature-list entries (components, shell, dashboards, dialogs, config, reports, print, mobile, target state)
+  data/modules.ts          SHARED: group names, PRD-module names, and SECTIONS (the sidebar sections)
   store/                   SHARED: root store, event bus, hooks
   lib/                     SHARED: cn(), formatting
   index.css                SHARED: design tokens
 ```
+
+**Group ownership of the new groups.** `shell` may edit `src/app/AppShell.tsx`, `src/app/GlobalSearch.tsx` and the `/` redirect in `src/App.tsx` for the global-shell rows only (entity selector, breadcrumbs, search results page, notification bell, profile menu, role landing page). It never touches the sidebar generation or `/coverage`. `inventory-ops` and `target-state` follow the general rule.
 
 **You may not edit any SHARED path**, nor `package.json`, `vite.config.ts`, `tsconfig*.json` or `components.json`. In particular:
 
@@ -68,8 +74,11 @@ export const built = { "MM-MAT-001": "full" }   // or "partial"
 - `built` is your claim; `/coverage` and the sidebar markers read it. Keep it honest: "partial" if a state or an action is missing.
 - `layout: "kiosk"` gives a full-screen floor-touch page with no sidebar. Use it for PP-SFT-001, RMA-RECEIPT and the pack station.
 - Paths outside the registry (a sub-page or a wizard step) are allowed when they start with your screen's path.
-- Extra sidebar links go in `nav` with the PRD module name they sit under (`module: "Production"`). The sidebar already lists every registry screen.
-- Do not use `/dev/*` (gallery), `/coverage` or `/approvals` (WF-INBOX, admin).
+- Extra sidebar links go in `nav` with the PRD module name they sit under (`module: "Production"`). The sidebar already lists every registry screen, grouped by `SECTIONS` in `data/modules.ts`: Home and dashboards; the seven original groups; Inventory operations; Print outputs; Global shell, components and handoff; Target state (phased).
+- Feature-list entries (ids `FX-...`, or the feature list's own ids such as `EDI-PART-001`) are claimed the same way. Their routes are design values. A dialog entry (`/<module>/dialogs/<name>`) is built as a dialog component opened from the screens that need it **and** as a page at its route that shows the dialog in each of its states, so the route is never empty. Mobile entries (`/mobile/...`, `/sales/load-ship`) use `layout: "kiosk"`.
+- Static feature-list paths such as `/sales/leads/import` sit beside parameterised ones (`/sales/leads/:id`); the router prefers the static path.
+- A feature row that is a tab or panel of a screen already registered has no entry of its own. It is scope of that screen and is listed in the owning group's README.
+- Do not use `/dev/*` (gallery) or `/coverage`. `/approvals` is WF-INBOX (admin); `/approvals/mobile`, `/approvals/analytics` and `/approvals/dialogs` are admin entries beneath it.
 
 ## 3. Use a template
 
@@ -167,3 +176,17 @@ subscribe: (api) => {
 ---
 
 **Key.** **S-n / C-n / E-n** status list, consequence and entity rows in `40-models/_tentative/erd-sketch.md` · **F1..F7** status families · **L-n / T-n** rules in `30-design-language/skills-md/layout.md` and `tokens.md` · **OQ-nn** a reading in `10-discovery/open-questions.md` · **K-nn** a contradiction in `STATE.md` · **#nn** a posting template · **SP-nn** a scan point · **T01..T13** a traceability event · **FL-nn** a flow · **W1..W7** build waves.
+
+
+## 9. Scope: the feature list and the registry (12 October 2026)
+
+The user's feature list is a second source of scope. The rule is: **every feature-list row ends up visible and working**, including the target-state (Book IX) rows, which are built after the High and Medium rows. Mapping rules the feature mapper applied:
+
+1. A row that is a screen, dialog, wizard, config page, report set, print output, mobile flow, dashboard, system state, bespoke component or target-state module has a registry entry (`screens-features.ts`) with `built: none` and a placeholder route.
+2. A row that is a tab, panel, field set or behaviour of a screen already in the registry has no entry. It belongs to that screen's group, which must complete it (the group's README lists them under "Feature rows").
+3. Rows for the three bespoke areas with no natural PRD home land in the shell group: the component gallery (`/components/*`), print outputs (`/print/*`) and the flow-prototype and handoff register (`/flows`).
+4. A route is a design value unless the PRD gives it (`routeSource` is "design" for every feature-list entry). The sidebar groups entries under their PRD module, or under the new modules: Global Shell and System States, Home and Dashboards, Component Library, Print Outputs, Flow Prototypes and Handoff, Inventory Operations, and ten Book IX modules.
+5. Rows that rest on external specs (Delta vs INV V3.0 / ACC V2.0: number series, GL account mapping) are built from what the feature list states and carry a `Chip kind="oq"` for the unknown parts (ASM-EXT-1).
+6. Nothing in the feature list changes a PRD rule. Where the list and the PRD differ, the PRD wins and the difference is logged.
+
+New folders: `src/modules/shell`, `src/modules/inventory-ops`, `src/modules/target-state`, each with `index.ts`, `routes.tsx`, `pages/`, `data/slice.ts` (a stub; slice keys `shell`, `inventoryOps`, `targetState`) and a README that tables its entries.

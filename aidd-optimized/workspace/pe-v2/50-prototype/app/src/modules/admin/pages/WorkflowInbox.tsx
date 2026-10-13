@@ -5,7 +5,7 @@
 // ApprovalButton) and the admin engine queue for the W.4 rows the shared engine has no kind for (R-1).
 // Approval requests have no status list (OQ-21): outcome is text, never a badge.
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { toast } from "sonner"
 import { ShieldAlert, UserRoundCheck } from "lucide-react"
@@ -18,22 +18,21 @@ import type { Role, UserId } from "@/data/domain"
 import { TODAY, USERS } from "@/data/shared"
 import { fmtMoney } from "@/lib/format"
 import { store, useCore, useSlice } from "@/store"
-import { useModules } from "@/app/modules-context"
 import { W4 } from "../data/catalog"
 import { NOW } from "../data/seed"
 import { addDelegation, decide, delegateStep, recall, resubmit, revokeDelegation } from "../data/actions"
+import { ensureSharedSeeds, raiseCreditLimit } from "../data/queue"
 import type { Channel } from "../data/types"
-import { canAct, delegationFor, delegationState, inboxRows, waitingFor, type InboxRow } from "../lib/engine"
+import { canAct, delegationFor, delegationState, inboxRows, roundsOf, waitingFor, type InboxRow } from "../lib/engine"
 import { fmtDateTime } from "../lib/time"
 import { act, Field, SimpleSelect, SlaClock, StateText, userName } from "../components/common"
 
 type Queue = "mine" | "escalated" | "submitted" | "open" | "decided"
-type DialogKind = null | "reject" | "delegate" | "recall" | "resubmit" | "delegations"
+type DialogKind = null | "reject" | "delegate" | "recall" | "resubmit" | "delegations" | "raiseLimit"
 
 export function WorkflowInbox() {
   const core = useCore()
   const admin = useSlice("admin")
-  const modules = useModules()
   const loading = useFirstVisitLoading("WF-INBOX")
   const [params, setParams] = useSearchParams()
   const [queue, setQueue] = useState<Queue>("mine")
@@ -41,6 +40,11 @@ export function WorkflowInbox() {
   const [channel, setChannel] = useState<Channel>("In-app")
   const { role, userId } = core
   const rows = useMemo(() => inboxRows(core.approvals, admin), [core.approvals, admin])
+  // After a Scenario reset the shared engine is empty again: put back the requests the seed holds for the other
+  // modules' W.4 rows and the mirrored FL-09 items (once per admin seed).
+  useEffect(() => {
+    if (!admin.sharedSeeded) ensureSharedSeeds()
+  }, [admin.sharedSeeded])
   const reqId = params.get("req")
   const active = rows.find((r) => r.id === reqId)
   const dl = admin.delegations
@@ -67,10 +71,10 @@ export function WorkflowInbox() {
     { id: "amount", header: "Amount", value: (r) => r.amount ?? null, cell: (r) => (r.amount == null ? "" : fmtMoney(r.amount, r.currency)), align: "right", sortable: true, mono: true },
     {
       id: "waiting", header: "Waiting for", filterable: true,
-      value: (r) => (r.outcome ? `Decided: ${r.outcome}` : r.steps[r.current].role),
+      value: (r) => (r.outcome ? `Decided: ${r.outcome}` : r.open.map((n) => r.steps[n].role).join(" + ")),
       cell: (r) => r.outcome ? <StateText tone="muted">{r.outcome}</StateText> : (
         <span className="flex flex-col">
-          <span>{r.steps[r.current].role} <span className="text-xs text-muted-foreground">step {r.current + 1} of {r.steps.length}</span></span>
+          <span>{r.open.map((n) => seatName(r.steps[n])).join(" + ")} <span className="text-xs text-muted-foreground">{r.open.length > 1 ? `parallel steps ${r.open.map((n) => n + 1).join(", ")}` : `step ${r.current + 1}`} of {r.steps.length}</span></span>
           {delegationFor(r, userId, dl) && <span className="text-xs">you, as delegate</span>}
         </span>
       ),
@@ -199,15 +203,6 @@ export function WorkflowInbox() {
         ]}
       />
 
-      {modules
-        .filter((m) => m.inboxSection)
-        .map((m) => (
-          <section key={m.group} aria-label={m.inboxSection!.title} className="border-t pt-6">
-            <p className="mb-2 text-sm text-muted-foreground">{m.inboxSection!.title}: kept from the FL-09 build until it moves onto the shared engine.</p>
-            {m.inboxSection!.element}
-          </section>
-        ))}
-
       <DialogShell
         open={dialog === "reject"}
         onOpenChange={(o) => !o && setDialog(null)}
@@ -240,6 +235,7 @@ export function WorkflowInbox() {
         onConfirm={(reason) => (active ? act(resubmit(active.id, reason)) : "No request selected.")}
       />
       <DelegationsDialog open={dialog === "delegations"} onClose={() => setDialog(null)} />
+      <RaiseLimitDialog open={dialog === "raiseLimit"} onClose={() => setDialog(null)} row={active} />
     </div>
   )
 }
@@ -249,8 +245,8 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
   const { role } = useCore()
   const info = row.subject.ref ? store.lookup(row.subject.ref) : undefined
   const audit = admin.audit.filter((e) => e.requestId === row.id)
-  const inst = admin.instances.find((i) => i.id === row.id)
-  const step = row.current >= 0 ? row.steps[row.current] : undefined
+  const rounds = roundsOf(row.id, admin)
+  const canRaiseLimit = row.kind === "Credit release" && !row.outcome && role === "Controller" && !!row.subject.ref
   const mineToRecall = !row.outcome && row.raisedBy === role && !row.steps.some((s) => s.decided)
   return (
     <div className="flex flex-col gap-4">
@@ -284,7 +280,8 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
             <li key={i} className="flex flex-col rounded-md border px-2 py-1">
               <span className="flex flex-wrap items-center gap-2">
                 <span className="tabular w-5">{i + 1}.</span>
-                <span className="font-medium">{s.role}</span>
+                <span className="font-medium">{seatName(s)}</span>
+                {s.parallel && <span className="text-xs text-muted-foreground">parallel vote</span>}
                 {s.note && <span className="text-xs text-muted-foreground">{s.note}</span>}
               </span>
               {s.decided ? (
@@ -292,7 +289,7 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
                   {s.decided.outcome} by {userName(s.decided.by)}{s.decided.onBehalfOf ? ` on behalf of ${userName(s.decided.onBehalfOf)}` : ""} · {fmtDateTime(s.decided.on)} · {s.decided.channel ?? "In-app"}
                   {s.decided.reason ? `: “${s.decided.reason}”` : ""}
                 </span>
-              ) : i === row.current ? (
+              ) : row.open.includes(i) ? (
                 <span className="pl-7"><SlaClock ageHours={row.ageHours} slaHours={s.slaHours} overdue={row.overdue} escalateTo={s.escalateTo} /></span>
               ) : (
                 <span className="pl-7 text-xs text-muted-foreground">after the step above · SLA {s.slaHours} h</span>
@@ -328,10 +325,11 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
             {check.can && (
               <>
                 <Button variant="outline" onClick={() => onDialog("reject")}>Reject</Button>
-                {step?.role === role && <Button variant="outline" onClick={() => onDialog("delegate")} disabled={!row.delegationAllowed} title={row.delegationAllowed ? undefined : "Not allowed: financial approval above $250,000 (C-2)"}>Delegate</Button>}
-                <Button onClick={onApprove}>Approve step {row.current + 1} of {row.steps.length}</Button>
+                {!check.asDelegate && <Button variant="outline" onClick={() => onDialog("delegate")} disabled={!row.delegationAllowed} title={row.delegationAllowed ? undefined : "Not allowed: financial approval above $250,000 (C-2)"}>Delegate</Button>}
+                <Button onClick={onApprove}>{row.open.length > 1 ? `Approve step ${(check.stepIndex ?? row.current) + 1} (vote ${row.steps.filter((x) => x.decided).length + 1} of ${row.steps.length})` : `Approve step ${(check.stepIndex ?? row.current) + 1} of ${row.steps.length}`}</Button>
               </>
             )}
+            {canRaiseLimit && <Button variant="outline" onClick={() => onDialog("raiseLimit")}>Raise limit</Button>}
             {mineToRecall && (
               <Button variant="outline" onClick={() => onDialog("recall")} disabled={row.source === "shared"} title={row.source === "shared" ? "The shared engine has no recall yet (R-3)" : undefined}>
                 Recall
@@ -341,11 +339,11 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
         </div>
       )}
 
-      {inst && inst.rounds.length > 0 && (
+      {rounds.length > 0 && (
         <section aria-label="Earlier rounds">
-          <h3 className="text-sm font-semibold">Earlier rounds ({inst.rounds.length})</h3>
+          <h3 className="text-sm font-semibold">Earlier rounds ({rounds.length})</h3>
           <ul className="text-xs text-muted-foreground">
-            {inst.rounds.map((r, n) => <li key={n}>Round {n + 1}: {r.outcome} on {fmtDateTime(r.closedAt)} · {r.steps.filter((s) => s.decided).map((s) => `${s.role} ${s.decided!.outcome}${s.decided!.reason ? ` (“${s.decided!.reason}”)` : ""}`).join("; ") || "no step decided"}</li>)}
+            {rounds.map((r, n) => <li key={n}>Round {n + 1}: {r.outcome} on {fmtDateTime(r.closedAt)} · {r.steps.filter((s) => s.decided).map((s) => `${s.role} ${s.decided!.outcome}${s.decided!.reason ? ` (“${s.decided!.reason}”)` : ""}`).join("; ") || "no step decided"}</li>)}
           </ul>
         </section>
       )}
@@ -374,6 +372,30 @@ function RequestPanel({ row, check, channel, setChannel, onApprove, onDialog }: 
   )
 }
 
+const seatName = (st: { role: Role; derived?: string; approverUser?: UserId }) =>
+  st.derived ? `${st.derived} (${st.role})` : st.approverUser ? `${userName(st.approverUser)} (${st.role})` : st.role
+
+function RaiseLimitDialog({ open, onClose, row }: { open: boolean; onClose: () => void; row?: InboxRow }) {
+  const [limit, setLimit] = useState("")
+  return (
+    <DialogShell
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setLimit("")
+          onClose()
+        }
+      }}
+      title={`Raise credit limit for ${row?.subject.id ?? ""}`}
+      consequence="Raises the customer's credit limit and re-runs the credit check. If it passes, the order is released and this request closes; if it still fails, nothing changes. Controller only (OQ-33)."
+      confirmLabel="Raise limit"
+      onConfirm={() => (row ? act(raiseCreditLimit(row.subject.id, Number(limit))) : "No request selected.")}
+    >
+      <Field id="rl-limit" label="New credit limit"><Input id="rl-limit" type="number" value={limit} onChange={(e) => setLimit(e.target.value)} /></Field>
+    </DialogShell>
+  )
+}
+
 function DelegateDialog({ open, onClose, row }: { open: boolean; onClose: () => void; row?: InboxRow }) {
   const { userId } = useCore()
   const [to, setTo] = useState<string>("")
@@ -389,7 +411,7 @@ function DelegateDialog({ open, onClose, row }: { open: boolean; onClose: () => 
         }
       }}
       title={`Delegate ${row?.id ?? ""} step`}
-      consequence={row && target ? `${target.name} (${target.roles[0]}) can decide step ${row.current + 1} of ${row.id} until ${days} days from today. Every action is logged as on behalf of you.` : "Choose who decides this step for you."}
+      consequence={row && target ? `${target.name} (${target.roles[0]}) can decide the ${row.steps[row.current].role} step of ${row.id} until ${days} days from today. Every action is logged as on behalf of you.` : "Choose who decides this step for you."}
       requireReason
       confirmLabel="Delegate"
       confirmDisabled={!target}

@@ -13,7 +13,7 @@ import { DashboardCard, DashboardPage, DialogShell } from "@/components/template
 import { Chip, EmptyState, ErrorAlert } from "@/components/patterns"
 import { COST_CENTERS, PROFIT_CENTERS, WORK_CENTERS } from "@/data/shared"
 import { fmtDate, fmtMoney, fmtNumber, fmtPct } from "@/lib/format"
-import { useRole, useSlice } from "@/store"
+import { useCore, useRole, useSlice } from "@/store"
 import { sumVar } from "../data/logic"
 import { PC_PNL } from "../data/seed"
 import type { JournalEntry } from "../data/types"
@@ -21,6 +21,21 @@ import { CsvButton, Design, DocLink, Reading, signCls, useDemoState } from "../c
 import { ccName, pcName, SelectField, SkeletonTable } from "../components/bits"
 import { allCenters } from "./Centers"
 
+/** Who sees what (CO-R1..R4 [DOC:p.273], reading OQ-PF-23): the Controller, the CFO and the Controlling analyst see every
+ *  center; any other role sees the centers (and the centers below them) where he or she is the named manager. */
+function useScope() {
+  const s = useSlice("purchasingFinance")
+  const core = useCore()
+  const all = core.role === "Controller" || core.role === "CFO" || core.role === "Controlling analyst"
+  const centers = allCenters(s)
+  const below = (id: string): string[] => [id, ...centers.filter((c) => c.parentId === id).flatMap((c) => below(c.id))]
+  const mine = centers.filter((c) => c.managerId === core.userId)
+  const ids = new Set(all ? centers.map((c) => c.id) : mine.flatMap((c) => below(c.id)))
+  return { all, ids, mine, role: core.role, centers }
+}
+const NoScope = ({ role }: { role: string }) => (
+  <EmptyState title="No centers to show">Acting as {role}: you see the cost centers where you are the named manager, and none is assigned to you. Switch Acting as to a center manager or to the Controller.</EmptyState>
+)
 const PERIODS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]
 const REPORTS = [
   { id: "CO-R1", title: "Cost center report", text: "Actuals by account group against budget, YTD, allocations received and sent, with hierarchy rollups." },
@@ -32,15 +47,17 @@ const REPORTS = [
 export function ReportsIndex() {
   const s = useSlice("purchasingFinance")
   const st = useDemoState("CO-R0")
-  const ex = s.journal.filter((j) => j.rule === 7).length
+  const scope = useScope()
+  const jr = scope.all ? s.journal : s.journal.filter((j) => j.costCenterId && scope.ids.has(j.costCenterId))
+  const ex = jr.filter((j) => j.rule === 7).length
   return (
     <DashboardPage
       header={{ screenId: "CO-R1..R4", title: "Controlling reports", description: "The spend and margin accountability views. Managers see their own centers; the Controller sees all.", chips: <Design note="Report-set layout is a design value" />, actions: st.menu }}
       tiles={[
-        { label: "Journal lines this year", value: fmtNumber(s.journal.length) },
-        { label: "Live postings this session", value: s.journal.filter((j) => j.live).length, hint: "From posting.posted events" },
+        { label: scope.all ? "Journal lines this year" : "Journal lines in your centers", value: fmtNumber(jr.length) },
+        { label: "Live postings this session", value: jr.filter((j) => j.live).length, hint: "From posting.posted events" },
         { label: "Rule-7 fallbacks", value: ex, tone: ex ? "attention" : "default", to: "/controlling/reports/CO-R4" },
-        { label: "PC-900 balance (Sep)", value: fmtMoney(s.journal.filter((j) => j.profitCenterId === "PC-900" && j.period === "2026-09").reduce((t, j) => t + j.amount, 0)), hint: "Target zero after allocations" },
+        ...(scope.all ? [{ label: "PC-900 balance (Sep)", value: fmtMoney(s.journal.filter((j) => j.profitCenterId === "PC-900" && j.period === "2026-09").reduce((t, j) => t + j.amount, 0)), hint: "Target zero after allocations" }] : [{ label: "Centers you manage", value: scope.mine.length, hint: scope.mine.map((c) => c.id).join(", ") || `Acting as ${scope.role}` }]),
       ]}
     >
       {st.loading ? (
@@ -146,10 +163,13 @@ function R1({ header }: { header: Header }) {
   const s = useSlice("purchasingFinance")
   const [sp] = useSearchParams()
   const [role] = useRole()
-  const [cc, setCc] = useState(sp.get("cc") ?? "CC-1000")
+  const scopeInfo = useScope()
+  const [ccPick, setCc] = useState(sp.get("cc") ?? "CC-1000")
   const [period, setPeriod] = useState("2026-09")
   const [drill, setDrill] = useState<JournalEntry[] | null>(null)
   const centers = allCenters(s)
+  const visible = centers.filter((c) => scopeInfo.ids.has(c.id))
+  const cc = visible.some((c) => c.id === ccPick) ? ccPick : (visible[0]?.id ?? "")
   const leaves = (id: string): string[] => {
     const kids = centers.filter((c) => c.parentId === id)
     return kids.length ? kids.flatMap((k) => leaves(k.id)) : [id]
@@ -169,18 +189,26 @@ function R1({ header }: { header: Header }) {
   const received = runs.flatMap((r) => r.lines).filter((l) => scope.includes(l.receiverId)).reduce((t, l) => t + l.amount, 0)
   const sent = runs.flatMap((r) => r.lines).filter((l) => scope.includes(l.senderId)).reduce((t, l) => t + l.amount, 0)
   const tot = rows.reduce((t, r) => ({ actual: t.actual + r.actual, budget: t.budget + r.budget, ytd: t.ytd + r.ytd }), { actual: 0, budget: 0, ytd: 0 })
+  if (!visible.length)
+    return (
+      <DashboardPage header={header}>
+        <DashboardCard title="Cost center report" className="lg:col-span-2">
+          <NoScope role={role} />
+        </DashboardCard>
+      </DashboardPage>
+    )
   return (
     <DashboardPage header={{ ...header, actions: <>{header.actions}<CsvButton filename={`co-r1-${cc}-${period}.csv`} rows={rows.map((r) => ({ Group: r.g, Actual: r.actual, Budget: r.budget, Variance: r.actual - r.budget, YTD: r.ytd }))} /></> }}>
       <DashboardCard title="Selection" className="lg:col-span-2">
         <div className="flex flex-wrap gap-4">
           <div className="w-72">
-            <SelectField id="r1-cc" label="Cost center (summary nodes roll up)" value={cc} onChange={setCc} options={centers.map((c) => ({ value: c.id, label: `${"· ".repeat(c.depth)}${c.id} ${c.name}` }))} />
+            <SelectField id="r1-cc" label="Cost center (summary nodes roll up)" value={cc} onChange={setCc} options={visible.map((c) => ({ value: c.id, label: `${"· ".repeat(c.depth)}${c.id} ${c.name}` }))} />
           </div>
           <div className="w-40">
             <SelectField id="r1-p" label="Period" value={period} onChange={setPeriod} options={PERIODS.map((p) => ({ value: p, label: p }))} />
           </div>
           <p className="self-end text-sm text-muted-foreground">
-            Acting as {role}. Cost center managers see their own centers; the Controller sees all. Rolling up {scope.length} postable center(s).
+            Acting as {role}: {scopeInfo.all ? "you see every center" : `you see your ${visible.length} center(s)`}. Rolling up {scope.length} postable center(s). <Reading id="OQ-PF-23" />
           </p>
         </div>
       </DashboardCard>
@@ -239,6 +267,7 @@ function R1({ header }: { header: Header }) {
 // ---------------------------------------------------------------- CO-R2
 function R2({ header }: { header: Header }) {
   const s = useSlice("purchasingFinance")
+  const scopeInfo = useScope()
   const [sga, setSga] = useState(true)
   const [period, setPeriod] = useState("2026-09")
   const pcs = PROFIT_CENTERS
@@ -254,6 +283,14 @@ function R2({ header }: { header: Header }) {
     const alloc = sga && revTotal ? Math.round((sgaTotal * rev) / revTotal) : 0
     return { p, rev, cogs, pv, gm, alloc, om: gm - alloc }
   })
+  if (!scopeInfo.all)
+    return (
+      <DashboardPage header={header}>
+        <DashboardCard title="Profit center P&L" className="lg:col-span-2">
+          <EmptyState title="For Controlling">The profit center P&L is shown to the Controller, the CFO and the Controlling analyst. Managers see their own centers in CO-R1 and CO-R3 <Reading id="OQ-PF-23" />.</EmptyState>
+        </DashboardCard>
+      </DashboardPage>
+    )
   const unalloc = sga ? 0 : sgaTotal
   const sum = (k: "rev" | "cogs" | "pv" | "gm" | "alloc" | "om") => cols.reduce((t, c) => t + c[k], 0)
   const entity = { rev: sum("rev"), cogs: sum("cogs"), pv: sum("pv"), gm: sum("gm"), alloc: sga ? sum("alloc") : 0, om: sum("gm") - sgaTotal }
@@ -327,12 +364,13 @@ function R2({ header }: { header: Header }) {
 // ---------------------------------------------------------------- CO-R3
 function R3({ header }: { header: Header }) {
   const s = useSlice("purchasingFinance")
+  const scopeInfo = useScope()
   const [period, setPeriod] = useState("2026-09")
   const [drill, setDrill] = useState<JournalEntry[] | null>(null)
   const rate = (wc: string) => s.wcRates.filter((r) => r.workCenterId === wc && r.state === "Released").sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0]
   const rows = useMemo(
     () =>
-      [...new Set(WORK_CENTERS.map((w) => w.costCenterId))].map((cc) => {
+      [...new Set(WORK_CENTERS.map((w) => w.costCenterId))].filter((cc) => scopeInfo.ids.has(cc)).map((cc) => {
         const wcs = WORK_CENTERS.filter((w) => w.costCenterId === cc)
         const actual = s.journal.filter((j) => j.costCenterId === cc && j.period === period).reduce((t, j) => t + j.amount, 0)
         const skf = s.skf.find((k) => k.costCenterId === cc)
@@ -343,8 +381,16 @@ function R3({ header }: { header: Header }) {
         const absorbed = Math.round(hours * (lr + or))
         return { cc, wcs: wcs.map((w) => w.id).join(", "), actual, hours, lr, or, absorbed, diff: absorbed - actual }
       }),
-    [s, period],
+    [s, period, scopeInfo.ids],
   )
+  if (!rows.length)
+    return (
+      <DashboardPage header={header}>
+        <DashboardCard title="Work center cost and rate review" className="lg:col-span-2">
+          <NoScope role={scopeInfo.role} />
+        </DashboardCard>
+      </DashboardPage>
+    )
   return (
     <DashboardPage header={header}>
       <DashboardCard title="Selection" className="lg:col-span-2">
@@ -398,10 +444,12 @@ function R3({ header }: { header: Header }) {
 function R4({ header }: { header: Header }) {
   const s = useSlice("purchasingFinance")
   const [drill, setDrill] = useState<JournalEntry[] | null>(null)
+  const scopeInfo = useScope()
   const centers = allCenters(s)
-  const rule7 = s.journal.filter((j) => j.rule === 7)
-  const blocked = s.journal.filter((j) => j.costCenterId && (centers.find((c) => c.id === j.costCenterId)?.status === "Blocked" || COST_CENTERS.find((c) => c.id === j.costCenterId)?.status === "Blocked") && j.period === "2026-10")
-  const missing = s.journal.filter((j) => !j.profitCenterId || (!j.costCenterId && j.template !== "grn" && j.template !== "match"))
+  const jr = scopeInfo.all ? s.journal : s.journal.filter((j) => j.costCenterId && scopeInfo.ids.has(j.costCenterId))
+  const rule7 = jr.filter((j) => j.rule === 7)
+  const blocked = jr.filter((j) => j.costCenterId && (centers.find((c) => c.id === j.costCenterId)?.status === "Blocked" || COST_CENTERS.find((c) => c.id === j.costCenterId)?.status === "Blocked") && j.period === "2026-10")
+  const missing = jr.filter((j) => !j.profitCenterId || (!j.costCenterId && j.template !== "grn" && j.template !== "match"))
   const pc900 = PERIODS.map((p) => ({ p, v: s.journal.filter((j) => j.profitCenterId === "PC-900" && j.period === p).reduce((t, j) => t + j.amount, 0) - s.allocRuns.filter((r) => r.period === p && r.state === "Posted").reduce((t, r) => t + r.total, 0) }))
   const sections = [
     { k: "Rule-7 fallback postings", rows: rule7, note: "Derivation fell back to the default; reassign to a real center" },
@@ -413,7 +461,7 @@ function R4({ header }: { header: Header }) {
       header={header}
       tiles={[
         ...sections.map((x) => ({ label: x.k, value: x.rows.length, tone: x.rows.length ? ("attention" as const) : ("default" as const), hint: "Target zero" })),
-        { label: "PC-900 balance after allocations (Sep)", value: fmtMoney(pc900.find((x) => x.p === "2026-09")!.v), hint: `${pcName("PC-900")}: target zero` },
+        ...(scopeInfo.all ? [{ label: "PC-900 balance after allocations (Sep)", value: fmtMoney(pc900.find((x) => x.p === "2026-09")!.v), hint: `${pcName("PC-900")}: target zero` }] : []),
       ]}
     >
       {sections.map((x) => (
@@ -429,7 +477,7 @@ function R4({ header }: { header: Header }) {
           </ul>
         </DashboardCard>
       ))}
-      <DashboardCard title="PC-900 balance by period">
+      {scopeInfo.all && <DashboardCard title="PC-900 balance by period">
         <Table>
           <TableBody>
             {pc900.map((x) => (
@@ -443,7 +491,7 @@ function R4({ header }: { header: Header }) {
         <p className="text-xs text-muted-foreground">
           Corporate costs less what the allocation cycles distributed. Dimension derivation per template <Reading id="OQ-PF-14" />
         </p>
-      </DashboardCard>
+      </DashboardCard>}
       <JournalDrill rows={drill ?? []} open={!!drill} onOpenChange={(o) => !o && setDrill(null)} title="Exception journal items" />
     </DashboardPage>
   )

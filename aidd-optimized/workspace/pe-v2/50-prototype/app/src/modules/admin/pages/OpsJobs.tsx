@@ -11,7 +11,7 @@ import { Chip, DataTable, ErrorAlert, KV, PostingPreview, RulesPanel, useFirstVi
 import { DialogShell, WorkbenchPage } from "@/components/templates"
 import type { LegalEntityId } from "@/data/domain"
 import { LEGAL_ENTITIES, OPEN_PERIOD } from "@/data/shared"
-import { useSlice } from "@/store"
+import { useCore, useSlice } from "@/store"
 import { JOBS, SEVERITIES, jobById, type JobDef, type Severity } from "../data/catalog"
 import { NOW } from "../data/seed"
 import { escalate, retryRun, runNow, setIncident, triggerJob } from "../data/actions"
@@ -110,6 +110,7 @@ export function OpsJobs() {
             { id: "src", header: "Source", value: (i) => i.source.id, cell: (i) => <Link className="font-mono text-link underline-offset-4 hover:underline" to={i.source.kind === "job" ? `/operations/jobs?run=${i.source.id}` : `/operations/integrations?msg=${i.source.id}`}>{i.source.id}</Link> },
             { id: "due", header: "Response due", value: (i) => i.responseDue, cell: (i) => <span className="text-xs">{i.responseDue === "Queued" ? "Queued" : fmtDateTime(i.responseDue)}</span> },
             { id: "state", header: "State", value: (i) => i.state, filterable: true },
+            { id: "paged", header: "Paged", value: (i) => i.paged?.length ?? 0, cell: (i) => (i.paged?.length ? <span className="text-xs">{i.onCall} × {i.paged.length}, last {fmtDateTime(i.paged.at(-1)!.at)}</span> : <span className="text-xs text-muted-foreground">Not paged</span>) },
             { id: "act", header: "", cell: (i) => (i.state === "Resolved" ? "" : <span className="flex gap-1">{i.state === "Open" && <Button size="sm" variant="ghost" onClick={() => act(setIncident(i.id, "Acknowledged"))}>Acknowledge</Button>}<Button size="sm" variant="ghost" onClick={() => act(setIncident(i.id, "Resolved"))}>Resolve</Button></span>) },
           ]}
         />
@@ -129,6 +130,7 @@ export function OpsJobs() {
             { id: "name", header: "Name", value: (j) => j.name },
             { id: "cal", header: "Calendar", value: (j) => j.calendar },
             { id: "crit", header: "Close-criticality", value: (j) => j.closeCriticality, filterable: true },
+            { id: "inputs", header: "Inputs", value: (j) => j.inputs, className: "max-w-[280px]" },
             { id: "dep", header: "Depends on", value: (j) => j.dependsOn.map((d) => `${d} ${jobById(d)?.name}`).join(", ") || "None" },
             { id: "retry", header: "Retry policy", value: (j) => j.retryPolicy },
             { id: "idem", header: "Idempotency key", value: (j) => j.idempotencyKey },
@@ -136,7 +138,7 @@ export function OpsJobs() {
             { id: "rec", header: "Reconciliation", value: (j) => j.reconciliation },
           ]}
         />
-        <p className="mt-1 text-xs text-muted-foreground">Names and calendars from W.3 [DOC:p.11]; contract fields from §7.7 [DOC:p.217]. SLA minutes, retry counts, owners and times of day are design values (AR-21).</p>
+        <p className="mt-1 text-xs text-muted-foreground">Names and calendars from W.3 [DOC:p.11]; contract fields from §7.7 [DOC:p.217]: inputs, dependency jobs, calendar, close-criticality, retry policy, idempotency key, output artifact, reconciliation query. Input values are read off each job (AR-28); SLA minutes, retry counts, owners and times of day are design values (AR-21).</p>
       </section>
 
       <RulesPanel
@@ -168,11 +170,14 @@ function SlaTimer({ run }: { run: JobRun }) {
 function RunPanel({ run, onEscalate }: { run: JobRun; onEscalate: () => void }) {
   const s = useSlice("admin")
   const job = jobById(run.jobId)!
+  const { role } = useCore()
+  const blocked = run.jobId === "JOB-06" && role !== "Controller"
   const history = s.runs.filter((r) => r.jobId === run.jobId && r.entityId === run.entityId && r.period === run.period)
   const dependents = JOBS.filter((j) => j.dependsOn.includes(job.id))
   return (
     <div className="flex flex-col gap-4">
       <dl className="grid grid-cols-2 gap-4">
+        <KV k="Inputs">{job.inputs}</KV>
         <KV k="Calendar">{job.calendar}</KV>
         <KV k="Close-criticality">{job.closeCriticality}</KV>
         <KV k="Depends on">{job.dependsOn.map((d) => jobById(d)?.name).join(", ") || "None"}</KV>
@@ -191,11 +196,11 @@ function RunPanel({ run, onEscalate }: { run: JobRun; onEscalate: () => void }) 
         <PostingPreview title="Posting on a successful retry" period={run.period} lines={[{ template: 24, amount: 41280, detail: `Warranty accrual ${run.period}, ${run.entityId}: accrual % × FG shipments (amount is a design value)` }]} />
       )}
       {run.posting && <PostingPreview title="Posted by this run" period={run.period} lines={[{ template: run.posting.template, amount: run.posting.amount, currency: run.entityId === "LE-TBD-30" ? "CAD" : "USD" }]} />}
-      {run.jobId === "JOB-06" && <p className="text-xs text-muted-foreground">Allocation postings (#36) belong to CO-ALC-001/2; the console starts the cycle and shows its result.</p>}
+      {run.jobId === "JOB-06" && <p className="text-xs text-muted-foreground">Allocation postings (#36) belong to CO-ALC-001/2; the console starts the cycle and shows its result. {blocked ? "Starting, retrying or running it now is the Controller's: allocation posting is restricted to the Controller [DOC:pp.180-181 FL-06 field 13]." : "Allocation posting is restricted to the Controller (FL-06 field 13)."}</p>}
       <div className="flex flex-wrap gap-2">
-        {run.state === "Failed" && !run.retriedBy && <Button onClick={() => act(retryRun(run.id))}>Retry</Button>}
+        {run.state === "Failed" && !run.retriedBy && <Button onClick={() => act(retryRun(run.id))} disabled={blocked}>Retry</Button>}
         {run.retriedBy && <Link className="self-center text-sm text-link underline-offset-4 hover:underline" to={`/operations/jobs?run=${run.retriedBy}`}>Retried by {run.retriedBy}</Link>}
-        {(run.state === "Scheduled" || run.state === "Held (dependency)") && <Button onClick={() => act(runNow(run.id))}>Run now</Button>}
+        {(run.state === "Scheduled" || run.state === "Held (dependency)") && <Button onClick={() => act(runNow(run.id))} disabled={blocked}>Run now</Button>}
         {(run.state === "Failed" || run.state === "Held (dependency)") && <Button variant="outline" onClick={onEscalate} disabled={!!run.incidentId && s.incidents.some((i) => i.id === run.incidentId && i.state !== "Resolved")}>Escalate</Button>}
         {run.incidentId && <span className="self-center text-xs">Incident {run.incidentId} · {s.incidents.find((i) => i.id === run.incidentId)?.state}</span>}
       </div>
@@ -212,7 +217,9 @@ function RunPanel({ run, onEscalate }: { run: JobRun; onEscalate: () => void }) 
 function StartJobDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [jobId, setJobId] = useState("JOB-05")
   const [entity, setEntity] = useState<string>("LE-TBD-10")
+  const { role } = useCore()
   const job = jobById(jobId)!
+  const blocked = jobId === "JOB-06" && role !== "Controller"
   const periodEnd = job.calendar.startsWith("Period-end")
   const period = prevMonth(OPEN_PERIOD)
   return (
@@ -222,10 +229,12 @@ function StartJobDialog({ open, onClose }: { open: boolean; onClose: () => void 
       title="Start a job"
       consequence={`Starts ${job.name} now${periodEnd ? ` for ${period}, ${entity}` : ""}; it runs once with idempotency key “${job.idempotencyKey}”.`}
       confirmLabel="Start"
+      confirmDisabled={blocked}
       onConfirm={() => act(triggerJob(jobId, periodEnd ? period : undefined, periodEnd ? (entity as LegalEntityId) : undefined))}
     >
       <div className="grid grid-cols-2 gap-4">
         <Field id="sj-job" label="Job"><SimpleSelect id="sj-job" value={jobId} onChange={setJobId} options={JOBS.map((j) => ({ value: j.id, label: `${j.id} ${j.name}` }))} /></Field>
+        {blocked && <p role="alert" className="col-span-2 text-sm text-destructive">Allocation cycles post #36; allocation posting is restricted to the Controller (FL-06 field 13). Switch “Acting as” to the Controller.</p>}
         {periodEnd && <Field id="sj-ent" label="Entity"><SimpleSelect id="sj-ent" value={entity} onChange={setEntity} options={LEGAL_ENTITIES.map((e) => ({ value: e.id, label: e.name }))} /></Field>}
       </div>
     </DialogShell>

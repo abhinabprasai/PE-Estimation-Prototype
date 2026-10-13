@@ -3,14 +3,14 @@
 
 import type { ApprovalRequestId, DocRef, FiscalPeriodStatus, LegalEntityId, Role, UserId } from "@/data/domain"
 import { roleGroupOf } from "@/data/domain"
-import { TODAY } from "@/data/shared"
-import { ProtoError, store, type MutateCtx, type Result } from "@/store"
+import { TODAY, USERS } from "@/data/shared"
+import { ProtoError, store, type ApprovalRequest, type MutateCtx, type Result } from "@/store"
 import { addDays } from "@/lib/format"
-import { INTERFACES, SEVERITIES, W4, escalationOf, fillMsg, jobById, w4ById, type Severity } from "./catalog"
+import { INTERFACES, SEVERITIES, W4_ALL, escalationOf, fillMsg, jobById, w4ById, type Severity } from "./catalog"
 import { NOW, periodId } from "./seed"
 import type { AdminState } from "./slice"
-import type { Channel, DefStep, Delegation, InstEffect, InstStep, Subject, WfInstance } from "./types"
-import { canAct, fromAdmin, fromShared } from "../lib/engine"
+import type { Channel, DefStep, Delegation, InstEffect, InstOutcome, InstStep, Rule, Subject, WfInstance } from "./types"
+import { canAct, fromAdmin, fromShared, runOf } from "../lib/engine"
 import { rPer01 } from "../lib/period"
 import { addHours, nextMonth } from "../lib/time"
 
@@ -26,6 +26,8 @@ export interface RaiseInput {
   amount?: number
   currency?: "USD" | "CAD"
   steps?: Role[]
+  /** Names of conditional steps whose rule fired (DefStep.when). */
+  conditions?: string[]
   effect?: InstEffect
   reading?: string
 }
@@ -39,8 +41,18 @@ export function raiseIn(d: AdminState, ctx: MutateCtx, input: RaiseInput): WfIns
   const open = d.instances.find((i) => !i.outcome && i.wfId === input.wfId && sameSubject(i.subject, input.subject))
   if (open) throw new ProtoError(`${open.id} is already open for ${subjectId(input.subject)}; decide or recall it first.`)
   const v = activeVersion(d, input.wfId)
-  const roles: { role: Role; slaHours: number }[] = input.steps ? input.steps.map((role) => ({ role, slaHours: 24 })) : (v?.steps ?? [{ role: "Controller", slaHours: 24 }])
-  const steps: InstStep[] = roles.map((s, n) => ({ role: s.role, slaHours: s.slaHours, escalateTo: escalationOf(s.role), openedAt: n === 0 ? NOW : undefined }))
+  // Conditional steps (e.g. "budget check fails") join only when the raiser names the rule that fired.
+  const base: { role: Role; slaHours: number; parallel?: boolean; approver?: DefStep["approver"] }[] = input.steps
+    ? input.steps.map((role) => ({ role, slaHours: v?.steps.find((x) => x.role === role)?.slaHours ?? 24 }))
+    : ((v?.steps ?? [{ role: "Controller" as Role, slaHours: 24 }]) as Partial<DefStep>[] as DefStep[]).filter((x) => !x.when || input.conditions?.includes(x.when))
+  const steps: InstStep[] = base.map((st) => ({
+    role: st.role, slaHours: st.slaHours, escalateTo: escalationOf(st.role), parallel: st.parallel ?? (v?.steps.find((x) => x.role === st.role)?.parallel),
+    ...(st.approver?.kind === "user" && st.approver.userId ? { approverUser: st.approver.userId as UserId } : {}),
+    ...(st.approver?.kind === "derived" ? { derived: st.approver.derived } : {}),
+  }))
+  // The first run opens now (a parallel run opens together).
+  const [, last] = runOf(steps, 0)
+  for (let n = 0; n <= last; n++) steps[n].openedAt = NOW
   const w = w4ById(input.wfId)
   const id = `APR-TBD-${String(d.seq++).padStart(4, "0")}` as const
   const inst: WfInstance = {
@@ -66,7 +78,7 @@ export function decide(requestId: string, outcome: "Approved" | "Rejected", reas
     if (!chk.can) return { ok: false, error: chk.reason ?? "Not allowed." }
     if (outcome === "Rejected" && !reason?.trim()) return { ok: false, error: "A reason is required to reject.", field: "reason" }
     const actor = { role: core.role, userId: core.userId }
-    const stepRole = row.steps[row.current].role
+    const stepRole = row.steps[chk.stepIndex ?? row.current].role
     // A delegate acts in the step role's seat on the shared engine (R-4); the real actor is logged here.
     if (chk.asDelegate) store.setRole(stepRole)
     const r = store.decideApproval(shared.id, outcome, reason)
@@ -84,13 +96,30 @@ export function decide(requestId: string, outcome: "Approved" | "Rejected", reas
     const chk = canAct(row, ctx.role, ctx.userId, d.delegations)
     if (!chk.can) throw new ProtoError(chk.reason ?? "Not allowed.")
     if (outcome === "Rejected" && !reason?.trim()) throw new ProtoError("A reason is required to reject.", "reason")
-    const st = i.steps[row.current]
+    const idx = chk.stepIndex ?? row.current
+    const st = i.steps[idx]
+    // R-PER-01 holds at the moment a reopen lands, not only when it is raised [DOC:p.42 §9.3].
+    const lastApproval = outcome === "Approved" && row.open.length === 1 && !i.steps.some((x, n) => n > idx && !x.decided)
+    if (lastApproval && i.effect?.type === "periodReopen") {
+      const eff = i.effect
+      const p = d.periods.find((x) => x.id === eff.periodId)
+      if (p) {
+        const { soft } = rPer01(d.periods, p.entityId)
+        if (soft.length) throw new ProtoError(`R-PER-01: ${soft[0].month} is in Soft Close for this entity, so reopening ${p.month} would give it two Soft Close periods. Hard close ${soft[0].month} first, then decide this reopen (or reject it with a comment).`)
+      }
+    }
     st.decided = { outcome, by: ctx.userId, role: ctx.role, on: NOW, reason, channel, onBehalfOf: chk.asDelegate?.fromUser }
     d.audit.push({ at: NOW, requestId, action: outcome, by: ctx.userId, role: ctx.role, channel, comment: reason, onBehalfOf: chk.asDelegate?.fromUser })
-    const next = i.steps[row.current + 1]
-    if (outcome === "Approved" && next) {
-      next.openedAt = NOW
-      return `${requestId}: step approved, sent to the ${next.role}.`
+    if (outcome === "Approved") {
+      // A parallel run (CCB votes) completes only when every member has approved.
+      const waiting = i.steps.filter((x, n) => n !== idx && !x.decided && runOf(i.steps, idx)[0] <= n && n <= runOf(i.steps, idx)[1])
+      if (waiting.length) return `${requestId}: vote recorded, still waiting for the ${waiting.map((x) => x.role).join(" and ")}.`
+      const nextIdx = i.steps.findIndex((x) => !x.decided)
+      if (nextIdx >= 0) {
+        const [a, b] = runOf(i.steps, nextIdx)
+        for (let n = a; n <= b; n++) i.steps[n].openedAt = NOW
+        return `${requestId}: step approved, sent to the ${i.steps.slice(a, b + 1).map((x) => x.role).join(" and ")}.`
+      }
     }
     i.outcome = outcome
     applyEffect(d, ctx, i)
@@ -143,6 +172,12 @@ function applyEffect(d: AdminState, ctx: MutateCtx, i: WfInstance) {
       d.tax.audit.push({ at: NOW, by: ctx.userId, change: `Tax adjustment JE for ${r.month} approved (${i.id}); remittance correction, no document restated`, effectiveFrom: TODAY, firstDocument: "None (tax-only adjustment JE)" })
     }
   }
+  if (e.type === "seriesChange") {
+    const ns = d.series.find((x) => x.id === e.seriesId)
+    const v = ns?.changes.find((x) => x.changeId === e.changeId)
+    if (ns && v) v.state = ok ? "Scheduled" : "Rejected"
+    if (ns && v && ok) ctx.emit("admin.configChanged", { settingId: ns.id, value: `${v.format}, next ${v.next}`, effectiveFrom: v.effectiveFrom })
+  }
   if (e.type === "sodGrant") {
     const s = d.sod.find((x) => x.id === e.sodId)
     if (s) s.state = ok ? "Active" : "Expired"
@@ -158,20 +193,21 @@ export function delegateStep(requestId: string, toUser: UserId, toRole: Role, da
     const row = shared ? fromShared(shared, d) : inst ? fromAdmin(inst, d) : undefined
     if (!row) throw new ProtoError(`Request ${requestId} not found.`)
     if (row.outcome) throw new ProtoError("The request is decided; nothing to delegate.")
-    const st = row.steps[row.current]
-    if (st.role !== ctx.role) throw new ProtoError(`Only the ${st.role} can delegate this step.`)
+    const mine = row.open.find((n) => row.steps[n].role === ctx.role)
+    if (mine == null) throw new ProtoError(`Only the ${row.steps[row.open[0]].role} can delegate this step.`)
     if (!row.delegationAllowed) throw new ProtoError("Delegation is not allowed on a financial approval above $250,000 (C-2).")
     if (toUser === ctx.userId) throw new ProtoError("Choose someone other than yourself.", "toUser")
     if (!reason.trim()) throw new ProtoError("A reason is required; delegation is logged on every action.", "reason")
     const id = `DLG-TBD-${String(d.delegations.length + 1).padStart(4, "0")}`
     d.delegations.unshift({ id, fromUser: ctx.userId, fromRole: ctx.role, toUser, toRole, validFrom: TODAY, validTo: addDays(TODAY, days), scope: [row.wfId], reason, createdBy: ctx.userId, createdOn: TODAY, requestId })
     d.audit.push({ at: NOW, requestId, action: "Delegated", by: ctx.userId, role: ctx.role, channel: "In-app", comment: `To ${toRole} until ${addDays(TODAY, days)}: ${reason}` })
-    return `${requestId} step ${row.current + 1} delegated (${id}).`
+    return `${requestId} step ${mine + 1} delegated (${id}).`
   })
 }
 
 export function recall(requestId: string, reason: string): Result<string> {
-  if (store.getCore().approvals.some((a) => a.id === requestId)) return { ok: false, error: "The shared engine has no recall yet (R-3); ask the approver to reject with a comment." }
+  const sharedReq = store.getCore().approvals.find((a) => a.id === requestId)
+  if (sharedReq) return recallShared(sharedReq, reason)
   return mutate((d, ctx) => {
     const i = d.instances.find((x) => x.id === requestId)
     if (!i) throw new ProtoError(`Request ${requestId} not found.`)
@@ -186,7 +222,50 @@ export function recall(requestId: string, reason: string): Result<string> {
   })
 }
 
+/** Recall on the shared engine, done from here (R-3): the core has no recall, so the open step is closed as a rejection
+ *  (modules react to approval.decided) and this slice marks the request Recalled, with the initiator's reason on the audit trail. */
+function recallShared(req: ApprovalRequest, reason: string): Result<string> {
+  const core = store.getCore()
+  const row = fromShared(req, admin())
+  if (row.outcome) return { ok: false, error: `${req.id} is already ${row.outcome.toLowerCase()}.` }
+  if (req.raisedBy !== core.role) return { ok: false, error: `Only the initiator (${req.raisedBy}) can recall.` }
+  if (req.steps.some((s) => s.decided)) return { ok: false, error: "The initiator may recall only before the first approval [DOC:p.11 W.1]." }
+  if (!reason.trim()) return { ok: false, error: "A reason is required.", field: "reason" }
+  const actor = { role: core.role, userId: core.userId }
+  const stepRole = req.steps[0].role
+  store.setRole(stepRole)
+  const r = store.decideApproval(req.id, "Rejected", `Recalled by the initiator: ${reason}`)
+  store.setRole(actor.role)
+  if (!r.ok) return r
+  mutate((d) => {
+    d.sharedLineage[req.id] = { recalled: true, rounds: d.sharedLineage[req.id]?.rounds ?? [] }
+    d.audit.push({ at: NOW, requestId: req.id, action: "Recalled", by: actor.userId, role: actor.role, channel: "In-app", comment: reason })
+  })
+  return { ok: true, value: `${req.id} recalled.` }
+}
+
+/** Resubmit on the shared engine: the closed request is kept as an earlier round and a new request is raised for the same
+ *  document, linked to it (the core cannot reopen a decided request, so the id changes; the history travels with it). */
+function resubmitShared(req: ApprovalRequest, note: string): Result<string> {
+  const core = store.getCore()
+  const row = fromShared(req, admin())
+  if (row.outcome !== "Rejected" && row.outcome !== "Recalled") return { ok: false, error: "Only a rejected or recalled request can be resubmitted." }
+  if (req.raisedBy !== core.role) return { ok: false, error: `Only the initiator (${req.raisedBy}) can resubmit.` }
+  if (!note.trim()) return { ok: false, error: "Say what changed.", field: "reason" }
+  const prior = admin().sharedLineage[req.id]?.rounds ?? []
+  const closed = { steps: row.steps.map((s): InstStep => ({ role: s.role, slaHours: s.slaHours, escalateTo: s.escalateTo, openedAt: s.openedAt, decided: s.decided && { ...s.decided, role: s.role, channel: s.decided.channel ?? "In-app" } })), outcome: row.outcome as InstOutcome, closedAt: row.steps.find((s) => s.decided?.outcome === "Rejected")?.decided?.on ?? NOW }
+  const next = store.raiseApproval({ kind: req.kind, subject: req.subject, title: req.title, amount: req.amount, currency: req.currency, note: `Resubmitted from ${req.id}: ${note}` })
+  if (next.id === req.id) return { ok: false, error: "The request is still open." }
+  mutate((d, ctx) => {
+    d.sharedLineage[next.id] = { rounds: [...prior, { ...closed, closedAt: closed.closedAt.length === 10 ? `${closed.closedAt}T12:00` : closed.closedAt }] }
+    d.audit.push({ at: NOW, requestId: next.id, action: "Resubmitted", by: ctx.userId, role: ctx.role, channel: "In-app", comment: `Round ${prior.length + 2}, from ${req.id}: ${note}` })
+  })
+  return { ok: true, value: `${req.id} resubmitted as ${next.id}; history kept (round ${prior.length + 2}).` }
+}
+
 export function resubmit(requestId: string, note: string): Result<string> {
+  const sharedReq = store.getCore().approvals.find((a) => a.id === requestId)
+  if (sharedReq) return resubmitShared(sharedReq, note)
   return mutate((d, ctx) => {
     const i = d.instances.find((x) => x.id === requestId)
     if (!i) throw new ProtoError(`Request ${requestId} not found.`)
@@ -194,7 +273,8 @@ export function resubmit(requestId: string, note: string): Result<string> {
     if (i.raisedBy !== ctx.role) throw new ProtoError(`Only the initiator (${i.raisedBy}) can resubmit.`)
     if (!note.trim()) throw new ProtoError("Say what changed.", "reason")
     i.rounds.push({ steps: structuredClone(i.steps), outcome: i.outcome, closedAt: NOW })
-    i.steps = i.steps.map((s, n) => ({ role: s.role, slaHours: s.slaHours, escalateTo: s.escalateTo, openedAt: n === 0 ? NOW : undefined }))
+    i.steps = i.steps.map((s) => ({ role: s.role, slaHours: s.slaHours, escalateTo: s.escalateTo, approverUser: s.approverUser, derived: s.derived, parallel: s.parallel }))
+    for (let n = 0; n <= runOf(i.steps, 0)[1]; n++) i.steps[n].openedAt = NOW
     i.outcome = undefined
     if (i.effect?.type === "defVersion") {
       const v = d.definitions.find((x) => x.id === (i.effect as { wfId: string }).wfId)?.versions.find((x) => x.version === (i.effect as { version: number }).version)
@@ -203,6 +283,11 @@ export function resubmit(requestId: string, note: string): Result<string> {
     if (i.effect?.type === "configChange") {
       const ef = i.effect
       const v = d.settings.find((x) => x.id === ef.settingId)?.versions.find((x) => x.changeId === ef.changeId)
+      if (v) v.state = "Pending approval"
+    }
+    if (i.effect?.type === "seriesChange") {
+      const ef = i.effect
+      const v = d.series.find((x) => x.id === ef.seriesId)?.changes.find((x) => x.changeId === ef.changeId)
       if (v) v.state = "Pending approval"
     }
     d.audit.push({ at: NOW, requestId, action: "Resubmitted", by: ctx.userId, role: ctx.role, channel: "In-app", comment: note })
@@ -234,7 +319,7 @@ export function revokeDelegation(id: string): Result<string> {
 }
 
 // ============================================================================ WF-DEF: versions
-export function saveVersion(wfId: string, draft: { effectiveFrom: string; steps: DefStep[]; conditions: string[]; changeNote: string }): Result<string> {
+export function saveVersion(wfId: string, draft: { effectiveFrom: string; steps: DefStep[]; rules: Rule[]; changeNote: string }): Result<string> {
   return mutate((d, ctx) => {
     const w = w4ById(wfId)
     const def = d.definitions.find((x) => x.id === wfId)
@@ -243,12 +328,21 @@ export function saveVersion(wfId: string, draft: { effectiveFrom: string; steps:
     if (!draft.effectiveFrom || draft.effectiveFrom <= TODAY) throw new ProtoError("Effective date must be after today: in-flight requests finish on their version and history is never edited (C-50).", "effectiveFrom")
     if (!draft.steps.length) throw new ProtoError("A chain needs at least one step.", "steps")
     if (draft.steps.some((s) => !(s.slaHours > 0))) throw new ProtoError("Every step needs SLA hours above zero.", "steps")
+    for (const [n, st] of draft.steps.entries()) {
+      if (st.approver?.kind === "user" && !st.approver.userId) throw new ProtoError(`Step ${n + 1}: choose the named user.`, "steps")
+      if (st.approver?.kind === "derived" && !st.approver.derived?.trim()) throw new ProtoError(`Step ${n + 1}: name the derived owner (for example Cost Center Manager).`, "steps")
+    }
+    for (const [n, rl] of draft.rules.entries()) {
+      if (!rl.field.trim()) throw new ProtoError(`Rule ${n + 1}: choose the document field.`, "rules")
+      if (rl.op !== "is set" && rl.op !== "is true" && !rl.value.trim()) throw new ProtoError(`Rule ${n + 1}: enter the value to compare with.`, "rules")
+      if (["<", "<=", ">", ">="].includes(rl.op) && !/\d/.test(rl.value) && !/limit|floor|target|today/.test(rl.value)) throw new ProtoError(`Rule ${n + 1}: ${rl.op} compares numbers or dates; “${rl.value}” is neither.`, "rules")
+    }
     if (!draft.changeNote.trim()) throw new ProtoError("Describe the change.", "changeNote")
     if (def.versions.some((v) => v.state === "Pending co-sign")) throw new ProtoError("A version is already waiting for the Controller co-sign.")
     const base = def.versions[def.versions.length - 1]
     const version = Math.max(...def.versions.map((v) => v.version)) + 1
     const gated = w.gatesPosting
-    def.versions.push({ ...base, version, effectiveFrom: draft.effectiveFrom, effectiveTo: undefined, steps: draft.steps, conditions: draft.conditions, changedBy: ctx.userId, changedOn: TODAY, changeNote: draft.changeNote, state: gated ? "Pending co-sign" : "Scheduled", requestId: undefined })
+    def.versions.push({ ...base, version, effectiveFrom: draft.effectiveFrom, effectiveTo: undefined, steps: draft.steps, rules: draft.rules, changedBy: ctx.userId, changedOn: TODAY, changeNote: draft.changeNote, state: gated ? "Pending co-sign" : "Scheduled", requestId: undefined })
     // The previous scheduled/active version ends the day before.
     for (const v of def.versions) if (v.version !== version && (v.state === "Active" || v.state === "Scheduled") && !v.effectiveTo && v.effectiveFrom < draft.effectiveFrom) v.effectiveTo = addDays(draft.effectiveFrom, -1)
     if (gated) {
@@ -265,6 +359,23 @@ export function saveVersion(wfId: string, draft: { effectiveFrom: string; steps:
 }
 
 // ============================================================================ OPS-JOBS
+/** A failed close-critical run pages the on-call role and carries an incident; it is never just logged
+ *  [DOC:p.190 Part D §5]. The open incident of the earlier attempt moves to the new run; otherwise one is opened. */
+function pageFailure(d: AdminState, run: AdminState["runs"][number], job: NonNullable<ReturnType<typeof jobById>>, previousRunId: string | undefined, by: UserId) {
+  if (job.closeCriticality !== "Close-critical" || run.state !== "Failed") return
+  const reason = `Close-critical job failed again (attempt ${run.attempt})`
+  const inc = previousRunId ? d.incidents.find((i) => i.source.id === previousRunId && i.state !== "Resolved") : undefined
+  if (inc) {
+    inc.source = { kind: "job", id: run.id }
+    inc.paged = [...(inc.paged ?? []), { at: NOW, to: inc.onCall, reason }]
+    run.incidentId = inc.id
+    return
+  }
+  const id = `INC-TBD-${String(d.incSeq++).padStart(4, "0")}`
+  d.incidents.unshift({ id, severity: "S2", title: `Close-critical job failed: ${job.name}, ${run.entityId ?? ""} ${run.period ?? ""}`.trim(), source: { kind: "job", id: run.id }, openedAt: NOW, openedBy: by, responseDue: addHours(NOW, 1), state: "Open", onCall: "Plant IT", paged: [{ at: NOW, to: "Plant IT", reason }] })
+  run.incidentId = id
+}
+
 function newRun(d: AdminState, jobId: string, extra: Partial<AdminState["runs"][number]>) {
   const id = `RUN-TBD-${d.runSeq++}`
   const r = { id, jobId, scheduledAt: NOW, startedAt: NOW, endedAt: addHours(NOW, 0.1), state: "Succeeded" as const, attempt: 1, correlationId: `COR-${id.slice(-5)}`, ...extra }
@@ -277,6 +388,10 @@ export function retryRun(runId: string): Result<string> {
   // A retry that ran and failed again is committed (run history) but reported as an error.
   return r.ok && r.value.includes("failed again") ? { ok: false, error: r.value } : r
 }
+/** Allocation posting (#36) is restricted to the Controller [DOC:pp.180-181 FL-06 field 13]. */
+const allocationGate = (jobId: string, role: Role) => {
+  if (jobId === "JOB-06" && role !== "Controller") throw new ProtoError("Allocation cycles post #36: allocation posting is restricted to the Controller (FL-06 field 13).")
+}
 function retryRunInner(runId: string): Result<string> {
   return mutate((d, ctx) => {
     const r = d.runs.find((x) => x.id === runId)
@@ -285,11 +400,13 @@ function retryRunInner(runId: string): Result<string> {
     if (r.retriedBy) throw new ProtoError(`Already retried by ${r.retriedBy}.`)
     if (d.runs.some((x) => x.jobId === r.jobId && x.entityId === r.entityId && x.period === r.period && x.state === "Succeeded" && x.scheduledAt > r.scheduledAt)) throw new ProtoError("A later run already succeeded.")
     const job = jobById(r.jobId)!
+    allocationGate(r.jobId, ctx.role)
     // The warranty accrual failed on a missing determination row: it succeeds only after matrix v14 is released (WF-16).
     if (r.jobId === "JOB-07" && r.entityId === "LE-TBD-10" && d.instances.find((i) => i.id === "APR-TBD-5019")?.outcome !== "Approved") {
       const again = newRun(d, r.jobId, { period: r.period, entityId: r.entityId, attempt: r.attempt + 1, state: "Failed", error: "Same error: release account determination matrix v14 (APR-TBD-5019, WF-16) first, then retry", correlationId: r.correlationId })
       r.retriedBy = again.id
       for (const it of d.preClose) if (it.jobRunId === r.id) it.jobRunId = again.id
+      pageFailure(d, again, job, r.id, ctx.userId)
       return `Retry ${again.id} failed again: account 2610 still has no determination row. Release matrix v14 (APR-TBD-5019) in WF-INBOX, then retry ${again.id}.`
     }
     const amount = r.jobId === "JOB-07" ? 41280 : undefined
@@ -304,9 +421,10 @@ function retryRunInner(runId: string): Result<string> {
 }
 
 export function runNow(runId: string): Result<string> {
-  return mutate((d) => {
+  return mutate((d, ctx) => {
     const r = d.runs.find((x) => x.id === runId)
     if (!r) throw new ProtoError(`${runId} not found.`)
+    allocationGate(r.jobId, ctx.role)
     if (r.state === "Held (dependency)") throw new ProtoError(`Held: ${r.error ?? "a job it depends on has not succeeded"}.`)
     if (r.state !== "Scheduled") throw new ProtoError("Only a scheduled run can be started now.")
     const job = jobById(r.jobId)!
@@ -321,9 +439,10 @@ export function runNow(runId: string): Result<string> {
 }
 
 export function triggerJob(jobId: string, period?: string, entityId?: LegalEntityId): Result<string> {
-  return mutate((d) => {
+  return mutate((d, ctx) => {
     const job = jobById(jobId)
     if (!job) throw new ProtoError(`${jobId} not found.`)
+    allocationGate(jobId, ctx.role)
     for (const dep of job.dependsOn) {
       const last = d.runs.find((x) => x.jobId === dep && (!entityId || x.entityId === entityId || !x.entityId) && (!period || x.period === period || !x.period))
       if (last && last.state === "Failed") throw new ProtoError(`${job.name} depends on ${jobById(dep)?.name}, whose last run failed (${last.id}).`)
@@ -403,6 +522,31 @@ export function discard(msgId: string, reason: string): Result<string> {
   })
 }
 
+/** Reconciliation reports [DOC:p.187 §4]: the interface's control from §3 runs now (the schedule is RECON_SCHEDULE);
+ *  a failure raises an incident per Part D §5 and is never just logged. Exceptions are the interface's failed
+ *  messages that nobody has replayed or discarded. */
+export function runRecon(interfaceId: string): Result<string> {
+  return mutate((d, ctx) => {
+    const f = INTERFACES.find((x) => x.id === interfaceId)
+    if (!f) throw new ProtoError(`${interfaceId} not found.`)
+    const bad = d.messages.filter((m) => m.interfaceId === interfaceId && (m.state === "Dead-lettered" || m.state === "Retrying"))
+    const id = `REC-${interfaceId}-${String(1100 + d.reconSeq++)}`
+    if (!bad.length) {
+      d.recon.unshift({ id, interfaceId, at: NOW, by: ctx.userId, result: "Clean", exceptions: 0, finding: `Control passed: ${f.reconciliation}` })
+      return `${id}: clean, no exceptions for ${interfaceId}.`
+    }
+    const finding = `${f.reconciliation}: ${bad.length} failed message${bad.length === 1 ? "" : "s"} (${bad.map((m) => m.id).join(", ")})`
+    let inc = d.incidents.find((i) => i.source.id === interfaceId && i.state !== "Resolved")
+    if (!inc) {
+      const sev: Severity = f.financial ? "S2" : "S3"
+      inc = { id: `INC-TBD-${String(d.incSeq++).padStart(4, "0")}`, severity: sev, title: `Reconciliation failed: ${interfaceId} ${f.name}, ${bad.length} exception${bad.length === 1 ? "" : "s"}`, source: { kind: "interface", id: interfaceId }, openedAt: NOW, openedBy: ctx.userId, responseDue: sev === "S2" ? addHours(NOW, 1) : "Queued", state: "Open", onCall: "Plant IT" }
+      d.incidents.unshift(inc)
+    }
+    d.recon.unshift({ id, interfaceId, at: NOW, by: ctx.userId, result: "Exceptions", exceptions: bad.length, finding, incidentId: inc.id })
+    return `${id}: ${bad.length} exception${bad.length === 1 ? "" : "s"}; incident ${inc.id} (${inc.severity}).`
+  })
+}
+
 // ============================================================================ INV-CONFIG-PERIOD
 const needController = (role: Role, what: string) => {
   if (role !== "Controller") throw new ProtoError(`${what} is the Controller's action [DOC:p.42 §9.5].`)
@@ -421,6 +565,8 @@ export function softClose(pid: string): Result<string> {
     if (p.status !== "Open") throw new ProtoError(`${p.month} is ${p.status}; only an Open period can go to Soft Close.`)
     const { soft } = rPer01(d.periods, p.entityId)
     if (soft.length) throw new ProtoError(`R-PER-01: at most one Soft Close period per entity. Hard close ${soft[0].month} first.`)
+    const pendingReopen = d.instances.find((i) => !i.outcome && i.effect?.type === "periodReopen" && d.periods.find((x) => x.id === (i.effect as { periodId: string }).periodId)?.entityId === p.entityId)
+    if (pendingReopen) throw new ProtoError(`R-PER-01: ${pendingReopen.id} would reopen a Hard Closed period of this entity into Soft Close. Decide or recall it before setting ${p.month} to Soft Close, so the entity never has two.`)
     setStatus(p, "Soft Close", ctx)
     p.softClosedAt = NOW
     const nm = nextMonth(p.month)
@@ -494,7 +640,7 @@ export function requestReopen(pid: string, reason: string): Result<string> {
     if (soft.length) throw new ProtoError(`R-PER-01: ${soft[0].month} is already in Soft Close for this entity; hard close it before reopening ${p.month}.`)
     if (!reason.trim()) throw new ProtoError("The reopen reason is mandatory; it is tagged on the audit trail.", "reason")
     const inst = raiseIn(d, ctx, {
-      wfId: "WF-20", kindLabel: "Fiscal period reopen", subject: { loose: { id: p.id, label: `Fiscal period ${p.month}`, route: `/configuration/periods?p=${p.id}` } },
+      wfId: "WF-20", kindLabel: "Fiscal period reopen", subject: { loose: { id: p.id, label: `Fiscal period ${p.month}`, route: `/inventory/configuration/fiscal-periods?p=${p.id}` } },
       title: `Reopen ${p.month} ${p.entityId}: ${reason}`, effect: { type: "periodReopen", periodId: p.id },
     })
     return `${inst.id} raised: Controller, then CFO (two distinct users, in sequence).`
@@ -564,7 +710,7 @@ export function proposeRate(jurisdiction: string, ratePct: number, validFrom: st
     if (!(ratePct >= 0 && ratePct < 30)) throw new ProtoError("Enter a rate between 0 and 30%.", "ratePct")
     if (!validFrom || validFrom < TODAY) throw new ProtoError("Valid from cannot be in the past: posted documents are never restated [DOC:p.46 §11.5].", "validFrom")
     const id = `MR-${String(d.tax.manualRates.length + 1).padStart(2, "0")}`
-    const inst = raiseIn(d, ctx, { wfId: "TAX-RATE", kindLabel: "Manual tax rate change", subject: { loose: { id, label: `Manual rate · ${jurisdiction}`, route: "/configuration/tax?section=rates" } }, title: `${jurisdiction}: ${ratePct}% from ${validFrom} (new dated row)`, steps: ["Controller"], effect: { type: "taxRate", rateId: id }, reading: "AR-18: §11.5 routes manual rate changes to the Controller; the W.4 register has no row for it" })
+    const inst = raiseIn(d, ctx, { wfId: "TAX-RATE", kindLabel: "Manual tax rate change", subject: { loose: { id, label: `Manual rate · ${jurisdiction}`, route: "/inventory/configuration/tax?section=rates" } }, title: `${jurisdiction}: ${ratePct}% from ${validFrom} (new dated row)`, steps: ["Controller"], effect: { type: "taxRate", rateId: id }, reading: "AR-18: §11.5 routes manual rate changes to the Controller; the W.4 register has no row for it" })
     d.tax.manualRates.push({ id, jurisdiction: jurisdiction.trim(), ratePct, validFrom, state: "Pending approval", createdBy: ctx.userId, createdOn: TODAY, requestId: inst.id })
     return `${id} waits for the Controller (${inst.id}).`
   })
@@ -586,7 +732,7 @@ export function proposeTaxAdjustment(id: string): Result<string> {
     const diff = Math.round((r.avalaraTax - r.glTax - r.explained) * 100) / 100
     if (!diff) throw new ProtoError("No unexplained difference.")
     if (r.adjustmentRequestId) throw new ProtoError(`${r.adjustmentRequestId} already covers it.`)
-    const inst = raiseIn(d, ctx, { wfId: "TAX-ADJ", kindLabel: "Tax adjustment JE", subject: { loose: { id: r.id, label: `Tax reconciliation · ${r.month}`, route: "/configuration/tax?section=recon" } }, title: `Tax adjustment JE: ${r.month} ${r.entityId}, unexplained ${diff.toFixed(2)}`, amount: Math.abs(diff), steps: ["Controller"], effect: { type: "taxAdjustment", reconId: r.id }, reading: "AR-18: §11.5 names the Controller; the W.4 register has no row for it" })
+    const inst = raiseIn(d, ctx, { wfId: "TAX-ADJ", kindLabel: "Tax adjustment JE", subject: { loose: { id: r.id, label: `Tax reconciliation · ${r.month}`, route: "/inventory/configuration/tax?section=recon" } }, title: `Tax adjustment JE: ${r.month} ${r.entityId}, unexplained ${diff.toFixed(2)}`, amount: Math.abs(diff), steps: ["Controller"], effect: { type: "taxAdjustment", reconId: r.id }, reading: "AR-18: §11.5 names the Controller; the W.4 register has no row for it" })
     r.adjustmentRequestId = inst.id
     return `${inst.id} raised for the Controller.`
   })
@@ -609,6 +755,51 @@ export function proposeSetting(settingId: string, value: string, effectiveFrom: 
   })
 }
 
-export const W4_IDS = W4.map((w) => w.id)
+/** Number series are maintained under change control like every other register row [DOC:p.276 §15 CFG-CORE]: a change is
+ *  a new effective-dated version, approved by the series owner (AR-30: Controller for gap-free series, Plant IT otherwise). */
+export function proposeSeries(seriesId: string, format: string, next: number, effectiveFrom: string, note: string): Result<string> {
+  return mutate((d, ctx) => {
+    const ns = d.series.find((x) => x.id === seriesId)
+    if (!ns) throw new ProtoError(`${seriesId} not found.`)
+    if (ns.next === 0) throw new ProtoError(`${ns.object} numbers come from ACC (V2.0), which is not in the knowledge base; the series cannot be maintained here.`)
+    if (!format.trim()) throw new ProtoError("Enter the format.", "format")
+    if (!/\{SEQ(:\d+)?\}/.test(format)) throw new ProtoError("The format needs a sequence token such as {SEQ:5}; without it numbers repeat.", "format")
+    if (!Number.isInteger(next) || next < ns.next) throw new ProtoError(`The next number cannot go below ${ns.next}: numbers already issued would repeat.`, "next")
+    if (!effectiveFrom || effectiveFrom <= TODAY) throw new ProtoError("Effective date must be after today; history is never edited in place (C-50).", "effectiveFrom")
+    if (!note.trim()) throw new ProtoError("Say why it changes.", "note")
+    if (ns.changes.some((c) => c.state === "Pending approval")) throw new ProtoError("A change to this series is already waiting for approval.")
+    if (format.trim() === ns.format && next === ns.next) throw new ProtoError("Nothing changes: enter a new format or a higher next number.", "format")
+    const changeId = `CHG-TBD-${String(d.chgSeq++).padStart(4, "0")}`
+    const owner: Role = ns.gapFree ? "Controller" : "Plant IT"
+    const inst = raiseIn(d, ctx, { wfId: "CFG-CHG", kindLabel: "Configuration change", subject: { loose: { id: ns.id, label: `Number series · ${ns.object}`, route: "/configuration/core?section=numbers" } }, title: `${ns.object} series: ${ns.format} next ${ns.next} → ${format.trim()} next ${next}, effective ${effectiveFrom}`, steps: [owner], effect: { type: "seriesChange", seriesId: ns.id, changeId }, reading: "AR-30: number series have no owner in the register; the Controller approves a gap-free series, Plant IT the others" })
+    ns.changes.push({ format: format.trim(), next, effectiveFrom, by: ctx.userId, note, state: "Pending approval", requestId: inst.id, changeId })
+    return `${changeId} raised as ${inst.id} for the ${owner}.`
+  })
+}
+
+export const W4_IDS = W4_ALL.map((w) => w.id)
 export type { DocRef }
 export const asRequestId = (id: string) => id as ApprovalRequestId
+
+// ============================================================================ requests raised by the configuration screens
+/** Raise a configuration request on the admin engine (wfId CFG-CHG) for a subject that lives in the adminCfg slice.
+ *  Returns the request id. The decision is read off the request by the screen (lib/cfg.ts requestState). */
+export function raiseCfg(i: { id: string; label: string; route: string; title: string; steps: Role[]; kindLabel?: string; reading: string; amount?: number }): Result<string> {
+  return mutate((d, ctx) => raiseIn(d, ctx, { wfId: "CFG-CHG", kindLabel: i.kindLabel ?? "Configuration change", subject: { loose: { id: i.id, label: i.label, route: i.route } }, title: i.title, steps: i.steps, amount: i.amount, reading: i.reading }).id)
+}
+
+/** SoD exception request: CFO approval with an expiry date [DOC:p.188 C §3; W.4 WF-26]. The grant is Active only once approved. */
+export function requestSod(input: { userId: UserId; grant: string; expires: string; reason: string }): Result<string> {
+  return mutate((d, ctx) => {
+    if (!input.grant.trim()) throw new ProtoError("Name the toxic combination the user needs.", "grant")
+    if (!input.expires || input.expires <= TODAY) throw new ProtoError("An exception needs an expiry date after today; it cannot be open-ended.", "expires")
+    if (input.expires > addDays(TODAY, 180)) throw new ProtoError("Design limit: an exception runs 180 days at most; renew it with a new request.", "expires")
+    if (input.reason.trim().length < 20) throw new ProtoError("Justify the exception in at least 20 characters.", "reason")
+    if (d.sod.some((x) => x.user === input.userId && x.grant === input.grant && x.state !== "Expired")) throw new ProtoError("This user already has an open or active exception for this combination.")
+    const id = `SOD-TBD-${String(d.sod.length + 2).padStart(3, "0")}`
+    const inst = raiseIn(d, ctx, { wfId: "WF-26", kindLabel: "SoD exception grant", subject: { loose: { id, label: "SoD exception", route: "/configuration/access-recertification?queue=sod" } }, title: `${userName(input.userId)}: ${input.grant}, expires ${input.expires}. ${input.reason}`, effect: { type: "sodGrant", sodId: id } })
+    d.sod.push({ id, user: input.userId, grant: input.grant, expires: input.expires, requestId: inst.id, state: "Pending approval" })
+    return `${id} raised as ${inst.id} for the CFO.`
+  })
+}
+const userName = (id: string) => USERS.find((u) => u.id === id)?.name ?? id

@@ -51,7 +51,7 @@ export interface PlanRevision {
   effectiveFrom: ISODate
   effectiveTo?: ISODate
   sampling: SamplingMethod
-  aql?: { level: string; value: number; switching: boolean; state: "Normal" | "Tightened" | "Reduced" }
+  aql?: { level: string; value: number; switching: boolean; state: "Normal" | "Tightened" | "Reduced"; /** 10 consecutive lots accepted: reduced inspection may be approved by the Quality Manager. */ reduceEligible?: boolean }
   skipLot?: { n: number }
   fixedSize?: number
   characteristics: QtCharacteristic[]
@@ -105,7 +105,9 @@ export interface InspectionLot {
   serials: SerialNo[]
   lotSize: number
   sampleSize: number
-  samplePulled?: { by: UserId; on: ISODate }
+  samplePulled?: { by: UserId; on: ISODate; /** SP-05 reads the inspector badge with the batch. */ badge?: string }
+  /** Skip-lot: a qualified vendor's lot that the plan does not inspect (1 of N is inspected). */
+  skipped?: boolean
   instruments: InstrumentId[]
   results: ResultRow[]
   certificate?: string
@@ -116,6 +118,8 @@ export interface InspectionLot {
   decision?: Decision
   decidedOn?: ISODate
   decidedBy?: UserId
+  /** Conditional pass: Accepted with a restriction note [DOC: Book I Part D terminal QC gate; Part E roles, conditional releases] (QT-R28). */
+  conditional?: { note: string; scope: string; expiresOn?: ISODate; by: UserId; on: ISODate }
   disposition?: Disposition
   ncrId?: NcrId
   deviationId?: DeviationId
@@ -158,7 +162,15 @@ export interface FinalTest {
   qmCountersign?: { by: UserId; on: ISODate }
   ncrId?: NcrId
   disposition?: "Rework" | "Engineering Review" | "Scrap"
+  /** Set only when planning-production has drafted the RWO; this module never invents the number. */
   rwoId?: ReworkOrderId
+  /** Rework requested from planning-production through quality.reworkRequested (README R-4). */
+  rwoRequestedOn?: ISODate
+  /** Engineering Review: the ECR the unit is linked to, or the date a new ECR was requested [DOC:p.87 §4]. */
+  ecrId?: string
+  ecrRequestedOn?: ISODate
+  /** Scrap needs the Controller and the Engineering Manager [DOC:p.87 §4]; the result is Fail only after both. */
+  scrapApprovals?: { role: Role; by: UserId; on: ISODate }[]
   activity: Activity[]
 }
 
@@ -219,6 +231,8 @@ export interface QtScar extends Scar {
   respondedOn?: ISODate
   closedOn?: ISODate
   recovery?: { amount: number; creditNote?: string }
+  /** A SCAR can also start from an RMA failure attributable to a component supplier [DOC:p.89 §6]. */
+  rmaId?: RmaId
   escalations: { on: ISODate; text: string }[]
   activity: Activity[]
 }
@@ -245,7 +259,15 @@ export interface QtInstrument extends Omit<Instrument, "events"> {
 
 // ------------------------------------------------------------------ deviations and waivers
 /** No status list in the specification (OQ-21); `state` is shown as text. */
-export interface QtDeviation extends Deviation {
+/** Deviation types of the specification [DOC:p.215 Book IV §7.3]. The shared entity still says Deviation / Waiver (README R-7). */
+export type DeviationType = "Use-As-Is (waiver)" | "Temporary Process Deviation" | "Customer-Approved Concession"
+export const DEVIATION_TYPES: DeviationType[] = ["Use-As-Is (waiver)", "Temporary Process Deviation", "Customer-Approved Concession"]
+export interface QtDeviation extends Omit<Deviation, "type"> {
+  type: DeviationType
+  /** The customer flag or contract requires customer approval evidence before approval. */
+  customerRequired?: boolean
+  /** Value impact in USD; above the threshold the Controller approves as well (QT-R27). */
+  valueImpact?: number
   title: string
   origin: "Inspection failure" | "Supplier deviation request"
   characteristic: string
@@ -355,6 +377,8 @@ export interface Printer {
   labelTypes: string[]
   registeredOn: ISODate
   active: boolean
+  /** design: live state of the device for the failed-print queue (retry or redirect). */
+  health?: "Online" | "Offline" | "Paper out" | "Ribbon out" | "Head open"
 }
 export interface LabelTemplate {
   id: string
@@ -376,6 +400,13 @@ export interface Reprint {
   by: UserId
   on: string
   reason: string
+  /** Governance fields (FX-BC-REPRINT) [DOC:p.97 Part F]: reason code; serial and nameplate reprints need Quality approval; reprints carry DUPLICATE except location labels. */
+  reasonCode?: string
+  kind?: string
+  watermark?: boolean
+  state?: "Printed" | "Awaiting Quality approval" | "Rejected"
+  approvedBy?: UserId
+  approvedOn?: string
 }
 export interface ScanException {
   id: string
@@ -387,6 +418,32 @@ export interface ScanException {
   conflict: string
   resolvedOn?: ISODate
   resolution?: string
+  /** Conflict card (FX-BC-EXCEPTIONS): what the offline device queued against what the system holds now. */
+  queued?: string
+  current?: string
+  decision?: "Accepted" | "Rejected" | "Re-posted"
+  supervisorId?: UserId
+  reason?: string
 }
 
 export type { RecallStage }
+
+/** Auto-Accept-with-Warning events of the no-plan policy [DOC:p.35 §6.5]: shown on the quality dashboard exception panel. */
+export interface AutoAcceptWarning {
+  id: string
+  on: ISODate
+  gate: Gate
+  itemId: MaterialId
+  vendorId?: VendorId
+  subject: DocRef
+  batchId?: BatchId
+  text: string
+  acknowledgedBy?: UserId
+}
+export interface VendorLots {
+  vendorId: string
+  lots: number
+  accepted: number
+  /** Consecutive accepted lots with no NCR (skip-lot qualification needs 10 and a rating of 98%). */
+  streak?: number
+}

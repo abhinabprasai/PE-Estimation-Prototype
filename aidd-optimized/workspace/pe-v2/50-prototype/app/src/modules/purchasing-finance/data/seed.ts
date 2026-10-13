@@ -240,6 +240,26 @@ export const SEED_POS: PoRec[] = [
     { sentOn: "2026-07-06", confirmedOn: "2026-07-08", invoice: { no: "KCC-55120", on: "2026-08-12", lines: [{ line: 10, price: 12.1 }] } }),
   po("PO-TBD-0330", "Calibration services, test lab instruments", "Sent", "VEN-TBD-0114", "2026-10-07",
     [[10, "NSTK-TBD-CAL", 1, 7900, "Open", "2026-10-31"]], { sentOn: "2026-10-08", buyerId: BUYER_B }),
+  // ---- feature-list rows: price source and stale basis (PUR-PO-001/2), E-MM-32, E-MM-35, subcontract variant (FX-PUR-SUBCON)
+  po("PO-TBD-0291", "Accessory crates, 2025 shipment batch", "Matched/Closed", "VEN-TBD-0109", "2025-07-14",
+    [[10, "PACK-TBD-CRATE", 120, 172, "Closed", "2025-08-18", { confirmedDate: "2025-08-15" }]], { sentOn: "2025-07-14", confirmedOn: "2025-07-16", invoice: { no: "CCP-25-0912", on: "2025-08-28", lines: [{ line: 10, price: 172 }] } }),
+  po("PO-TBD-0334", "Accessory crates for Q4 pad-mount shipments", "Draft", "VEN-TBD-0109", "2026-10-07",
+    [[10, "PACK-TBD-CRATE", 90, 172, "Open", "2026-11-09"]], { qualityClauses: [], buyerId: BUYER_B }),
+  po("PO-TBD-0335", "Copper foil, overflow lot (no price basis yet)", "Draft", "VEN-TBD-0125", "2026-10-08",
+    [[10, "RAW-TBD-FOIL", 3000, 0, "Open", "2026-11-23"]], { currency: "CAD", qualityClauses: ["Q1"], buyerId: BUYER_A }),
+  po("PO-TBD-0336", "Heavy skids for 20 MVA shipment", "Draft", "VEN-TBD-0109", "2026-10-09",
+    [[10, "PACK-TBD-SKID", 4, 420, "Open", "2026-12-04"]], { buyerId: BUYER_B }),
+  po("PO-TBD-0337", "LV bushings 15 kV, replenishment (Restricted vendor)", "Draft", "VEN-TBD-0112", "2026-10-09",
+    [[10, "RAW-TBD-BSH015", 20, 1240, "Open", "2026-12-01", { stpId: "STP-000305" }]], { buyerId: BUYER_B }),
+  po("PO-TBD-0331", "Subcontract: hot-dip galvanizing, 2,500 kVA cover plates", "Confirmed", "VEN-TBD-0106", "2026-09-16",
+    [[10, "SERV-TBD-GALV", 6000, 0.6, "Open", "2026-10-22", { confirmedDate: "2026-10-22", peg: { type: "salesOrder", id: "SO-2026-00393" } }]],
+    { type: "Subcontract", sentOn: "2026-09-17", confirmedOn: "2026-09-19", buyerId: BUYER_A, provided: [{ itemId: "RAW-TBD-PLATE", qty: 6000, issued: true }] }),
+  po("PO-TBD-0332", "Subcontract: hot-dip galvanizing, radiator headers batch 2", "Partially Received", "VEN-TBD-0106", "2026-08-31",
+    [[10, "SERV-TBD-GALV", 12000, 0.62, "Partial", "2026-10-05", { received: 6000, confirmedDate: "2026-10-05", schedules: [{ no: 10, qty: 6000, date: "2026-09-21" }, { no: 20, qty: 6000, date: "2026-10-05" }] }]],
+    { type: "Subcontract", sentOn: "2026-09-01", confirmedOn: "2026-09-03", buyerId: BUYER_A, provided: [{ itemId: "RAW-TBD-PLATE", qty: 14000, issued: true }] }),
+  po("PO-TBD-0333", "Subcontract: hot-dip galvanizing, July run", "Matched/Closed", "VEN-TBD-0106", "2026-07-08",
+    [[10, "SERV-TBD-GALV", 9000, 0.6, "Closed", "2026-08-03", { confirmedDate: "2026-08-03" }]],
+    { type: "Subcontract", sentOn: "2026-07-08", confirmedOn: "2026-07-10", buyerId: BUYER_A, provided: [{ itemId: "RAW-TBD-PLATE", qty: 9500, issued: true }], invoice: { no: "PPF-26-0711", on: "2026-08-14", lines: [{ line: 10, price: 0.6 }] } }),
 ]
 
 export const SEED_GRNS: GrnRec[] = [
@@ -250,6 +270,9 @@ export const SEED_GRNS: GrnRec[] = [
   { id: "GRN-TBD-0324", poId: "PO-TBD-0324", on: "2026-08-31", batches: ["BAT-TBD-O0831"], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "RAW-TBD-OIL", qty: 30000, price: 1.95, std: 1.92 }] },
   { id: "GRN-TBD-0325", poId: "PO-TBD-0325", on: "2026-09-14", batches: ["BAT-TBD-C0914"], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "RAW-TBD-CTC", qty: 16000, price: 13.85, std: 13.4 }] },
   { id: "GRN-TBD-0326", poId: "PO-TBD-0326", on: "2026-09-29", batches: ["BAT-TBD-T0929"], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "CONS-TBD-PAINT", qty: 800, price: 23.4, std: 22.5 }] },
+  { id: "GRN-TBD-0291", poId: "PO-TBD-0291", on: "2025-08-15", batches: [], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "PACK-TBD-CRATE", qty: 120, price: 172, std: 185 }] },
+  { id: "GRN-TBD-0332", poId: "PO-TBD-0332", on: "2026-09-24", batches: [], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "SERV-TBD-GALV", qty: 6000, price: 0.62, std: 0.6 }] },
+  { id: "GRN-TBD-0333", poId: "PO-TBD-0333", on: "2026-08-04", batches: [], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "SERV-TBD-GALV", qty: 9000, price: 0.6, std: 0.6 }] },
   { id: "GRN-TBD-0329", poId: "PO-TBD-0329", on: "2026-08-03", batches: ["BAT-TBD-F0803"], serials: [], postedBy: "USR-TBD-017", lines: [{ poLine: 10, itemId: "RAW-TBD-FOIL", qty: 7000, price: 12.1, std: 12.1 }] },
 ]
 
@@ -411,6 +434,15 @@ export const SEED_AGREEMENTS: AgreementRec[] = [
     attachment: "CELSJ-cadre-2026.pdf", rows: [cp("CUS-TBD-0044", "FIN-TBD-1000PM", 55900, "2026-02-01", "2027-01-31")] },
 ]
 
+SEED_AGREEMENTS.push(
+  { id: "AGR-TBD-0027", customerId: "CUS-TBD-0027", name: "Lakeshore Municipal framework 2027 (draft)", validFrom: "2027-01-01", validTo: "2027-12-31", scope: "Pad-mount 1,000 kVA and pole-mount 167 kVA", contractTerm: "Fixed at Order", state: "Draft",
+    attachment: "", baseListId: "PL-PRC-TBD-US27", rebateTiers: [{ aboveAmount: 500000, pct: 1 }], history: [{ on: "2026-10-05", by: "USR-TBD-006", text: "Draft created from the 2027 wholesale list" }],
+    rows: [cp("CUS-TBD-0027", "FIN-TBD-1000PM", 41000, "2027-01-01", "2027-12-31"), cp("CUS-TBD-0027", "FIN-TBD-0167PL", 6980, "2027-01-01", "2027-12-31")] },
+  { id: "AGR-TBD-0012", customerId: "CUS-TBD-0041", name: "Granite Peak supply 2025", validFrom: "2025-01-01", validTo: "2025-12-31", scope: "Pad-mount families", contractTerm: "Fixed at Order", state: "Expired",
+    attachment: "GPMO-supply-2025.pdf", rebate: "None", baseListId: "PL-PRC-TBD-US25", discountPct: 3, history: [{ on: "2025-01-02", by: "USR-TBD-006", text: "Activated" }, { on: "2026-01-01", by: "USR-TBD-006", text: "Expired at end of validity" }],
+    rows: [cp("CUS-TBD-0041", "FIN-TBD-1000PM", 40600, "2025-01-01", "2025-12-31")] },
+)
+
 export const SEED_SURCHARGES: SurchargeRec[] = [
   { id: "SUR-TBD-001", commodity: "Copper", index: "COMEX copper $/lb", baseValue: 4.1, shareOfPricePct: 100, passThroughPct: 100, shipDateAdjusted: false, family: "Pad-mount 2,500 kVA", itemIds: ["FIN-TBD-2500PM"], contentPerUnit: 1850, contentUnit: "lb", validFrom: "2026-01-01", maintainedBy: PRICING },
   { id: "SUR-TBD-002", commodity: "Copper", index: "COMEX copper $/lb", baseValue: 4.1, shareOfPricePct: 100, passThroughPct: 100, shipDateAdjusted: false, family: "Pad-mount 1,000 kVA", itemIds: ["FIN-TBD-1000PM"], contentPerUnit: 980, contentUnit: "lb", validFrom: "2026-01-01", maintainedBy: PRICING },
@@ -431,6 +463,12 @@ export const SEED_ADDED_CCS: AddedCostCenter[] = [
   { id: "CC-1450", name: "Legacy Coil Repair", parentId: "CC-1000", postable: true, entityId: "LE-TBD-10", defaultProfitCenterId: "PC-400", status: "Inactive", validFrom: "2019-01-01", validTo: "2025-12-31" },
 ]
 const skf = (cc: CostCenterId, headcount: number, sqft: number, machineHours: number, laborHours: number, revenueShare: number): SkfValue => ({ costCenterId: cc, period: "2026-Q3", headcount, sqft, machineHours, laborHours, revenueShare })
+/** Cost center managers (design values; the shared master names none). Used by CO-R1..R4 scoping and the owner column. */
+export const SEED_MANAGERS: Record<string, UserId> = {
+  "CC-1100": "USR-TBD-031", "CC-1150": "USR-TBD-031", "CC-1200": "USR-TBD-031", "CC-1250": "USR-TBD-031", "CC-1300": "USR-TBD-031", "CC-1400": "USR-TBD-031", "CC-1600": "USR-TBD-031",
+  "CC-1500": "USR-TBD-037", "CC-1700": "USR-TBD-016", "CC-2000": "USR-TBD-021", "CC-3000": "USR-TBD-024", "CC-4000": "USR-TBD-041", "CC-5000": "USR-TBD-007",
+  "CC-9100": "USR-TBD-044", "CC-9200": "USR-TBD-009", "CC-9300": "USR-TBD-043", "CC-9500": "USR-TBD-043",
+}
 export const SEED_SKF: SkfValue[] = [
   skf("CC-1100", 14, 18000, 4200, 6400, 0), skf("CC-1150", 22, 26000, 1800, 10200, 0), skf("CC-1200", 31, 22000, 5100, 14600, 0), skf("CC-1250", 4, 6000, 6200, 1900, 0),
   skf("CC-1300", 26, 24000, 900, 12100, 0), skf("CC-1400", 18, 16000, 300, 8300, 0), skf("CC-1500", 11, 9000, 1200, 4800, 0), skf("CC-1600", 7, 8000, 400, 3100, 0),
@@ -459,6 +497,8 @@ export const SENDER_BALANCES: Record<string, Record<string, number>> = {
 let rnd = 20261009
 const rand = () => ((rnd = (rnd * 1103515245 + 12345) % 2147483648) / 2147483648)
 const PERIODS = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]
+/** CVA-R1 shows 13 period columns [DOC:p.40 §8.3]: the current month and the twelve before it. */
+export const VAR_PERIODS = ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", ...PERIODS]
 let jeSeq = 41000
 const je = (): `JE-${string}` => `JE-TBD-${++jeSeq}`
 const vr = (type: VarianceType, period: string, day: number, variance: number, stdBasis: number, qty: number, source: VarianceRow["source"], cc: CostCenterId, pc: VarianceRow["profitCenterId"], extra: Partial<VarianceRow> = {}): VarianceRow => ({
@@ -488,7 +528,7 @@ function buildVariances(): VarianceRow[] {
   const woItems: [MaterialId, number][] = [["FIN-TBD-2500PM", 61200], ["FIN-TBD-1000PM", 32640], ["FIN-TBD-0167PL", 5410], ["FIN-TBD-5000SS", 149900]]
   const wcs: [WorkCenterId, CostCenterId][] = [["WC-200", "CC-1200"], ["WC-210", "CC-1200"], ["WC-300", "CC-1300"], ["WC-400", "CC-1400"], ["WC-100", "CC-1100"], ["WC-050", "CC-1150"]]
   let woSeq = 250
-  for (const p of PERIODS)
+  for (const p of VAR_PERIODS)
     for (const [item, s] of woItems) {
       const n = item === "FIN-TBD-0167PL" ? 3 : 2
       for (let k = 0; k < n; k++) {
@@ -505,7 +545,7 @@ function buildVariances(): VarianceRow[] {
   // PPV / IPV volume on raw materials each period
   const raws: [MaterialId, VendorId, number, number][] = [["RAW-TBD-CTC", "VEN-TBD-0102", 13.4, 9000], ["RAW-TBD-CRGO23", "VEN-TBD-0101", 3.85, 18000], ["RAW-TBD-OIL", "VEN-TBD-0105", 1.92, 25000], ["RAW-TBD-FOIL", "VEN-TBD-0102", 12.1, 5000], ["RAW-TBD-KRAFT", "VEN-TBD-0107", 8.6, 3000], ["RAW-TBD-RAD", "VEN-TBD-0108", 2380, 20]]
   let grnSeq = 200
-  for (const p of PERIODS.slice(0, 5))
+  for (const p of VAR_PERIODS.slice(0, -1))
     for (const [item, ven, s, q] of raws) {
       const price = s * (1 + (rand() * 0.06 - 0.02))
       const g = { type: "grn" as const, id: `GRN-TBD-0${++grnSeq}` }
@@ -514,7 +554,7 @@ function buildVariances(): VarianceRow[] {
       out.push(vr("IPV", p, 20 + Math.floor(rand() * 8), price * q * (rand() * 0.008 - 0.002), price * q, q, g, "CC-2000", pc, { itemId: item, vendorId: ven }))
     }
   // SPV: subcontract galvanizing and tank fabrication
-  for (const p of PERIODS) out.push(vr("SPV", p, 18, 9000 * (rand() * 0.08 - 0.02), 9000, 15000, { type: "purchaseOrder", id: "PO-TBD-0320" }, "CC-1150", "PC-200", { itemId: "SERV-TBD-GALV", vendorId: "VEN-TBD-0106" }))
+  for (const p of VAR_PERIODS) out.push(vr("SPV", p, 18, 9000 * (rand() * 0.08 - 0.02), 9000, 15000, { type: "purchaseOrder", id: "PO-TBD-0320" }, "CC-1150", "PC-200", { itemId: "SERV-TBD-GALV", vendorId: "VEN-TBD-0106" }))
   // RVV: annual costing run release 2026-01 is outside the six periods; a mid-year release in June
   out.push(vr("RVV", "2026-06", 30, 4280, 182600, 21400, { type: "material", id: "RAW-TBD-CTC" }, "CC-2000", "PC-200", { itemId: "RAW-TBD-CTC" }))
   out.push(vr("RVV", "2026-06", 30, -1910, 61200, 4, { type: "material", id: "FIN-TBD-2500PM" }, "CC-2000", "PC-100", { itemId: "FIN-TBD-2500PM" }))

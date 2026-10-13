@@ -8,7 +8,9 @@ import { useMemo, useState } from "react"
 import { Link, useParams, useSearchParams } from "react-router"
 import { FilePen, PackageCheck, Plus, Receipt, Send, ShieldAlert, Truck } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DetailPage, DialogShell, ListPage } from "@/components/templates"
 import { ApprovalButton, Chip, EmptyState, KV, PostingPreview, RulesPanel, ScanField, StatusBadge, type Column } from "@/components/patterns"
@@ -16,9 +18,13 @@ import { routeApproval, THRESHOLDS } from "@/data/domain"
 import { TODAY } from "@/data/shared"
 import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { useRole, useSlice } from "@/store"
-import { cancelPo, confirmPo, expedite, issueProvided, matchInvoice, overrideRestricted, poBlocker, postGrn, revisePo, sendPo, shortClose } from "../data/actions"
-import { isUnconfirmedOverdue, itemText, material, OPEN_PO, poTotal, stdOf, vendorEligibility, vendorName, vendorOf } from "../data/logic"
+import { cancelPo, confirmPo, expedite, issueProvided, matchInvoice, poBlocker, postGrn, revisePo, sendPo, shortClose } from "../data/actions"
+import { deviationNote, isUnconfirmedOverdue, itemText, material, OPEN_PO, poTotal, priceDeviations, stdOf, vendorEligibility, vendorName, vendorOf } from "../data/logic"
+import { CLAUSES, lineSource, scheduleStatus, type PriceSourceInfo } from "../data/xlogic"
+import { editSchedule, setPoClauses } from "../data/xactions"
 import type { PoRec } from "../data/types"
+import { PoLineShortCloseDialog, RestrictedVendorOverrideDialog } from "../components/PoLineDialogs"
+import { useNineStates, writeProps, type NineState, type NineStates } from "../components/states"
 import { CsvButton, DocLink, OtherPostingPreview, Reading, report, Section, TextState, useDemoState } from "../components/common"
 import { DetailFrame, ItemLink, RecLink, SelectField, TextField, userName, VendorLink } from "../components/bits"
 
@@ -135,53 +141,61 @@ function LadderTable({ amount }: { amount?: number }) {
 export function PoDetail() {
   const { id = "" } = useParams()
   const s = useSlice("purchasingFinance")
-  const st = useDemoState("PUR-PO-002")
+  const st = useNineStates("PUR-PO-002", { writers: "the Buyer or Purchasing Manager", degraded: "Receipt quantities come from the inventory service, which answered slowly: received quantities and schedule states may be up to an hour old." })
   const p = s.purchaseOrders.find((x) => x.id === id)
   return (
-    <DetailFrame loading={st.loading} error={st.error} onRetry={st.retry} found={!!p} title={id} screenId="PUR-PO-001/2" back={{ label: "Purchase orders", to: "/purchasing/orders" }}>
-      {() => <PoBody p={p!} menu={st.menu} />}
+    <DetailFrame loading={st.loading} error={undefined} onRetry={st.retry} found={!!p} title={id} screenId="PUR-PO-001/2" back={{ label: "Purchase orders", to: "/purchasing/orders" }}>
+      {() => <PoBody p={p!} st={st} />}
     </DetailFrame>
   )
 }
 
-function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
+function PoBody({ p, st }: { p: PoRec; st: NineStates }) {
+  const menu = st.menu
   const s = useSlice("purchasingFinance")
   const [role] = useRole()
-  const [dlg, setDlg] = useState<null | "send" | "confirm" | "revise" | "cancel" | "short" | "override" | "grn" | "match" | "provide" | "expedite">(null)
+  const [dlg, setDlg] = useState<null | "send" | "confirm" | "revise" | "cancel" | "short" | "override" | "grn" | "match" | "provide" | "expedite" | "lineClose" | "schedule" | "clauses">(null)
+    const [schedLine, setSchedLine] = useState<number>(10)
   const total = poTotal(p)
   const v = vendorOf(s, p.vendorId)
   const el = vendorEligibility(v)
   const blocker = poBlocker(s, p)
+  const dev = priceDeviations(s, p)
+  const devNote = deviationNote(dev)
   const llr = p.llrId ? s.llrs.find((l) => l.id === p.llrId) : undefined
   const route = routeApproval("PO approval", { amount: total })
   const grns = s.grns.filter((g) => g.poId === p.id)
   const terminal = p.status === "Matched/Closed" || p.status === "Cancelled"
+  const sources = p.lines.map((l) => ({ l, src: lineSource(s, p, l) }))
+  const stale = sources.filter((x) => x.src.stale && x.l.status !== "Cancelled")
+  const stps = [...new Set(p.lines.filter((l) => l.status !== "Cancelled" && l.stpId).map((l) => l.stpId!))].map((id) => s.stps.find((t) => t.id === id)).filter((t): t is NonNullable<typeof t> => !!t)
+  const wr = writeProps(st)
 
   let primary: React.ReactNode = null
   if (p.status === "Draft")
-    primary = <ApprovalButton kind="PO approval" subject={{ type: "purchaseOrder", id: p.id }} title={`${p.id} ${vendorName(s, p.vendorId)}: ${p.title}`} amount={total} currency={p.currency} variant="default" disabled={!!blocker} disabledReason={blocker ?? undefined} stay />
-  else if (p.status === "In Approval") primary = <ApprovalButton kind="PO approval" subject={{ type: "purchaseOrder", id: p.id }} title={p.title} amount={total} currency={p.currency} variant="default" stay />
+    primary = <ApprovalButton kind="PO approval" subject={{ type: "purchaseOrder", id: p.id }} title={`${p.id} ${vendorName(s, p.vendorId)}: ${p.title}${devNote ? ` · ${devNote}` : ""}`} amount={total} currency={p.currency} variant="default" disabled={!!blocker || !!st.blockReason} disabledReason={blocker ?? st.blockReason ?? undefined} stay />
+  else if (p.status === "In Approval") primary = <ApprovalButton kind="PO approval" subject={{ type: "purchaseOrder", id: p.id }} title={p.title} amount={total} currency={p.currency} variant="default" disabled={!!st.blockReason} disabledReason={st.blockReason ?? undefined} stay />
   else if (p.status === "Approved")
     primary = (
-      <Button onClick={() => setDlg("send")}>
+      <Button {...wr} onClick={() => setDlg("send")}>
         <Send aria-hidden="true" /> Send to vendor
       </Button>
     )
   else if (p.status === "Sent" || (p.changePending && (p.status === "Confirmed" || p.status === "Partially Received")))
     primary = (
-      <Button onClick={() => setDlg("confirm")}>
+      <Button {...wr} onClick={() => setDlg("confirm")}>
         <PackageCheck aria-hidden="true" /> Capture confirmation
       </Button>
     )
   else if (p.status === "Confirmed" || p.status === "Partially Received")
     primary = (
-      <Button onClick={() => setDlg("grn")}>
+      <Button {...wr} onClick={() => setDlg("grn")}>
         <Truck aria-hidden="true" /> Post goods receipt
       </Button>
     )
   else if (p.status === "Received")
     primary = (
-      <Button onClick={() => setDlg("match")}>
+      <Button {...wr} onClick={() => setDlg("match")}>
         <Receipt aria-hidden="true" /> Match invoice
       </Button>
     )
@@ -190,32 +204,37 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
     <>
       {menu}
       {!terminal && p.status !== "Received" && (
-        <Button variant="outline" onClick={() => setDlg("revise")}>
+        <Button variant="outline" {...wr} onClick={() => setDlg("revise")}>
           <FilePen aria-hidden="true" /> {p.status === "Draft" ? "Edit lines" : "Revise"}
         </Button>
       )}
       {OPEN_PO(p) && !["Draft", "In Approval", "Approved"].includes(p.status) && (
-        <Button variant="outline" onClick={() => setDlg("expedite")}>
+        <Button variant="outline" {...wr} onClick={() => setDlg("expedite")}>
           Expedite
         </Button>
       )}
       {el.needsOverride && !p.restrictedOverride && !terminal && (
-        <Button variant="outline" onClick={() => setDlg("override")}>
+        <Button variant="outline" {...wr} onClick={() => setDlg("override")}>
           <ShieldAlert aria-hidden="true" /> Restricted override
         </Button>
       )}
       {p.type === "Subcontract" && p.provided?.some((x) => !x.issued) && ["Sent", "Confirmed", "Partially Received"].includes(p.status) && (
-        <Button variant="outline" onClick={() => setDlg("provide")}>
+        <Button variant="outline" {...wr} onClick={() => setDlg("provide")}>
           Issue provided components
         </Button>
       )}
+      {p.status === "Partially Received" && p.lines.some((l) => l.received > l.invoiced && l.status !== "Cancelled") && (
+        <Button variant="outline" {...wr} onClick={() => setDlg("match")}>
+          <Receipt aria-hidden="true" /> Match invoice
+        </Button>
+      )}
       {p.status === "Partially Received" && (
-        <Button variant="outline" onClick={() => setDlg("short")}>
+        <Button variant="outline" {...wr} onClick={() => setDlg("short")}>
           Short-close
         </Button>
       )}
       {!terminal && p.status !== "Received" && !p.lines.some((l) => l.received > 0) && (
-        <Button variant="ghost" onClick={() => setDlg("cancel")}>
+        <Button variant="ghost" {...wr} onClick={() => setDlg("cancel")}>
           Cancel PO
         </Button>
       )}
@@ -224,6 +243,7 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
 
   return (
     <>
+      {st.banner}
       <DetailPage
         header={{
           screenId: "PUR-PO-001/2",
@@ -232,7 +252,12 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
           chips: (
             <>
               {p.changePending && <Chip kind="change">Change Pending</Chip>}
+              {dev.length > 0 && <Chip kind="flag" note={`${devNote}. The approval request carries this as a note (Book I G §5.2; reading OQ-PF-19 for the basis).`}>Price deviation over {THRESHOLDS.poPriceDeviationPct}%</Chip>}
               {p.llrId && <Chip kind="flag" note="PO lines carry Long-Lead: Preliminary Revision (Book IV §3.2)">Long-Lead: Preliminary Revision</Chip>}
+              {stale.length > 0 && <Chip kind="flag" note="A last-PO price older than 12 months is a stale basis: confirm the price with the vendor or an info record before approval (Book II §7.3).">Price basis stale</Chip>}
+              {stps.map((t) => (
+                <Chip key={t.id} kind="design" note={`Supplier technical package ${t.id} version ${t.version} governs ${p.lines.filter((l) => l.stpId === t.id).length} line(s)`}>{t.id} v{t.version}</Chip>
+              ))}
               {p.revision > 0 && <Chip kind="design" note="Revision number of the PO change order">Rev {p.revision}</Chip>}
               {isUnconfirmedOverdue(p) && <Chip kind="flag">Unconfirmed more than 3 business days</Chip>}
               {p.status === "Draft" && p.activity.some((a) => /Rejected/.test(a.text)) && <Reading id="OQ-PF-7" />}
@@ -277,7 +302,29 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
                     Restricted-vendor override by {userName(p.restrictedOverride.by)} on {fmtDate(p.restrictedOverride.on)}: {p.restrictedOverride.reason}
                   </p>
                 )}
-                <LinesTable p={p} />
+                {stale.length > 0 && (
+                  <p role="status" className="rounded-md border border-status-exception px-4 py-2 text-sm">
+                    <span className="font-semibold">Stale price basis: </span>
+                    {stale.map((x) => `line ${x.l.no} (${x.src.text})`).join("; ")}. The approver sees this flag with the request.
+                  </p>
+                )}
+                <LinesTable p={p} editable={!terminal && !st.blockReason} onSchedule={(n) => { setSchedLine(n); setDlg("schedule") }} onClose={(n) => { setSchedLine(n); setDlg("lineClose") }} />
+                <Section
+                  title="Quality clauses"
+                  action={p.status === "Draft" ? <Button size="sm" variant="outline" {...wr} onClick={() => setDlg("clauses")}>Edit clauses</Button> : undefined}
+                >
+                  {p.qualityClauses.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No quality clauses on this PO.{p.status === "Draft" ? " Add them before approval; after Sent a change is a revision." : ""}</p>
+                  ) : (
+                    <ul className="flex flex-col gap-1 text-sm">
+                      {p.qualityClauses.map((c) => (
+                        <li key={c}>
+                          <span className="font-semibold">{c}</span> {CLAUSES[c]?.name}: <span className="text-muted-foreground">{CLAUSES[c]?.detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Section>
                 {p.type === "Subcontract" && p.provided && (
                   <Section title="Provided components (subcontract)">
                     <ul className="text-sm">
@@ -356,11 +403,11 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
                     </TableBody>
                   </Table>
                 )}
-                {p.invoice && (
-                  <p className="text-sm">
-                    Vendor invoice <span className="font-mono">{p.invoice.no}</span> matched on {fmtDate(p.invoice.on)}: {p.invoice.lines.map((l) => `line ${l.line} at ${fmtMoney(l.price, p.currency)}`).join("; ")}.
+                {(p.invoices ?? (p.invoice ? [{ ...p.invoice, lines: p.invoice.lines.map((l) => ({ ...l, qty: 0 })) }] : [])).map((iv) => (
+                  <p key={iv.no} className="text-sm">
+                    Vendor invoice <span className="font-mono">{iv.no}</span> matched on {fmtDate(iv.on)}: {iv.lines.map((l) => `line ${l.line}${l.qty ? ` x ${l.qty}` : ""} at ${fmtMoney(l.price, p.currency)}`).join("; ")}.
                   </p>
-                )}
+                ))}
                 <p className="text-sm text-muted-foreground">
                   GRN and three-way match belong to INV and ACC (ASM-EXT-1); they are shown here so the PO reaches Received and Matched/Closed. Variances land on the{" "}
                   <RecLink to="/inventory/valuation/cost-variance">Cost Variance Workbench</RecLink>.
@@ -446,18 +493,21 @@ function PoBody({ p, menu }: { p: PoRec; menu: React.ReactNode }) {
               ["C-31", "No PO before vendor onboarding is Active", "[DOC:p.101 §2.1]"],
               ["C-32", "Restricted needs a Purchasing Manager override; Disqualified hard-blocks", "[DOC:p.101 §2.1]"],
               ["C-23", "Receipt is blocked when the vendor never acknowledged the STP (E-DTS-04)", "[DOC:p.209 §3.3]"],
+              ["G §5.2", `A unit price deviating more than ${THRESHOLDS.poPriceDeviationPct}% from the AVL basis flags an approval note`, "reading OQ-PF-19 for the basis"],
+              ["E-PUR-02", "A QI-critical item goes only to a Qualified AVL vendor", "reading OQ-PF-18"],
+              ["E-DTS-01", "A design at Concept or Preliminary / RFQ Package allows RFQs but blocks POs", "[DOC:p.208 §3.1]"],
               ["G §5.3", `Revision re-approval above ${THRESHOLDS.poPriceDeviationPct}% value increase or a higher ladder band`, "reading OQ-PF-5"],
               ["Acting", `You act as ${role}`, "role switcher"],
             ]}
           />
         }
       />
-      <PoDialogs p={p} dlg={dlg} setDlg={setDlg} total={total} />
+      <PoDialogs p={p} dlg={dlg} setDlg={setDlg} total={total} line={schedLine} state={st.state} />
     </>
   )
 }
 
-function LinesTable({ p }: { p: PoRec }) {
+function LinesTable({ p, editable, onSchedule, onClose }: { p: PoRec; editable: boolean; onSchedule: (no: number) => void; onClose: (no: number) => void }) {
   const s = useSlice("purchasingFinance")
   return (
     <Table>
@@ -467,7 +517,8 @@ function LinesTable({ p }: { p: PoRec }) {
           <TableHead>Item</TableHead>
           <TableHead className="text-right">Qty</TableHead>
           <TableHead className="text-right">Unit price</TableHead>
-          <TableHead>Schedules</TableHead>
+          <TableHead>Price source</TableHead>
+          <TableHead>Delivery schedule</TableHead>
           <TableHead>Confirmed</TableHead>
           <TableHead className="text-right">Received</TableHead>
           <TableHead>STP</TableHead>
@@ -495,18 +546,27 @@ function LinesTable({ p }: { p: PoRec }) {
               </TableCell>
               <TableCell className="tabular text-right">{fmtMoney(l.price, p.currency)}</TableCell>
               <TableCell>
-                {l.schedules.map((x) => (
+                <PriceSourceBadge info={lineSource(s, p, l)} />
+              </TableCell>
+              <TableCell>
+                {scheduleStatus(l).map((x) => (
                   <div key={x.no} className="tabular text-xs">
-                    {x.no}: {fmtNumber(x.qty)} on {fmtDate(x.date)}
+                    {x.no}: {fmtNumber(x.qty)} on {fmtDate(x.date)} · {x.state}
+                    {x.state === "Partly received" ? ` (${fmtNumber(x.received)} in)` : ""}
                   </div>
                 ))}
+                {editable && l.status !== "Cancelled" && l.status !== "Closed" && (
+                  <Button size="sm" variant="ghost" className="mt-1 h-6 px-1 text-xs" onClick={() => onSchedule(l.no)}>
+                    Edit schedule
+                  </Button>
+                )}
               </TableCell>
               <TableCell className="tabular">{l.confirmedDate ? fmtDate(l.confirmedDate) : "Not confirmed"}</TableCell>
               <TableCell className="tabular text-right">{fmtNumber(l.received)}</TableCell>
               <TableCell>
                 {stp ? (
                   <span className="flex flex-col gap-1">
-                    <RecLink to={`/purchasing/long-lead/${stp.id}`}>
+                    <RecLink to={`/purchasing/stp/${stp.id}`}>
                       {stp.id} v{stp.version}
                     </RecLink>
                     {stp.superseded && <Chip kind="block">Superseded</Chip>}
@@ -518,6 +578,11 @@ function LinesTable({ p }: { p: PoRec }) {
               </TableCell>
               <TableCell>
                 <StatusBadge kind="poLine" status={l.status} size="sm" />
+                {editable && (l.status === "Open" || l.status === "Partial") && l.received > 0 && l.received < l.qty && (
+                  <Button size="sm" variant="ghost" className="mt-1 h-6 px-1 text-xs" onClick={() => onClose(l.no)}>
+                    Short-close line
+                  </Button>
+                )}
               </TableCell>
             </TableRow>
           )
@@ -547,8 +612,8 @@ function IcCheck({ p }: { p: PoRec }) {
   )
 }
 
-type DlgKey = "send" | "confirm" | "revise" | "cancel" | "short" | "override" | "grn" | "match" | "provide" | "expedite"
-function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; setDlg: (d: DlgKey | null) => void; total: number }) {
+type DlgKey = "send" | "confirm" | "revise" | "cancel" | "short" | "override" | "grn" | "match" | "provide" | "expedite" | "lineClose" | "schedule" | "clauses"
+function PoDialogs({ p, dlg, setDlg, total, line, state }: { p: PoRec; dlg: DlgKey | null; setDlg: (d: DlgKey | null) => void; total: number; line: number; state: NineState }) {
   const s = useSlice("purchasingFinance")
   const close = (o: boolean) => !o && setDlg(null)
   const openLines = p.lines.filter((l) => l.status !== "Cancelled")
@@ -565,6 +630,9 @@ function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; se
   // match
   const [inv, setInv] = useState("")
   const [invPrices, setInvPrices] = useState<Record<number, string>>({})
+  const [invQtys, setInvQtys] = useState<Record<number, string>>({})
+  const matchLines = p.lines.filter((l) => l.status !== "Cancelled" && l.status !== "Closed" && l.received > l.invoiced)
+  const matchQty = (l: PoRec["lines"][number]) => (invQtys[l.no] !== undefined && invQtys[l.no] !== "" ? Number(invQtys[l.no]) : l.received - l.invoiced)
   // expedite
   const [xKind, setXKind] = useState<"Promise" | "Push out" | "Pull in" | "Escalate" | "Call" | "Email">("Call")
   const [xLine, setXLine] = useState("")
@@ -680,7 +748,10 @@ function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; se
 
       <DialogShell open={dlg === "cancel"} onOpenChange={close} destructive requireReason title={`Cancel ${p.id}`} confirmLabel="Cancel PO" consequence={`Cancels ${p.id} and every line; the requisitions it came from stay open for re-sourcing. This ends the record.`} onConfirm={(r) => report(cancelPo(p.id, r), `${p.id} cancelled`)} />
       <DialogShell open={dlg === "short"} onOpenChange={close} requireReason title={`Short-close ${p.id}`} confirmLabel="Short-close" consequence="Closes the open quantity: received lines keep what arrived, open lines are cancelled, and the PO moves to Received for matching. Purchasing Manager only." onConfirm={(r) => report(shortClose(p.id, r), `${p.id} short-closed`)} />
-      <DialogShell open={dlg === "override"} onOpenChange={close} requireReason title={`Restricted-vendor override for ${p.id}`} confirmLabel="Record override" consequence={`${vendorName(s, p.vendorId)} is Restricted. The override is recorded on the PO and lets it go for approval (C-32). Purchasing Manager only.`} onConfirm={(r) => report(overrideRestricted(p.id, r), "Override recorded")} />
+      <RestrictedVendorOverrideDialog open={dlg === "override"} onOpenChange={close} po={p} state={state === "normal" ? undefined : state} />
+      <PoLineShortCloseDialog open={dlg === "lineClose"} onOpenChange={close} po={p} line={line} state={state === "normal" ? undefined : state} />
+      {dlg === "schedule" && <ScheduleDialog p={p} line={line} onClose={() => setDlg(null)} />}
+      {dlg === "clauses" && <ClausesDialog p={p} onClose={() => setDlg(null)} />}
 
       <DialogShell
         open={dlg === "provide"}
@@ -726,7 +797,7 @@ function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; se
                 setGQty(String(l.qty - l.received))
                 return { ok: true, message: `Line ${l.no} ${l.itemId}: open ${l.qty - l.received}` }
               }
-              return { ok: false, errorCode: "E-MM-11", expected: `${p.id} or one of ${openLines.map((x) => x.itemId).join(", ")}`, next: "Scan an item on this PO with open quantity, or call the buyer." }
+              return { ok: false, expected: `${p.id} or one of ${openLines.map((x) => x.itemId).join(", ")}`, next: "Scan an item on this PO with open quantity, or call the buyer." }
             }}
           />
           {grnLine && (
@@ -748,8 +819,8 @@ function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; se
                   scanPoint="SP-03"
                   expected={`Serial ${gSerials.length + 1} of ${qtyN}`}
                   onScan={(code) => {
-                    if (!/^SN-/.test(code)) return { ok: false, errorCode: "E-TRC-01", expected: "a serial starting SN-", next: "Scan the serial plate." }
-                    if (gSerials.includes(code)) return { ok: false, errorCode: "E-TRC-02", expected: "a serial not yet captured", next: "Scan the next unit." }
+                    if (!/^SN-/.test(code)) return { ok: false, expected: "a serial starting SN-", next: "Scan the serial plate." }
+                    if (gSerials.includes(code)) return { ok: false, expected: "a serial not yet captured", next: "Scan the next unit." }
                     setGSerials([...gSerials, code])
                     return { ok: true, message: `${code} captured (${gSerials.length + 1} of ${qtyN})` }
                   }}
@@ -772,17 +843,29 @@ function PoDialogs({ p, dlg, setDlg, total }: { p: PoRec; dlg: DlgKey | null; se
         onOpenChange={close}
         title={`Three-way match for ${p.id}`}
         confirmLabel="Match and close"
-        consequence={`Matches PO, receipts and invoice, posts DR 2110 GR/IR / CR 2100 AP with any invoice price variance to 5210, and moves ${p.id} to Matched/Closed. AP clerk; the PO creator cannot approve the invoice.`}
-        onConfirm={() => report(matchInvoice(p.id, inv, Object.fromEntries(Object.entries(invPrices).filter(([, v]) => v).map(([k, v]) => [Number(k), Number(v)]))), `${p.id} matched`)}
+        consequence={`Matches PO, receipts and invoice on the quantity entered, posts DR 2110 GR/IR / CR 2100 AP with any invoice price variance to 5210, and moves ${p.id} to Matched/Closed once every line is fully received and invoiced. AP clerk; the PO creator cannot approve the invoice.`}
+        onConfirm={() =>
+          report(
+            matchInvoice(
+              p.id,
+              inv,
+              Object.fromEntries(Object.entries(invPrices).filter(([, v]) => v).map(([k, v]) => [Number(k), Number(v)])),
+              Object.fromEntries(Object.entries(invQtys).filter(([, v]) => v !== "").map(([k, v]) => [Number(k), Number(v)])),
+            ),
+            `${p.id} matched`,
+          )
+        }
       >
         <div className="flex flex-col gap-2">
           <TextField id="inv-no" label="Vendor invoice number" value={inv} onChange={setInv} />
-          {p.lines
-            .filter((l) => l.status === "Received")
-            .map((l) => (
-              <TextField key={l.no} id={`inv-${l.no}`} label={`Line ${l.no} invoice unit price (PO ${l.price})`} value={invPrices[l.no] ?? ""} onChange={(v) => setInvPrices({ ...invPrices, [l.no]: v })} placeholder={String(l.price)} />
-            ))}
-          <OtherPostingPreview rows={[{ key: "match", amount: p.lines.filter((l) => l.status === "Received").reduce((t, l) => t + (Number(invPrices[l.no]) || l.price) * l.received, 0) }]} period={TODAY.slice(0, 7)} />
+          <p className="text-xs text-muted-foreground">IPV is recognised per invoice on the matched quantity, so a partial delivery or a partial invoice matches on its own (Part A §8.4).</p>
+          {matchLines.map((l) => (
+            <div key={l.no} className="grid grid-cols-2 gap-2">
+              <TextField id={`inv-q-${l.no}`} label={`Line ${l.no} quantity on this invoice (received ${l.received}, invoiced ${l.invoiced})`} value={invQtys[l.no] ?? ""} onChange={(v) => setInvQtys({ ...invQtys, [l.no]: v })} placeholder={String(l.received - l.invoiced)} />
+              <TextField id={`inv-${l.no}`} label={`Line ${l.no} invoice unit price (PO ${l.price})`} value={invPrices[l.no] ?? ""} onChange={(v) => setInvPrices({ ...invPrices, [l.no]: v })} placeholder={String(l.price)} />
+            </div>
+          ))}
+          <OtherPostingPreview rows={[{ key: "match", amount: Math.round(matchLines.reduce((t, l) => t + (Number(invPrices[l.no]) || l.price) * matchQty(l), 0) * 100) / 100 }]} period={TODAY.slice(0, 7)} />
         </div>
       </DialogShell>
 
@@ -822,3 +905,84 @@ export function ExpediteFields(p: {
   )
 }
 
+
+function PriceSourceBadge({ info }: { info: PriceSourceInfo }) {
+  const gap = info.basisPrice != null && info.kind !== "No basis" ? info.basisPrice : undefined
+  return (
+    <span className="flex flex-col gap-1 text-xs">
+      <Badge variant={info.kind === "No basis" ? "destructive" : "outline"}>{info.kind}</Badge>
+      {info.ref && <span className="font-mono">{info.ref}</span>}
+      {gap != null && info.kind === "Manual" && <span className="text-muted-foreground">basis {fmtMoney(gap)}</span>}
+      {info.basisDate && <span className="tabular text-muted-foreground">{fmtDate(info.basisDate)}</span>}
+      {info.stale && <Chip kind="flag">Stale basis</Chip>}
+      {info.kind === "No basis" && <span className="text-destructive">E-MM-32 blocks Send</span>}
+    </span>
+  )
+}
+
+/** Delivery schedule sub-rows for one line: dates and quantities that must add up to the line quantity (Book I G §5.2). */
+function ScheduleDialog({ p, line, onClose }: { p: PoRec; line: number; onClose: () => void }) {
+  const l = p.lines.find((x) => x.no === line)
+  const [rows, setRows] = useState<{ qty: string; date: string }[]>((l?.schedules ?? []).map((x) => ({ qty: String(x.qty), date: x.date })))
+  if (!l) return null
+  const sum = rows.reduce((t, r) => t + (Number(r.qty) || 0), 0)
+  return (
+    <DialogShell
+      open
+      wide
+      onOpenChange={(o) => !o && onClose()}
+      title={`Delivery schedule, ${p.id} line ${l.no}`}
+      description={`${l.itemId}: ordered ${fmtNumber(l.qty)}, received ${fmtNumber(l.received)}`}
+      confirmLabel="Save schedule"
+      consequence={p.status === "Draft" ? "Sets the delivery sub-rows on the draft line." : `Creates revision ${p.revision + 1} with a change summary, sets Change Pending and asks the vendor to re-confirm this line.`}
+      onConfirm={() => report(editSchedule(p.id, l.no, rows.map((r) => ({ qty: Number(r.qty), date: r.date }))), (v) => (v.revision ? `Revision created for line ${l.no}` : `Schedule saved for line ${l.no}`))}
+    >
+      <div className="flex flex-col gap-2">
+        {rows.map((r, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+            <TextField id={`sq-${i}`} label={`Delivery ${i + 1} quantity`} value={r.qty} onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, qty: v } : x)))} />
+            <TextField id={`sd-${i}`} type="date" label="Date" value={r.date} onChange={(v) => setRows(rows.map((x, j) => (j === i ? { ...x, date: v } : x)))} />
+            <Button variant="ghost" size="sm" disabled={rows.length < 2} onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+              Remove
+            </Button>
+          </div>
+        ))}
+        <div className="flex items-center justify-between">
+          <Button variant="outline" size="sm" onClick={() => setRows([...rows, { qty: "", date: "" }])}>
+            <Plus aria-hidden="true" /> Add delivery
+          </Button>
+          <span className={sum === l.qty ? "text-sm text-muted-foreground" : "text-sm text-destructive"}>
+            {fmtNumber(sum)} of {fmtNumber(l.qty)} scheduled
+          </span>
+        </div>
+      </div>
+    </DialogShell>
+  )
+}
+
+/** Quality clauses Q1 to Q5 on a Draft PO (Book I G §5.1). */
+function ClausesDialog({ p, onClose }: { p: PoRec; onClose: () => void }) {
+  const [sel, setSel] = useState<string[]>(p.qualityClauses)
+  return (
+    <DialogShell
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Quality clauses on ${p.id}`}
+      confirmLabel="Save clauses"
+      consequence="Stores the clauses on the PO header. They print on the PDF and drive receiving inspection: a clause is the vendor's obligation, not a hold."
+      onConfirm={() => report(setPoClauses(p.id, sel as ("Q1" | "Q2" | "Q3" | "Q4" | "Q5")[]), "Clauses saved")}
+    >
+      <div className="flex flex-col gap-2">
+        {Object.entries(CLAUSES).map(([k, c]) => (
+          <label key={k} className="flex items-start gap-2 text-sm">
+            <Checkbox checked={sel.includes(k)} onCheckedChange={(v) => setSel(v ? [...sel, k] : sel.filter((x) => x !== k))} aria-label={`${k} ${c.name}`} />
+            <span>
+              <span className="font-semibold">{k}</span> {c.name}
+              <span className="block text-xs text-muted-foreground">{c.detail}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </DialogShell>
+  )
+}

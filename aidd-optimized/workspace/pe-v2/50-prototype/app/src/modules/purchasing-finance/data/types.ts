@@ -107,6 +107,8 @@ export type PoRec = Omit<PurchaseOrder, "lines"> & {
   ecoImpact?: { ecoId: string; on: ISODate; note: string }[]
   /** Invoice price per line at three-way match (ACC volume; captured for IPV). */
   invoice?: { no: string; on: ISODate; lines: { line: number; price: number }[] }
+  /** One entry per invoice matched on a quantity (partial deliveries and invoices, Part A §8.4). */
+  invoices?: { no: string; on: ISODate; lines: { line: number; price: number; qty: number }[] }[]
 }
 
 export type GrnRec = GrnRef & {
@@ -221,6 +223,14 @@ export interface AgreementRec {
   contractTerm: ContractTerm
   attachment: string
   rows: CustomerPrice[]
+  /** No status list in the specification for agreements (OQ-21): state shown as text. Absent = Active (the four spine agreements). */
+  state?: "Draft" | "Active" | "Expired"
+  /** Rates or a discount matrix off a base list (Book I I §6.2). */
+  baseListId?: PriceList["id"]
+  discountPct?: number
+  /** Volume rebate terms; an accrual note goes to ACC, nothing posts here. */
+  rebateTiers?: { aboveAmount: number; pct: number }[]
+  history?: { on: ISODate; by: UserId; text: string }[]
 }
 export type SurchargeRec = SurchargeRule & {
   family: string
@@ -250,6 +260,28 @@ export interface AddedCostCenter {
   status: "Active" | "Blocked" | "Inactive"
   validFrom: ISODate
   validTo?: ISODate
+}
+export type CenterChangeKind = "Block" | "Unblock" | "Deactivate" | "Move" | "Maintain" | "New cost center" | "New profit center"
+/** Controlling analyst drafts, Controller (cost centers) or CFO (profit centers) approves [DOC:p.115 §6]. */
+export interface CenterDraft {
+  id: `CCD-${string}`
+  centerId: string
+  kind: CenterChangeKind
+  input: { parentId?: CostCenterId; managerId?: string; effective: ISODate; text?: string; name?: string; postable?: boolean; defaultProfitCenterId?: string; entityId?: LegalEntityId; priceFloorPct?: number; scope?: string }
+  draftedBy: UserId
+  draftedOn: ISODate
+  status: "Draft" | "Approved" | "Rejected"
+  decidedBy?: UserId
+  decidedOn?: ISODate
+  reason?: string
+}
+export interface AddedProfitCenter {
+  id: ProfitCenterId
+  name: string
+  scope: string
+  status: "Active" | "Blocked" | "Inactive"
+  priceFloorPct?: number
+  validFrom: ISODate
 }
 export type Driver = "Fixed %" | "Headcount" | "Sq Ft" | "Machine Hours" | "Labor Hours" | "Revenue Share"
 export interface AllocSegment {
@@ -314,6 +346,42 @@ export interface VarianceRow {
   costCenterId: CostCenterId
   profitCenterId: ProfitCenterId
   reversal?: boolean
+  entityId?: LegalEntityId
+}
+/** An explanation the Cost accountant or Controller attaches to a variance line or group (Part A §8, "Creates or updates"). */
+export interface Explanation {
+  id: string
+  type: VarianceType
+  key: string
+  text: string
+  by: UserId
+  role: Role
+  on: ISODate
+}
+/** CVA exception list entry: a receipt or settlement for an item with no standard ever released (Part A §8.4). */
+export interface CvaException {
+  id: string
+  itemId: MaterialId
+  text: string
+  source?: DocRef
+  on: ISODate
+  /** Alert to the Cost accountant raised with the entry. */
+  alertTo: Role
+  acknowledgedBy?: UserId
+  acknowledgedOn?: ISODate
+}
+/** #38 true-up recorded when a Ship-Date Adjusted contract's delivery posts goods issue (PRC-SUR-001). */
+export interface TrueUp {
+  id: string
+  deliveryId: string
+  soId: string
+  customerId: string
+  agreementId: string
+  orderMonth: string
+  shipMonth: string
+  lines: { line: number; itemId: MaterialId; qty: number; ruleId: string; indexAtOrder: number; indexAtShip: number; delta: number }[]
+  total: number
+  on: ISODate
 }
 export interface JournalEntry {
   id: `JE-${string}`
@@ -338,6 +406,7 @@ export interface VendorOverlay {
   history: { on: ISODate; by: UserId; role: Role; text: string }[]
 }
 export interface AvlOverlay {
+  rank?: number
   status?: "Qualified" | "Conditional" | "Suspended"
   priceBasis?: string
   leadDays?: number

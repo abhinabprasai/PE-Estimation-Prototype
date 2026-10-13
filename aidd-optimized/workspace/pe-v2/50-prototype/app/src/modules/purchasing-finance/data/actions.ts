@@ -7,11 +7,12 @@
 import { ProtoError, store, type MutateCtx, type Result } from "@/store"
 import type { BatchId, CostCenterId, ISODate, MaterialId, Role, SerialNo, VendorId, WorkCenterId } from "@/data/domain"
 import { THRESHOLDS } from "@/data/domain"
-import { COST_CENTERS, FISCAL_PERIODS, MATERIALS, TODAY, WORK_CENTERS } from "@/data/shared"
+import { COST_CENTERS, FISCAL_PERIODS, MATERIALS, PROFIT_CENTERS, TODAY, WORK_CENTERS } from "@/data/shared"
 import { computeAllocation, type PurchasingFinanceState } from "./slice"
-import { allAvl, ladder, llrRunningExposure, material, poTotal, stdOf, vendorEligibility, vendorOf } from "./logic"
+import { allAvl, designReleaseBlocker, noStandardException, isQiCritical, ladder, llrRunningExposure, material, poTotal, providedValue, qualifiedSourceBlocker, stdOf, subcontractStd, vendorEligibility, vendorOf } from "./logic"
 import { ceTotals } from "./seed"
-import type { AllocRun, CeRec, ContractTerm, ExpediteEntry, PoLineX, PoRec, PrRec, RfqRec, RunItem, RunRec, VarianceRow, WcRateRec } from "./types"
+import { sourceListBlocker, zeroPriceBlocker } from "./xlogic"
+import type { AddedCostCenter, AddedProfitCenter, AllocCycleRec, AllocRun, AllocSegment, CenterChangeKind, CenterDraft, CeRec, ContractTerm, ExpediteEntry, PoLineX, PoRec, PrRec, RfqRec, RunItem, RunRec, VarianceRow, WcRateRec } from "./types"
 
 type D = PurchasingFinanceState
 const m = <T>(fn: (d: D, ctx: MutateCtx) => T): Result<T> => store.mutate("purchasingFinance", fn)
@@ -44,7 +45,8 @@ export function createRequisition(input: { title: string; origin: PrRec["origin"
     const ov = input.costCenterId ? d.centerOverlay[input.costCenterId]?.status : undefined
     if (ov === "Blocked" || cc?.status === "Blocked") throw new ProtoError(`${input.costCenterId} is Blocked for posting.`, "costCenterId")
     const id = `PR-TBD-0${(d.seq += 1)}` as PrRec["id"]
-    const avl = allAvl(d).filter((a) => a.itemId === input.itemId && a.status !== "Suspended").sort((a, b) => a.rank - b.rank)[0]
+    const qi = isQiCritical(input.itemId)
+    const avl = allAvl(d).filter((a) => a.itemId === input.itemId && (qi ? a.status === "Qualified" : a.status !== "Suspended")).sort((a, b) => a.rank - b.rank)[0]
     const pr: PrRec = {
       id, title: input.title.trim(), status: "Open", origin: input.origin, createdOn: ctx.today, createdBy: ctx.userId, entityId: "LE-TBD-10", requesterId: ctx.userId, buyerId: "USR-TBD-039",
       activity: [{ at: ctx.today, by: ctx.role, text: `Created (${input.origin})` }], poIds: [], costCenterId: input.costCenterId,
@@ -99,7 +101,7 @@ const addBiz = (iso: string, n: number) => {
 }
 
 /** Group approved requisition lines into Draft POs, one per vendor (Book I G §1.4). */
-export function groupIntoPos(prIds: string[], vendorFor: Record<string, VendorId | undefined> = {}) {
+export function groupIntoPos(prIds: string[], vendorFor: Record<string, VendorId | undefined> = {}, overrideReasons: Record<string, string> = {}) {
   return m((d, ctx) => {
     need(ctx, ["Buyer", "Purchasing Manager"], "Grouping requisitions into POs")
     const prs = d.requisitions.filter((r) => prIds.includes(r.id))
@@ -109,10 +111,23 @@ export function groupIntoPos(prIds: string[], vendorFor: Record<string, VendorId
       if (r.status !== "Approved") throw new ProtoError(`${r.id} is ${r.status}; only Approved requisitions group into POs.`)
       if (r.poIds.length) throw new ProtoError(`${r.id} already feeds ${r.poIds.join(", ")}.`)
       const vid = vendorFor[r.id] ?? r.suggestedVendorId
-      if (!vid) throw new ProtoError(`${r.id} has no source: no AVL vendor (E-PUR-02). Start AVL qualification or an RFQ.`)
+      const qi = r.lines.some((l) => qualifiedSourceBlocker(d, "", l.itemId) !== null)
+      if (!vid) {
+        if (qi) throw new ProtoError(`${r.id} has no source: ${r.lines[0]?.itemId} is QI-critical and has no Qualified AVL vendor (E-PUR-02). Start AVL qualification or an RFQ.`)
+        throw new ProtoError(`${r.id} has no valid source of supply (EX-09). Choose a vendor or start an RFQ.`)
+      }
       const v = vendorOf(d, vid)
       const el = vendorEligibility(v)
       if (!el.ok) throw new ProtoError(`${r.id}: ${el.reason}`)
+      for (const l of r.lines) {
+        const blk = qualifiedSourceBlocker(d, vid, l.itemId)
+        if (blk) throw new ProtoError(`${r.id}: ${blk}`)
+      }
+      if (r.suggestedVendorId && vid !== r.suggestedVendorId) {
+        const why = overrideReasons[r.id]?.trim()
+        if (!why) throw new ProtoError(`${r.id}: the proposed source is ${r.suggestedVendorId}; give a reason to override it (Book I G §1.2).`, "overrideReason")
+        log(r, ctx, `Source override ${r.suggestedVendorId} to ${vid}: ${why}`)
+      }
       const value = r.lines.reduce((t, l) => t + l.qty * l.estPrice, 0)
       const avl = allAvl(d).find((a) => a.vendorId === vid && r.lines.some((l) => l.itemId === a.itemId))
       const contracted = !!avl && /info record|contract|award/i.test(avl.priceBasis)
@@ -190,6 +205,11 @@ export function recordResponse(id: string, vendorId: string, input: { price: num
     if (!r) throw new ProtoError("Vendor was not invited.")
     Object.assign(r, { prices: q.lines.map((l) => ({ line: l.no, price: input.price, leadDays: input.leadDays })), received: true, receivedOn: ctx.today, freightPct: input.freightPct, dutyPct: input.dutyPct, validUntil: input.validUntil, buyAmerica: input.buyAmerica })
     log(q, ctx, `Response keyed for ${vendorId}`)
+    if (!d.bidVersions.some((b) => b.rfqId === id && b.vendorId === vendorId)) {
+      d.bidVersions.push({ rfqId: id, vendorId: vendorId as VendorId, version: 1, receivedOn: ctx.today, price: input.price, leadDays: input.leadDays, freightPct: input.freightPct, dutyPct: input.dutyPct, validUntil: input.validUntil, buyAmerica: input.buyAmerica, note: "Original bid", deviations: [] })
+      const sc = (d.rfqScoring[id] ??= { weights: { landed: 50, lead: 20, quality: 20, buyAmerica: 10 }, selected: {} })
+      sc.selected[vendorId] = 1
+    }
     if (d.rfqResponses.filter((x) => x.rfqId === id).every((x) => x.received)) {
       q.status = "Responses In"
       log(q, ctx, "All responses in")
@@ -243,6 +263,11 @@ export function awardRfq(id: string, vendorId: VendorId, justification: string) 
     for (const l of q.lines) {
       const row = allAvl(d).find((a) => a.itemId === l.itemId && a.vendorId === vendorId)
       const price = win.prices.find((p) => p.line === l.no) ?? win.prices[0]
+      for (const old of d.infoRecords.filter((r) => r.itemId === l.itemId && r.vendorId === vendorId && r.status === "Active")) {
+        old.status = "Expired"
+        old.validTo = ctx.today
+      }
+      d.infoRecords.push({ id: `IR-00${4300 + (d.seq += 1)}`, itemId: l.itemId, vendorId, price: price.price, unit: material(l.itemId)?.baseUom ?? "EA", currency: v!.currency, validFrom: ctx.today, scales: [], source: "RFQ Award", leadDays: price.leadDays, status: "Active", ref: q.id })
       if (row) d.avlOverlay[row.id] = { ...d.avlOverlay[row.id], priceBasis: `Award ${q.id}: ${price.price} / ${price.leadDays} days`, leadDays: price.leadDays }
       else d.avlAdded.push({ id: `AVL-TBD-0${(d.seq += 1)}`, itemId: l.itemId, vendorId, rank: 9, status: "Conditional", priceBasis: `Award ${q.id}: ${price.price} / ${price.leadDays} days` })
     }
@@ -288,7 +313,17 @@ export function poBlocker(d: D, p: PoRec): string | null {
     if (t?.superseded && p.status === "Draft") return `Line ${l.no}: ${t.id} is superseded (E-DTS-03, C-22). Attach ${t.supersededBy}.`
     const mt = material(l.itemId)
     if (mt?.blocks.some((b) => b.block === "Purchasing Block")) return `Line ${l.no}: ${mt.id} carries a Purchasing Block (C-49).`
+    if (p.status === "Draft" || p.status === "Approved") {
+      const q = qualifiedSourceBlocker(d, p.vendorId, l.itemId)
+      if (q) return `Line ${l.no}: ${q}`
+    }
   }
+  const sl = sourceListBlocker(d, p)
+  if (sl) return sl
+  const zero = zeroPriceBlocker(p)
+  if (zero) return zero
+  const dts = designReleaseBlocker(p)
+  if (dts) return dts
   if (p.llrId) {
     const llr = d.llrs.find((x) => x.id === p.llrId)
     if (llr && llr.state === "Closed") return `${llr.id} is closed; no further POs under it.`
@@ -445,6 +480,7 @@ export function postGrn(id: string, input: { line: number; qty: number; batch?: 
     if (mt?.batchFlag && !input.batch) throw new ProtoError("Print and scan back the batch label at SP-02.")
     const gid = `GRN-TBD-0${(d.seq += 1)}` as `GRN-${string}`
     const s = stdOf(d, l.itemId) ?? l.price
+    if (stdOf(d, l.itemId) == null) noStandardException(d, l.itemId, { type: "grn", id: gid }, ctx.today)
     d.grns.unshift({ id: gid, poId: p.id, on: ctx.today, batches: input.batch ? [input.batch] : [], serials: input.serials, postedBy: ctx.userId, lines: [{ poLine: l.no, itemId: l.itemId, qty: input.qty, price: l.price, std: s }] })
     l.received += input.qty
     l.status = l.received >= l.qty ? "Received" : "Partial"
@@ -454,13 +490,16 @@ export function postGrn(id: string, input: { line: number; qty: number; batch?: 
     const ppv = r2((l.price - s) * input.qty)
     if (p.type !== "Subcontract" && Math.abs(ppv) >= 0.01)
       d.variances.push(varRow(d, "PPV", ppv, s * input.qty, input.qty, { type: "grn", id: gid }, "CC-2000", pcOf(l.itemId), { itemId: l.itemId, vendorId: p.vendorId }))
+    // SPV = (subcontract price - standard subcontract cost) x qty; at receipt the PO price stands in for the
+    // invoice, and the invoice adds its own delta at match (reading OQ-PF-20).
+    const subStd = p.type === "Subcontract" ? subcontractStd(d, p, l) : 0
     if (p.type === "Subcontract") {
-      const spv = r2((l.price - (stdOf(d, l.itemId) ?? l.price)) * input.qty)
-      if (Math.abs(spv) >= 0.01) d.variances.push(varRow(d, "SPV", spv, (stdOf(d, l.itemId) ?? l.price) * input.qty, input.qty, { type: "grn", id: gid }, "CC-1150", "PC-200", { itemId: l.itemId, vendorId: p.vendorId }))
+      const spv = r2((l.price - subStd) * input.qty)
+      if (Math.abs(spv) >= 0.01) d.variances.push(varRow(d, "SPV", spv, subStd * input.qty, input.qty, { type: "grn", id: gid }, "CC-1150", "PC-200", { itemId: l.itemId, vendorId: p.vendorId }))
     }
     log(p, ctx, `${gid} posted: ${input.qty} ${mt?.baseUom ?? ""} on line ${l.no}${input.batch ? `, batch ${input.batch}` : ""}${input.serials.length ? `, ${input.serials.length} serial(s)` : ""}; stock to QI Hold`)
     ctx.emit("purchasing.grnPosted", { grnId: gid, poId: p.id, batches: input.batch ? [input.batch] : [], serials: input.serials })
-    ctx.emit("posting.posted", p.type === "Subcontract" ? { template: 35, amount: value, currency: p.currency, source: { type: "grn", id: gid } } : { template: "grn", amount: value, currency: p.currency, source: { type: "grn", id: gid } })
+    ctx.emit("posting.posted", p.type === "Subcontract" ? { template: 35, amount: r2(value + providedValue(d, p, l, input.qty)), currency: p.currency, source: { type: "grn", id: gid } } : { template: "grn", amount: value, currency: p.currency, source: { type: "grn", id: gid } })
     if (input.batch) ctx.emit("trace.eventRecorded", { code: "T02", doc: { type: "grn", id: gid }, batch: input.batch })
     for (const sn of input.serials) ctx.emit("trace.eventRecorded", { code: "T02", doc: { type: "grn", id: gid }, serial: sn })
     ctx.link({ from: { type: "purchaseOrder", id: p.id }, to: { type: "grn", id: gid }, kind: "receives" })
@@ -471,28 +510,49 @@ export function postGrn(id: string, input: { line: number; qty: number; batch?: 
 function varRow(d: D, type: VarianceRow["type"], variance: number, std: number, qty: number, source: VarianceRow["source"], cc: CostCenterId, pc: VarianceRow["profitCenterId"], extra: Partial<VarianceRow> = {}): VarianceRow {
   return { id: `VAR-${type}-L${(d.seq += 1)}`, type, period: TODAY.slice(0, 7), on: TODAY, variance: r2(variance), stdBasis: r2(std), actual: r2(std + variance), qty, source, journalId: newJe(d), costCenterId: cc, profitCenterId: pc, ...extra }
 }
-/** Three-way match (ACC volume, shown here so the PO reaches Matched/Closed): DR 2110 / CR 2100, IPV to 5210. */
-export function matchInvoice(id: string, invoiceNo: string, prices: Record<number, number>) {
+/** Three-way match (ACC volume, shown here so the PO reaches Matched/Closed): DR 2110 / CR 2100, IPV to 5210.
+ *  Recognised per invoice on the matched quantity, so partial deliveries and partial invoices match
+ *  (Part A §8.4). `qtys` is the quantity this invoice covers per line (default: received and not yet invoiced). */
+export function matchInvoice(id: string, invoiceNo: string, prices: Record<number, number>, qtys: Record<number, number> = {}) {
   return m((d, ctx) => {
     need(ctx, ["AP clerk"], "Three-way match")
     const p = po(d, id)
-    if (p.status !== "Received") throw new ProtoError(`Match needs a fully Received PO (this one is ${p.status}).`)
+    if (!["Partially Received", "Received"].includes(p.status)) throw new ProtoError(`Match needs goods received against the PO (this one is ${p.status}).`)
     if (!invoiceNo.trim()) throw new ProtoError("Enter the vendor invoice number.", "invoice")
-    if (d.purchaseOrders.some((x) => x.vendorId === p.vendorId && x.invoice?.no === invoiceNo.trim())) throw new ProtoError("Duplicate (vendor, invoice #) is blocked (FL-03 step 8).", "invoice")
+    if (d.purchaseOrders.some((x) => x.vendorId === p.vendorId && (x.invoices ?? (x.invoice ? [x.invoice] : [])).some((i) => i.no === invoiceNo.trim()))) throw new ProtoError("Duplicate (vendor, invoice #) is blocked (FL-03 step 8).", "invoice")
     if (p.createdBy === ctx.userId) throw new ProtoError("Separation of duties: the PO creator cannot approve the invoice (FL-03).")
     let total = 0
-    for (const l of p.lines) if (l.status === "Received") {
+    const invLines: { line: number; price: number; qty: number }[] = []
+    for (const l of p.lines) {
+      if (l.status === "Cancelled" || l.status === "Closed") continue
+      const open = l.received - l.invoiced
+      if (open <= 0) continue
+      const q = qtys[l.no] ?? open
+      if (q <= 0) continue
+      if (q > open) throw new ProtoError(`Line ${l.no}: only ${open} received and not yet invoiced; the invoice cannot match ${q}.`)
       const inv = prices[l.no] ?? l.price
-      total += inv * l.received
-      const ipv = r2((inv - l.price) * l.received)
-      if (Math.abs(ipv) >= 0.01) d.variances.push(varRow(d, "IPV", ipv, l.price * l.received, l.received, { type: "purchaseOrder", id: p.id }, "CC-2000", pcOf(l.itemId), { itemId: l.itemId, vendorId: p.vendorId }))
-      l.invoiced = l.received
-      l.status = "Closed"
+      total += inv * q
+      const ipv = r2((inv - l.price) * q)
+      if (Math.abs(ipv) >= 0.01) {
+        // subcontract: the invoice delta is the SPV invoice leg; everything else is IPV
+        const type = p.type === "Subcontract" ? "SPV" : "IPV"
+        d.variances.push(varRow(d, type, ipv, l.price * q, q, { type: "purchaseOrder", id: p.id }, p.type === "Subcontract" ? "CC-1150" : "CC-2000", p.type === "Subcontract" ? "PC-200" : pcOf(l.itemId), { itemId: l.itemId, vendorId: p.vendorId }))
+      }
+      l.invoiced += q
+      invLines.push({ line: l.no, price: inv, qty: q })
+      if (l.invoiced >= l.qty && l.received >= l.qty) l.status = "Closed"
     }
-    p.invoice = { no: invoiceNo.trim(), on: ctx.today, lines: p.lines.map((l) => ({ line: l.no, price: prices[l.no] ?? l.price })) }
-    p.status = "Matched/Closed"
-    p.changePending = false
-    log(p, ctx, `Invoice ${invoiceNo} matched; PO closed`)
+    if (!invLines.length) throw new ProtoError("Nothing received and uninvoiced to match.")
+    const inv = { no: invoiceNo.trim(), on: ctx.today, lines: invLines }
+    p.invoices = [...(p.invoices ?? []), inv]
+    p.invoice = { no: inv.no, on: inv.on, lines: invLines.map((x) => ({ line: x.line, price: x.price })) }
+    const live = p.lines.filter((x) => x.status !== "Cancelled")
+    const allClosed = live.every((x) => x.status === "Closed")
+    if (allClosed) {
+      p.status = "Matched/Closed"
+      p.changePending = false
+    }
+    log(p, ctx, `Invoice ${invoiceNo} matched on ${invLines.map((x) => `line ${x.line} x ${x.qty}`).join(", ")}${allClosed ? "; PO closed" : "; PO stays open for the remaining receipt or invoice"}`)
     ctx.emit("posting.posted", { template: "match", amount: r2(total), currency: p.currency, source: { type: "purchaseOrder", id: p.id } })
   })
 }
@@ -653,7 +713,8 @@ export function computeRateDraft(validFrom: ISODate, upliftPct: number) {
   })
 }
 export function editRateDraft(wc: WorkCenterId, validFrom: ISODate, patch: { plannedLaborCost?: number; plannedOverheadPool?: number; plannedHours?: number }) {
-  return m((d) => {
+  return m((d, ctx) => {
+    need(ctx, ["Cost accountant", "Controller"], "Editing a rate draft (the cost accountant drafts)")
     const r = d.wcRates.find((x) => x.workCenterId === wc && x.validFrom === validFrom)
     if (!r) throw new ProtoError("Rate row not found.")
     if (r.state === "Released") throw new ProtoError("Released rates are never edited in place (C-50); compute a new dated draft.")
@@ -713,7 +774,8 @@ export function reEstimate(id: string, drivers: { name: string; qty: number; uni
   })
 }
 export function overrideCostItem(id: string, index: number, rate: number, note: string) {
-  return m((d) => {
+  return m((d, ctx) => {
+    need(ctx, ["Estimator", "Cost accountant"], "A manual cost override")
     const c = d.costEstimates.find((x) => x.id === id)
     if (!c) throw new ProtoError("Estimate not found.")
     if (c.status !== "Draft") throw new ProtoError("A Released estimate locks its values (C-35).")
@@ -796,6 +858,9 @@ export function releaseRun(id: string, effectiveFrom: ISODate) {
       const rvv = r2(it.onHand * (it.newStd - it.oldStd))
       if (Math.abs(rvv) >= 0.01) d.variances.push(varRow(d, "RVV", rvv, it.onHand * it.oldStd, it.onHand, { type: "material", id: it.itemId }, "CC-2000", pcOf(it.itemId), { itemId: it.itemId }))
     }
+    const reval = r2(r.items.filter((it) => !it.error).reduce((t, it) => t + it.onHand * (it.newStd - it.oldStd), 0))
+    // Revaluation through the REVAL event key at release (Book II §5.2): the Posting Service books on-hand delta to 5330.
+    ctx.emit("posting.posted", { template: "reval" as unknown as "grn", amount: reval, currency: "USD", source: { type: "approval", id: r.id } })
     r.stage = "Released"
     r.released = true
     r.releasedBy = ctx.userId
@@ -879,33 +944,86 @@ export function newSurchargeVersion(id: string, patch: { baseValue: number; cont
 }
 
 // ===================================================================== controlling (Book I H)
-export function centerAction(id: string, action: "Block" | "Unblock" | "Deactivate" | "Move" | "Maintain", input: { parentId?: CostCenterId; managerId?: string; effective: ISODate; whereUsed?: number; text?: string }) {
+type CenterInput = CenterDraft["input"]
+/** Validates a master change without applying it (used when drafting and again when approving). */
+function checkCenterChange(d: D, id: string, action: CenterChangeKind, input: CenterInput & { whereUsed?: number }) {
+  if (action === "New cost center") {
+    if (!input.name?.trim()) throw new ProtoError("Enter the cost center name.", "name")
+    if (input.parentId && ![...COST_CENTERS, ...d.addedCenters].some((c) => c.id === input.parentId && !c.postable)) throw new ProtoError("The parent must be a summary node.", "parentId")
+    if (input.postable && !input.defaultProfitCenterId) throw new ProtoError("A postable cost center needs a default profit center.", "defaultProfitCenterId")
+    if ([...COST_CENTERS, ...d.addedCenters].some((c) => c.id === id)) throw new ProtoError(`${id} already exists.`, "id")
+    if (!/^CC-\d{4}$/.test(id)) throw new ProtoError("Cost center ids look like CC-1234.", "id")
+    return { status: "Active" as const }
+  }
+  if (action === "New profit center") {
+    if (!input.name?.trim()) throw new ProtoError("Enter the profit center name.", "name")
+    if ([...PROFIT_CENTERS, ...d.addedProfitCenters].some((c) => c.id === id)) throw new ProtoError(`${id} already exists.`, "id")
+    if (!/^PC-\d{3}$/.test(id)) throw new ProtoError("Profit center ids look like PC-500.", "id")
+    return { status: "Active" as const }
+  }
+  const o = d.centerOverlay[id]
+  const base = COST_CENTERS.find((c) => c.id === id) ?? d.addedCenters.find((c) => c.id === id)
+  if (!base) throw new ProtoError("Center not found.")
+  const status = o?.status ?? base.status
+  if (action === "Block" && status !== "Active") throw new ProtoError(`Only an Active center is blocked (now ${status}).`)
+  if (action === "Unblock" && status !== "Blocked") throw new ProtoError("Center is not Blocked.")
+  if (action === "Deactivate") {
+    if ((input.whereUsed ?? 0) > 0) throw new ProtoError(`Where-used check failed: ${input.whereUsed} open use(s). Clear them before deactivation (Book I H §2).`)
+    if (status === "Inactive") throw new ProtoError("Already Inactive.")
+  }
+  if (action === "Move") {
+    if (!input.parentId) throw new ProtoError("Choose the new parent node.")
+    if (input.parentId === id) throw new ProtoError("A center cannot be its own parent.")
+  }
+  if (action === "Maintain" && !input.managerId) throw new ProtoError("Choose the manager.", "managerId")
+  return { status }
+}
+/** Controlling analyst drafts a master change (H §6); nothing changes until the approver decides it. */
+export function draftCenterChange(id: string, kind: CenterChangeKind, input: CenterInput & { whereUsed?: number }) {
   return m((d, ctx) => {
-    need(ctx, ["Controller"], "Cost center master changes (Controller approves masters)")
+    need(ctx, ["Controlling analyst"], "Drafting a cost or profit center change (the Controller approves)")
+    checkCenterChange(d, id, kind, input)
+    const { whereUsed: _w, ...keep } = input
+    void _w
+    const nid = `CCD-${String((d.seq += 1))}` as CenterDraft["id"]
+    d.centerDrafts.unshift({ id: nid, centerId: id, kind, input: keep, draftedBy: ctx.userId, draftedOn: ctx.today, status: "Draft" })
+    return nid
+  })
+}
+/** The Controller approves cost center masters; the CFO owns profit center structure [DOC:p.115 §6]. */
+export function decideCenterChange(draftId: string, outcome: "Approved" | "Rejected", reason: string, whereUsed = 0) {
+  return m((d, ctx) => {
+    const dr = d.centerDrafts.find((x) => x.id === draftId)
+    if (!dr) throw new ProtoError("Draft not found.")
+    if (dr.status !== "Draft") throw new ProtoError(`${draftId} is already ${dr.status}.`)
+    const approver: Role = dr.kind === "New profit center" ? "CFO" : "Controller"
+    need(ctx, [approver], `Approving a ${dr.kind} change`)
+    if (dr.draftedBy === ctx.userId) throw new ProtoError("The drafter cannot approve their own change.")
+    if (outcome === "Rejected" && !reason.trim()) throw new ProtoError("A reason is required to reject.", "reason")
+    dr.status = outcome
+    dr.decidedBy = ctx.userId
+    dr.decidedOn = ctx.today
+    dr.reason = reason || undefined
+    if (outcome === "Rejected") return
+    const input = dr.input
+    const id = dr.centerId
+    checkCenterChange(d, id, dr.kind, { ...input, whereUsed })
+    if (dr.kind === "New cost center") {
+      d.addedCenters.push({ id: id as CostCenterId, name: input.name!.trim(), parentId: input.parentId, postable: !!input.postable, entityId: input.entityId ?? "LE-TBD-10", defaultProfitCenterId: input.defaultProfitCenterId as AddedCostCenter["defaultProfitCenterId"], status: "Active", validFrom: input.effective })
+      d.centerOverlay[id] = { ...(d.centerOverlay[id] ?? { history: [] }), managerId: (input.managerId as `USR-${string}` | undefined) ?? d.centerOverlay[id]?.managerId, history: [{ on: ctx.today, by: dr.draftedBy, text: `Created (${draftId}), approved by ${ctx.role}`, effective: input.effective }] }
+      return
+    }
+    if (dr.kind === "New profit center") {
+      d.addedProfitCenters.push({ id: id as AddedProfitCenter["id"], name: input.name!.trim(), scope: input.scope ?? "", status: "Active", priceFloorPct: input.priceFloorPct, validFrom: input.effective })
+      return
+    }
     const o = (d.centerOverlay[id] ??= { history: [] })
-    const base = COST_CENTERS.find((c) => c.id === id) ?? d.addedCenters.find((c) => c.id === id)
-    if (!base) throw new ProtoError("Center not found.")
-    const status = o.status ?? base.status
-    if (action === "Block") {
-      if (status !== "Active") throw new ProtoError(`Only an Active center is blocked (now ${status}).`)
-      o.status = "Blocked"
-    }
-    if (action === "Unblock") {
-      if (status !== "Blocked") throw new ProtoError("Center is not Blocked.")
-      o.status = "Active"
-    }
-    if (action === "Deactivate") {
-      if ((input.whereUsed ?? 0) > 0) throw new ProtoError(`Where-used check failed: ${input.whereUsed} open use(s). Clear them before deactivation (Book I H §2).`)
-      if (status === "Inactive") throw new ProtoError("Already Inactive.")
-      o.status = "Inactive"
-    }
-    if (action === "Move") {
-      if (!input.parentId) throw new ProtoError("Choose the new parent node.")
-      if (input.parentId === id) throw new ProtoError("A center cannot be its own parent.")
-      o.parentId = input.parentId
-    }
-    if (action === "Maintain" && input.managerId) o.managerId = input.managerId as `USR-${string}`
-    o.history.push({ on: ctx.today, by: ctx.userId, text: input.text || `${action}${input.parentId ? ` under ${input.parentId}` : ""}`, effective: input.effective })
+    if (dr.kind === "Block") o.status = "Blocked"
+    if (dr.kind === "Unblock") o.status = "Active"
+    if (dr.kind === "Deactivate") o.status = "Inactive"
+    if (dr.kind === "Move") o.parentId = input.parentId
+    if (dr.kind === "Maintain" && input.managerId) o.managerId = input.managerId as `USR-${string}`
+    o.history.push({ on: ctx.today, by: dr.draftedBy, text: `${input.text || `${dr.kind}${input.parentId ? ` under ${input.parentId}` : ""}`} (${draftId}, approved by ${ctx.role})`, effective: input.effective })
   })
 }
 export function editSkf(cc: CostCenterId, field: "headcount" | "sqft" | "machineHours" | "laborHours", value: number) {
@@ -960,5 +1078,96 @@ export function rerunAllocation(cycleId: string, period: string) {
     prior.reversedBy = id
     ctx.emit("posting.posted", { template: 36, amount: -prior.total, currency: "USD", source: { type: "approval", id: prior.id } })
     return id
+  })
+}
+
+// ===================================================================== allocation cycles: Define (Book I H §5)
+const ccStatus = (d: D, id: string) => d.centerOverlay[id]?.status ?? COST_CENTERS.find((c) => c.id === id)?.status ?? d.addedCenters.find((c) => c.id === id)?.status
+const ccPostable = (d: D, id: string) => (COST_CENTERS.find((c) => c.id === id) ?? d.addedCenters.find((c) => c.id === id))?.postable
+function checkSegment(d: D, seg: { senderIds: CostCenterId[]; receiverIds: CostCenterId[]; driver: AllocSegment["driver"]; accountRange: string; fixedPct?: Record<string, number> }) {
+  if (!seg.senderIds.length) throw new ProtoError("Choose at least one sender cost center.", "senders")
+  if (!seg.receiverIds.length) throw new ProtoError("Choose at least one receiver cost center.", "receivers")
+  if (!/^\d{4}-\d{4}$/.test(seg.accountRange.trim())) throw new ProtoError("Account range as 6000-6999.", "accountRange")
+  for (const x of [...seg.senderIds, ...seg.receiverIds]) {
+    if (ccPostable(d, x) !== true) throw new ProtoError(`${x} is not a postable cost center (V-CO-01).`)
+    if (ccStatus(d, x) === "Inactive") throw new ProtoError(`${x} is Inactive.`)
+  }
+  const both = seg.senderIds.filter((x) => seg.receiverIds.includes(x))
+  if (both.length) throw new ProtoError(`${both.join(", ")} cannot be both sender and receiver in one segment.`)
+  if (seg.driver === "Fixed %") {
+    const t = seg.receiverIds.reduce((a, r) => a + (seg.fixedPct?.[r] ?? 0), 0)
+    if (Math.abs(t - 100) > 0.001) throw new ProtoError(`Fixed percentages add up to ${t}, not 100.`, "fixedPct")
+  }
+}
+/** Define a new cycle with its first segment (Controlling analyst defines; the Controller posts). */
+export function defineCycle(input: { name: string; entityId?: `LE-${string}`; senderIds: CostCenterId[]; receiverIds: CostCenterId[]; driver: AllocSegment["driver"]; accountRange: string; fixedPct?: Record<string, number> }) {
+  return m((d, ctx) => {
+    need(ctx, ["Controlling analyst"], "Defining an allocation cycle (the Controller posts)")
+    if (!input.name.trim()) throw new ProtoError("Enter a cycle name.", "name")
+    checkSegment(d, input)
+    const sequence = d.allocationCycles.reduce((t, c) => Math.max(t, c.sequence), 0) + 1
+    const id = `ALC-CYC-${String(sequence).padStart(2, "0")}` as AllocCycleRec["id"]
+    d.allocationCycles.push({
+      id, name: input.name.trim(), sequence, entityId: input.entityId ?? "LE-TBD-10", senderCostCenterIds: input.senderIds, receiverCostCenterIds: input.receiverIds, driver: input.driver, period: TODAY.slice(0, 7), status: "Defined",
+      segments: [{ no: 10, senderIds: input.senderIds, accountRange: input.accountRange.trim(), receiverIds: input.receiverIds, driver: input.driver, fixedPct: input.driver === "Fixed %" ? input.fixedPct : undefined }],
+    })
+    return id
+  })
+}
+const cycleOf = (d: D, id: string) => {
+  const c = d.allocationCycles.find((x) => x.id === id)
+  if (!c) throw new ProtoError("Cycle not found.")
+  if (d.allocRuns.some((r) => r.cycleId === id && r.state === "Posted")) throw new ProtoError(`${id} has a posted run: posted cycles keep their definition. Define a new cycle or rerun after the key figures change.`)
+  return c
+}
+const syncCycle = (c: AllocCycleRec) => {
+  c.senderCostCenterIds = [...new Set(c.segments.flatMap((g) => g.senderIds))]
+  c.receiverCostCenterIds = [...new Set(c.segments.flatMap((g) => g.receiverIds))]
+  c.driver = c.segments[0]?.driver ?? c.driver
+}
+export function addSegment(cycleId: string, seg: { senderIds: CostCenterId[]; receiverIds: CostCenterId[]; driver: AllocSegment["driver"]; accountRange: string; fixedPct?: Record<string, number> }) {
+  return m((d, ctx) => {
+    need(ctx, ["Controlling analyst"], "Defining an allocation segment")
+    const c = cycleOf(d, cycleId)
+    checkSegment(d, seg)
+    c.segments.push({ no: (c.segments[c.segments.length - 1]?.no ?? 0) + 10, senderIds: seg.senderIds, accountRange: seg.accountRange.trim(), receiverIds: seg.receiverIds, driver: seg.driver, fixedPct: seg.driver === "Fixed %" ? seg.fixedPct : undefined })
+    syncCycle(c)
+  })
+}
+export function removeSegment(cycleId: string, no: number) {
+  return m((d, ctx) => {
+    need(ctx, ["Controlling analyst"], "Editing an allocation segment")
+    const c = cycleOf(d, cycleId)
+    if (c.segments.length <= 1) throw new ProtoError("A cycle keeps at least one segment.")
+    c.segments = c.segments.filter((g) => g.no !== no)
+    syncCycle(c)
+  })
+}
+export function renameCycle(cycleId: string, name: string) {
+  return m((d, ctx) => {
+    need(ctx, ["Controlling analyst"], "Editing an allocation cycle")
+    const c = d.allocationCycles.find((x) => x.id === cycleId)
+    if (!c) throw new ProtoError("Cycle not found.")
+    if (!name.trim()) throw new ProtoError("Enter a cycle name.", "name")
+    c.name = name.trim()
+  })
+}
+
+// ===================================================================== CVA explanations and exception alerts (Part A §8)
+export function explainVariance(type: VarianceRow["type"], key: string, text: string) {
+  return m((d, ctx) => {
+    need(ctx, ["Cost accountant", "Controller"], "Recording a variance explanation")
+    if (!text.trim()) throw new ProtoError("Write the explanation.", "text")
+    d.explanations.unshift({ id: `EXP-${(d.seq += 1)}`, type, key, text: text.trim(), by: ctx.userId, role: ctx.role, on: ctx.today })
+  })
+}
+export function acknowledgeException(id: string) {
+  return m((d, ctx) => {
+    need(ctx, ["Cost accountant"], "Acknowledging a costing alert")
+    const x = d.cvaExceptions.find((e) => e.id === id)
+    if (!x) throw new ProtoError("Exception not found.")
+    if (x.acknowledgedBy) throw new ProtoError("Already acknowledged.")
+    x.acknowledgedBy = ctx.userId
+    x.acknowledgedOn = ctx.today
   })
 }

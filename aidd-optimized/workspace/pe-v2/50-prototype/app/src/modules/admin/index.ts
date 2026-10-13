@@ -4,9 +4,10 @@ import type { LegalEntityId } from "@/data/domain"
 import { store } from "@/store"
 import { built, nav, routes } from "./routes"
 import { adminSlice } from "./data/slice"
+import { adminCfgSlice } from "./data/cfg-slice"
 import { checkPostingDate as check, type GateResult } from "./lib/period"
 
-export const def: ModuleDef = { group: "admin", routes, nav, built, slices: [adminSlice as ModuleDef["slices"][number]] }
+export const def: ModuleDef = { group: "admin", routes, nav, built, slices: [adminSlice as ModuleDef["slices"][number], adminCfgSlice as ModuleDef["slices"][number]] }
 
 /** The posting-date gate for other modules [DOC:p.41 §9.1]: validates a posting date against the live
  *  period table (INV-CONFIG-PERIOD) and the module behavior matrix. `transaction` is a row name of the

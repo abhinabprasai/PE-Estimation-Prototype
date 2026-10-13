@@ -2,7 +2,7 @@
 
 > **What this is.** The owner's guide for `src/modules/planning-production/`. Planning and production: the PRD's Planning (5) and Production (8) modules. CTP-DLG is a Planning entry already built inside the sales module for one FL-09 order.
 >
-> **Where it stands.** Gap-fix pass, 12 October 2026. 12 screens are built at their registry routes and claimed "full"; the type-check is clean for this folder. CTP-DLG is claimed "partial": the dialog and the planner's host page (`/production/at-risk/promise`, with "New promise check" for quote and order lines) are here, but the registry route is the sales module's and embedding the dialog on the sales pages is request R-1.
+> **Where it stands.** Feature-list pass, 12 October 2026. 12 PRD screens plus the 11 feature-list entries below are built at their routes and claimed "full"; the type-check is clean for this folder. CTP-DLG is claimed "partial": the dialog and the planner's host page (`/production/at-risk/promise`, with "New promise check" for quote and order lines) are here, but the registry route is the sales module's and embedding the dialog on the sales pages is request R-1.
 >
 > **What we need from you.** Build the screens below inside this folder only. Anything you need outside it goes under "Requests to foundation" at the end.
 
@@ -93,3 +93,58 @@ Write one row per change you need in a shared file. Do not edit the shared file 
 | R-4 | src/data/domain/docflow.ts | Add a `routing` doc type (route `/production/routings/:id`, status kind `routing`) so routings appear in the document flow. | PP-RTG-002 | open |
 | R-6 | src/modules/purchasing-finance | Consume `production.cvaExceptionRaised` (release check 5, no standard cost) into the CVA exception list. | PP-WO-002 check 5 [DOC:p.74 §5.2] | open |
 | R-7 | src/modules/purchasing-finance + src/store/events.ts | Emit `purchasing.poDeliveryDateChanged` (declared here by augmentation) when a confirmed PO delivery date moves later; planning revalidates the pegged promises. Also consume `planning.expediteRequested` from Release Short. | AT-RISK "supply slip on a pegged PO" [DOC:p.193 §4]; PP-WO-002 check 2 | open |
+
+## Feature-list entries (added 12 October 2026)
+
+The user's feature list (`00-inputs/feature-list-2026-10.md`) is part of the prototype's scope together with the PRD. The feature mapper registered the rows below in `src/data/screens-features.ts`. Each has a placeholder route today. Build it at that path with `screenId` and a `built` claim, as for any registry screen. Routes, archetypes and ids marked FX- are design values. Rows that are a tab or panel of a screen you already own (for example Material Detail views, the RMA detail tabs, the Customer tax tab) have no entry: they are in the "Feature rows" list below and count as scope of that screen.
+
+| Screen ID | Title | Route | Archetype | Wave | Flows | Feature-list section | Built |
+|---|---|---|---|---|---|---|---|
+| FX-PLN-RUNMRP | Run MRP dialog | `/production/dialogs/run-mrp` | Dialog (design value) | W4 | FL-04 | MRP & Finite Planning | full |
+| FX-PLN-SCENARIOS | Interactive schedule board and multi-scenario compare | `/production/schedule/scenarios` | Workbench (design value) | W4 | FL-04 | MRP & Finite Planning | full |
+| FX-PLN-LOAD | Work center load view | `/production/work-center-load` | Dashboard (design value) | W4 | FL-04 | MRP & Finite Planning | full |
+| FX-PLN-RELIABILITY | Promise reliability report | `/production/promise-reliability` | Dashboard (design value) | W4 | - | MRP & Finite Planning | full |
+| STO-001 | Stock Transport Orders | `/production/transport-orders`, `/production/transport-orders/:id` | List (design value) | W4 | - | MRP & Finite Planning | full |
+| FX-PLN-CONSTRAINTS | Scheduling constraint masters | `/production/scheduling-masters` | Config (design value) | W4 | FL-04 | MRP & Finite Planning | full |
+| FX-PRD-CAPTURE | Capture template builder | `/production/capture-templates` | Config (design value) | W4 | FL-04 | Production & Shop Floor | full |
+| FX-PRD-WODIALOGS | Production order decision dialogs | `/production/dialogs/wo-decisions` | Dialog (design value) | W4 | FL-04 | Production & Shop Floor | full |
+| FX-PRD-LABOR | Labor export to payroll (IF-22) review | `/production/labor-export` | Workbench (design value) | W4 | FL-04 | Production & Shop Floor | full |
+| FX-PRD-RECEIPT | FG production receipt and subcontract operation views | `/production/receipts` | List (design value) | W4 | FL-04, FL-02 | Production & Shop Floor | full |
+| FX-PRD-REPORTS | Production reports (six) | `/production/reports`, `/production/reports/:id` | Dashboard (design value) | W4 | - | Production & Shop Floor | full |
+
+
+### Feature rows built in this pass (12 October 2026)
+
+| Feature row | Where | What is there |
+|---|---|---|
+| FX-PLN-RUNMRP | `/production/dialogs/run-mrp`; opened from the MRP Workbench | Regenerative or net-change, scope, progress, summary with the exceptions raised, validation, authorization (Planner, Planning Manager), conflict and offline states |
+| FX-PLN-SCENARIOS | `/production/schedule/scenarios` | Up to six what-if scenarios (moves, overtime, expedite, outage), side-by-side compare against the live plan, board per scenario, promote moves to the SCH-BOARD sandbox |
+| FX-PLN-LOAD | `/production/work-center-load` | Weekly load against capacity per work center, scenario switch, 4/8/12 week horizon, drill into a cell, maintenance windows show as "down" |
+| FX-PLN-RELIABILITY | `/production/promise-reliability` | Promises kept by month, customer or item, causes of late promises, row table (seeded history) |
+| STO-001 | `/production/transport-orders`, `/:id` | Create, release, SP-06 issue and receive, hand to carrier, close, short close; lane list with EX-10 effect; planner and warehouse roles |
+| FX-PLN-CONSTRAINTS | `/production/scheduling-masters` | Qualifications, tools, setup families, crew roster, maintenance calendar (grid plus list); a window re-plans and revalidates promises |
+| FX-PRD-CAPTURE | `/production/capture-templates` | Draft, publish, version, supersede; typed fields with hard or soft limits; live terminal preview; used by the terminal |
+| FX-PRD-WODIALOGS | `/production/dialogs/wo-decisions` (same dialogs on PP-WO-002) | Release Short, hold, reversal request and second sign-off, SO-cancellation disposition, cancel with collected cost, close preconditions, settled reopen with the JE it reverses |
+| FX-PRD-LABOR | `/production/labor-export` | Approve by supervisor, generate an IF-22 file for review (not transmitted), corrections net out, file contents review |
+| FX-PRD-RECEIPT | `/production/receipts` | FG receipts (#31) and subcontract operations (#34 send, #35 receive) |
+| FX-PRD-REPORTS | `/production/reports`, `/:id` | The six reports of Book I D §12: order status, scrap Pareto, efficiency, throughput, WIP aging, genealogy per serial; CSV export |
+
+Gap rows on screens already owned: PP-MRP-001 (EX-10 cards, Convert all firmed / all open), SCH-BOARD (Gantt by work center with freeze-horizon shading and maintenance windows), PP-SFT-001 (published capture-template entry, oven multi-order batch confirm at WC-230, nameplate verification SP-13 with E-BC-06; the drawing / work-instruction viewer, E-BC-05 child-serial install, offline queue and skill interlock were already there), PP-WIP-001 (WIP aging view, order progress panel), PP-WO-002 (confirmation reversal is now a request plus a second sign-off). CTP-DLG stays "partial": `CtpLineChip` is exported from this module's index for the sales pages (R-1).
+
+### Readings added in this pass
+
+| # | Where | Reading |
+|---|---|---|
+| RD-14 | FX-PRD-WODIALOGS | PRD-given: dual sign-off on confirmation corrections [DOC:Book IV §7.2]. Readings: the second signer is a Production Scheduler, Planning Manager, Cost accountant, Controller or Quality Manager, never the requester; a supervisor requests |
+| RD-15 | FX-PRD-LABOR | IF-22 is reserved for Phase 2 [DOC:Book IV §7.2], so the file is for review. Readings: supervisor approves before export; the period file, its checksum and the even split of hours over the recorded crew |
+| RD-16 | FX-PRD-REPORTS | The six reports and their content are the PRD's. Readings: stalled after 5 days, age buckets 0-7 / 8-14 / 15-30 / over 30, product lines as an item grouping, seeded history for May to September, efficiency window 90 days |
+| RD-17 | STO-001 | The status path, scan point SP-06 and the 1350 In transit bucket are the PRD's [DOC:p.283]. Readings: lane values, the design plants PL-TBD-02 and PL-TBD-03, short close leaves the value in 1350 (no write-off is named) |
+| RD-18 | FX-PLN-CONSTRAINTS, FX-PRD-CAPTURE, FX-PLN-LOAD, FX-PLN-SCENARIOS | Record fields (levels 1-5, family changeover hours, heads, tool statuses, capture field kinds and limits), the 90% load flag and the six-scenario limit are prototype values; calendars, qualifications and maintenance windows honoured by finite scheduling are the PRD's |
+
+## Requests to foundation (added in this pass)
+
+| # | File | Change | Why (screen / rule) | Status |
+|---|---|---|---|---|
+| R-8 | src/data/domain/docflow.ts | Add `transportOrder` and `captureTemplate` doc types so STO-TBD-nnnn appears in the document flow and search groups | STO-001, FX-PRD-CAPTURE | open |
+| R-9 | src/modules/inventory-ops or materials | Consume STO issue and receipt (SP-06) into stock movements and bucket 1350 (this module records the movement on the order only) | STO-001 | open |
+| R-10 | src/modules/purchasing-finance | Consume `posting.posted` #34 and #35 for subcontract operations into GR/IR and the vendor account; create SUBC records from a subcontract PO variant | FX-PRD-RECEIPT | open |

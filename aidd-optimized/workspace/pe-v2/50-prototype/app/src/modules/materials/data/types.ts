@@ -153,6 +153,8 @@ export interface StockRow {
   pegRef?: string
   grnId?: string
   lastMovement: ISODate
+  /** De-Peg requested (reason stored), waiting for the Sales Director's decision (§14.4). */
+  depeg?: { reason: string; by: UserId; on: ISODate }
 }
 
 /** Goods receipt record (owned by INV V3.0, ASM-EXT-1; this module holds the material side). */
@@ -201,8 +203,22 @@ export type McrRecord = Omit<Mcr, "tasks"> & {
 }
 
 // ------------------------------------------------------------------ MCH (§4.4, §16.1)
-export type MchStage = "Draft" | "In approval" | "Approved" | "Rejected" | "Scheduled" | "Applied" | "Applied with errors"
+export type MchStage = "Draft" | "In approval" | "Approved" | "Rejected" | "Scheduled" | "Applied" | "Applied with errors" | "Cancelled"
+/** Valuation-change variant of an MCH (Book II §5.4): method or price unit, period-boundary check, revaluation delta. */
+export interface ValuationChange {
+  kind: "Method change" | "Price unit change"
+  effective: ISODate
+  /** Open GRN-without-invoice per material at creation (warning list). */
+  grirWarnings: { materialId: Material["id"]; grnId: string; value: number }[]
+  reval: { materialId: Material["id"]; qty: number; from: number; to: number; delta: number; note?: string }[]
+  totalDelta: number
+  glDebit: string
+  glCredit: string
+  /** Release step: the Controller applies after approval (README R-13). */
+  controllerApplied?: { by: UserId; on: ISODate }
+}
 export type MchRecord = Mch & {
+  valuation?: ValuationChange
   title: string
   stage: MchStage
   fieldKey: string

@@ -42,7 +42,7 @@ function AppRoutes() {
   return (
     <OfficeLayout>
       <Routes>
-        <Route path="/" element={<Navigate to="/sales/quotations/QT-TBD-0412-V2" replace />} />
+        <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/coverage" element={<CoveragePage />} />
         <Route path="/dev/templates" element={<TemplateGallery />} />
         {moduleRoutes

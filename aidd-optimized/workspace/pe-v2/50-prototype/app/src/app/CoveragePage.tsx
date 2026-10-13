@@ -69,6 +69,7 @@ export function CoveragePage() {
     { id: "archetype", header: "Archetype", value: (r) => r.archetype, filterable: true },
     { id: "wave", header: "Wave", value: (r) => r.wave, filterable: true, sortable: true },
     { id: "flows", header: "Flows", value: (r) => r.flows.join(", ") },
+    { id: "source", header: "Source", value: (r) => (r.source === "feature-list" ? "Feature list" : "PRD plan"), filterable: true },
     { id: "built", header: "Built", value: (r) => r.effective, filterable: true, sortable: true },
     { id: "route", header: "Route", value: (r) => r.route, cell: (r) => <Link to={r.route.replace(/:id/g, "TBD")} className="font-mono text-xs text-link underline">{r.route}</Link> },
   ]
@@ -77,7 +78,7 @@ export function CoveragePage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Prototype coverage"
-        description={`All ${all.total} entries of the PRD screen plan (Book VI 78 + Book VII 6). Built ${all.full}, partial ${all.partial}, not built ${all.total - all.full - all.partial}. INV-RETURN ships no screen (ASM-SCOPE-1), so 83 are buildable.`}
+        description={`All ${all.total} entries: the PRD screen plan (84: Book VI 78 + Book VII 6) and ${all.total - 84} feature-list entries (components, shell, dashboards, dialogs, config, reports, print, mobile flows, Book IX target state). Built ${all.full}, partial ${all.partial}, not built ${all.total - all.full - all.partial}. INV-RETURN ships no screen (ASM-SCOPE-1).`}
       />
       <div className="grid gap-6 xl:grid-cols-2">
         <CountTable title="By PRD module" rows={byModule} />

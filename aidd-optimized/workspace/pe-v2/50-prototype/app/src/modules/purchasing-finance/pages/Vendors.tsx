@@ -13,10 +13,14 @@ import { fmtDate, fmtMoney } from "@/lib/format"
 import { useSlice } from "@/store"
 import { setAvlStatus, setVendorOnboarding, setVendorQuality } from "../data/actions"
 import { allAvl, allVendors, EXTRA_VENDORS, poTotal, vendorEligibility } from "../data/logic"
+import { complianceAlerts, complianceOf, qualityRating } from "../data/compliance"
+import { TODAY } from "@/data/shared"
 import { CsvButton, DocLink, Reading, report, Section, useDemoState } from "../components/common"
 import { DetailFrame, ItemLink, SelectField } from "../components/bits"
+import { VendorTaxTab } from "../components/VendorTax"
+import { useNineStates, writeProps, type NineStates } from "../components/states"
 
-type Row = Vendor & { avl: number; eligible: string; openPos: number }
+type Row = Vendor & { avl: number; eligible: string; openPos: number; alerts: number }
 const NEXT: Record<string, "Docs Pending" | "Under Review" | "Active" | undefined> = { Draft: "Docs Pending", "Docs Pending": "Under Review", "Under Review": "Active" }
 
 export function VendorList() {
@@ -26,7 +30,7 @@ export function VendorList() {
     () =>
       allVendors(s).map((v) => {
         const el = vendorEligibility(v)
-        return { ...v, avl: allAvl(s).filter((a) => a.vendorId === v.id).length, eligible: !el.ok ? "Blocked" : el.needsOverride ? "Override needed" : "Eligible", openPos: s.purchaseOrders.filter((p) => p.vendorId === v.id && !["Matched/Closed", "Cancelled"].includes(p.status)).length }
+        return { ...v, avl: allAvl(s).filter((a) => a.vendorId === v.id).length, eligible: !el.ok ? "Blocked" : el.needsOverride ? "Override needed" : "Eligible", openPos: s.purchaseOrders.filter((p) => p.vendorId === v.id && !["Matched/Closed", "Cancelled"].includes(p.status)).length, alerts: complianceAlerts(complianceOf(v), TODAY).length }
       }),
     [s],
   )
@@ -39,6 +43,7 @@ export function VendorList() {
     { id: "qual", header: "Quality approval", value: (r) => r.quality, filterable: true, cell: (r) => <StatusBadge kind="vendorQuality" status={r.quality} size="sm" /> },
     { id: "elig", header: "PO eligibility", value: (r) => r.eligible, filterable: true, cell: (r) => (r.eligible === "Eligible" ? "Eligible" : <Chip kind={r.eligible === "Blocked" ? "block" : "flag"}>{r.eligible}</Chip>) },
     { id: "scar", header: "Overdue SCARs", value: (r) => r.overdueScars, align: "right", mono: true, sortable: true },
+    { id: "alerts", header: "Document alerts", value: (r) => r.alerts, align: "right", mono: true, sortable: true, cell: (r) => (r.alerts ? <Chip kind="flag">{r.alerts} expiring</Chip> : "None") },
     { id: "avl", header: "AVL rows", value: (r) => r.avl, align: "right", mono: true },
     { id: "pos", header: "Open POs", value: (r) => r.openPos, align: "right", mono: true, sortable: true },
   ]
@@ -79,16 +84,18 @@ export function VendorList() {
 export function VendorDetail() {
   const { id = "" } = useParams()
   const s = useSlice("purchasingFinance")
-  const st = useDemoState("PUR-VEND-002")
+  const st = useNineStates("PUR-VEND-002", { writers: "the Buyer, Purchasing Manager, Quality or Finance roles", degraded: "Compliance dates and IQC ratings come from QMS and ACC, which answered slowly: they may be up to a day old." })
   const v = allVendors(s).find((x) => x.id === id)
   return (
-    <DetailFrame loading={st.loading} error={st.error} onRetry={st.retry} found={!!v} title={id} screenId="PUR-VEND-001/2" back={{ label: "Vendors", to: "/purchasing/vendors" }}>
-      {() => <VendorBody v={v!} menu={st.menu} />}
+    <DetailFrame loading={st.loading} error={undefined} onRetry={st.retry} found={!!v} title={id} screenId="PUR-VEND-001/2" back={{ label: "Vendors", to: "/purchasing/vendors" }}>
+      {() => <VendorBody v={v!} st={st} />}
     </DetailFrame>
   )
 }
 
-function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
+function VendorBody({ v, st }: { v: Vendor; st: NineStates }) {
+  const menu = st.menu
+  const wr = writeProps(st)
   const s = useSlice("purchasingFinance")
   const [dlg, setDlg] = useState<null | "onb" | "qual">(null)
   const [to, setTo] = useState<"Approved" | "Conditional" | "Restricted" | "Disqualified" | "">("")
@@ -97,8 +104,21 @@ function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
   const pos = s.purchaseOrders.filter((p) => p.vendorId === v.id)
   const el = vendorEligibility(v)
   const hist = s.vendorOverlay[v.id]?.history ?? []
+  const rating = qualityRating(v.id)
+  const comp = complianceOf(v)
+  const alerts = complianceAlerts(comp, TODAY)
+  const dayText = (on?: string) => {
+    if (!on) return <span className="text-muted-foreground">Not on file</span>
+    const a = alerts.find((x) => x.on === on)
+    return (
+      <span className="inline-flex items-center gap-2">
+        {fmtDate(on)} {a && <Chip kind="flag">{a.days < 0 ? `Expired ${-a.days} days ago` : `Expires in ${a.days} days`}</Chip>}
+      </span>
+    )
+  }
   return (
     <>
+      {st.banner}
       <DetailPage
         header={{
           screenId: "PUR-VEND-001/2",
@@ -114,13 +134,13 @@ function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
           actions: (
             <>
               {menu}
-              <Button variant="outline" onClick={() => setDlg("qual")}>
+              <Button variant="outline" {...wr} onClick={() => setDlg("qual")}>
                 <ShieldAlert aria-hidden="true" /> Change quality approval
               </Button>
             </>
           ),
           primary: next ? (
-            <Button onClick={() => setDlg("onb")}>
+            <Button {...wr} onClick={() => setDlg("onb")}>
               <UserCheck aria-hidden="true" /> Move to {next}
             </Button>
           ) : undefined,
@@ -150,6 +170,7 @@ function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
                     <TableHead className="text-right">Rank</TableHead>
                     <TableHead>Qualification</TableHead>
                     <TableHead>FAI</TableHead>
+                    <TableHead className="text-right">Quality rating</TableHead>
                     <TableHead>Price basis</TableHead>
                     <TableHead />
                   </TableRow>
@@ -167,6 +188,7 @@ function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
                         {a.note && <div className="text-xs text-muted-foreground">{a.note}</div>}
                       </TableCell>
                       <TableCell>{a.faiRef ?? "Not recorded"}</TableCell>
+                      <TableCell className="tabular text-right">{rating ? `${rating.pct}% of ${rating.lots} lots` : <span className="text-muted-foreground">Not rated</span>}</TableCell>
                       <TableCell>{a.priceBasis}</TableCell>
                       <TableCell>
                         <AvlMenu id={a.id} status={a.status} />
@@ -184,18 +206,57 @@ function VendorBody({ v, menu }: { v: Vendor; menu: React.ReactNode }) {
             label: "Compliance",
             count: v.complianceDocs.length,
             content: (
-              <Section title="Compliance documents">
-                {v.complianceDocs.length ? (
-                  <ul className="list-disc pl-6 text-sm">
-                    {v.complianceDocs.map((d) => (
-                      <li key={d}>{d}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm">None attached. W-9 or equivalent, insurance and ISO certificates are needed before review.</p>
+              <div className="flex flex-col gap-4">
+                {alerts.length > 0 && (
+                  <p className="text-sm" role="status">
+                    <Chip kind="flag">Alert</Chip> {alerts.map((a) => `${a.doc} ${a.days < 0 ? "expired" : "expires"} ${fmtDate(a.on)}`).join("; ")}. Expiring documents alert at 30 days.
+                  </p>
                 )}
-              </Section>
+                <Section title="Compliance panel">
+                  <dl className="grid gap-3 sm:grid-cols-2">
+                    <KV k="W-9 on file (link to ACC)">{comp.w9 ? "On file" : "Not on file"}</KV>
+                    <KV k="Insurance certificate, expiry">{dayText(comp.insuranceExpiry)}</KV>
+                    <KV k="ISO 9001 certificate, expiry">{dayText(comp.isoExpiry)}</KV>
+                    <KV k="Conflict minerals statement">{comp.conflictMinerals ? "Received" : "Not received"}</KV>
+                  </dl>
+                  <p className="text-xs text-muted-foreground">
+                    Documents named on the vendor master: {v.complianceDocs.join(", ") || "none"}. Expiry dates are <Chip kind="design" note="The vendor master holds document names only; dates and ship-from sites are design values">design values</Chip>.
+                  </p>
+                </Section>
+                <Section title="Buy America capability by ship-from site">
+                  {comp.sites.length ? (
+                    <Table>
+                      <TableHeader className="bg-table-head">
+                        <TableRow>
+                          <TableHead>Ship-from site</TableHead>
+                          <TableHead>Country</TableHead>
+                          <TableHead>Buy America capable</TableHead>
+                          <TableHead>Supporting document</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {comp.sites.map((x) => (
+                          <TableRow key={x.site} className="h-8 text-[13px]">
+                            <TableCell>{x.site}</TableCell>
+                            <TableCell>{x.country}</TableCell>
+                            <TableCell>{x.buyAmerica ? "Yes" : "No"}</TableCell>
+                            <TableCell>{x.doc ?? (x.buyAmerica ? "Not attached" : "n/a")}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <p className="text-sm">No ship-from site recorded.</p>
+                  )}
+                </Section>
+              </div>
             ),
+          },
+          {
+            id: "tax",
+            label: "Tax profile",
+            count: s.vendorTax[v.id]?.registrations.length,
+            content: <VendorTaxTab vendorId={v.id} st={st} />,
           },
           {
             id: "pos",

@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Chip, DataTable, KV, RulesPanel, StatusBadge, useFirstVisitLoading } from "@/components/patterns"
+import { Chip, DataTable, ErrorAlert, KV, RulesPanel, StatusBadge, useFirstVisitLoading } from "@/components/patterns"
 import { ConfigPage, DialogShell } from "@/components/templates"
 import { roleGroupOf, type LegalEntityId } from "@/data/domain"
 import { CUSTOMERS, HERO, LEGAL_ENTITIES, WAREHOUSES } from "@/data/shared"
@@ -46,7 +46,7 @@ export function TaxConfig() {
         description: "The operational tax determination layer between Material Master tax data, customer and vendor tax profiles and the Avalara engine (ACC 19). ACC 19 owns tax codes, GL mapping and filing; this screen owns determination policy and region handling. Phase 1 scope: US and Canada.",
         chips: (
           <>
-            <Chip kind="design" note="Route /configuration/tax is a design value; the PRD gives /inventory/configuration/tax">Design route</Chip>
+            <Chip kind="design" note="Served at the PRD URL pattern /inventory/configuration/tax [DOC:p.45 INV §11]; the shared registry still lists /configuration/tax, which redirects here (R-7)">PRD route</Chip>
             {!finance && <Chip kind="block" note="Tax configuration is maintained by Finance; you can read it">Read-only for {role}</Chip>}
           </>
         ),
@@ -56,6 +56,9 @@ export function TaxConfig() {
       onSectionChange={(id) => setParams({ section: id })}
       effectiveDated
     >
+      {!SECTIONS.some((x) => x.id === section) && (
+        <ErrorAlert title={`Section "${section}" not found`} onDismiss={() => setParams({ section: "engine" })}>Tax configuration has six sections: engine, nexus, rates, recon, determine and audit.</ErrorAlert>
+      )}
       {section === "engine" && <EngineSection />}
       {section === "nexus" && <NexusSection />}
       {section === "rates" && <RatesSection />}

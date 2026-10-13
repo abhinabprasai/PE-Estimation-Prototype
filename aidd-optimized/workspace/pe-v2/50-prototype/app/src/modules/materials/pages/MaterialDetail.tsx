@@ -4,7 +4,7 @@
 // View owners edit Class 1 fields in place; Class 2 changes run as an MCH; Class 3 never (§4.4).
 import { useState, type ReactNode } from "react"
 import { Link, useParams, useSearchParams } from "react-router"
-import { Pencil, Printer } from "lucide-react"
+import { Calculator, Pencil, Printer, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,19 +12,23 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DetailPage, DialogShell } from "@/components/templates"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Chip, EmptyState, KV, PostingPreview, RulesPanel, StatusBadge } from "@/components/patterns"
-import type { MaterialBlock, MaterialStatus as MStatus } from "@/data/domain"
+import type { MaterialStatus as MStatus } from "@/data/domain"
 import { TODAY, USERS, WAREHOUSES } from "@/data/shared"
 import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useRole, useSlice } from "@/store"
-import { BLOCK_SETTER, LIFECYCLE_NEXT, SIM_TRANSACTIONS, TYPE_BEHAVIOR, VALUATION_CLASS_LABEL, completeness, fieldDef, isValuated, simulate } from "../lib/rules"
+import { SIM_TRANSACTIONS, TYPE_BEHAVIOR, resolveRow, VALUATION_CLASS_LABEL, completeness, fieldDef, isValuated, simulate } from "../lib/rules"
 import { getMaterial, onHand, ownValue, rateOf, R } from "../data/state"
-import { endMaterial, irStatus, liveRows, removeBlock, saveClass1, setBlock, setLifecycle, whereUsedSweep } from "../data/actions"
+import { endMaterial, irStatus, liveRows, saveClass1, whereUsedSweep } from "../data/actions"
 import type { MaterialViews } from "../data/types"
 import { Completeness, DocLinkText, FieldRow, IrStatusBadge, Reading, Section, TypeBadge, show, userName } from "../components/common"
 import { ItemSalesTab } from "./ItemSales"
-import { confirmRun, run } from "../components/run"
+import { CopyFromDialog, ExtendToPlantDialog, FunctionBlockDialog, LIFECYCLE_DIALOGS, LifecycleDialog, lifecycleBlocker, type LifecycleKind } from "../components/dialogs"
+import { SimulateGlDialog } from "../components/simulate"
+import { ssAlerts, ssEffective } from "../lib/rules"
+import { confirmRun } from "../components/run"
 
 const VIEW_TABS = ["general", "units", "planning", "purchasing", "production", "warehouse", "quality", "accounting", "sales", "stock", "references"] as const
 
@@ -35,9 +39,9 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
   const [role] = useRole()
   const m = getMaterial(s, id)
   const v = s.views[id]
-  const [dlg, setDlg] = useState<null | "lifecycle" | "block" | "edit" | "end">(null)
-  const [to, setTo] = useState<MStatus | "">("")
-  const [block, setBlk] = useState<MaterialBlock>("Purchasing Block")
+  const [dlg, setDlg] = useState<null | "block" | "edit" | "end" | "sim" | "extend" | "copy">(null)
+  const [lc, setLc] = useState<LifecycleKind | null>(null)
+  const [to] = useState<MStatus | "">("")
   const [editKey, setEditKey] = useState<keyof MaterialViews>("longText")
   const [editVal, setEditVal] = useState("")
   const tab = forcedTab ?? sp.get("tab") ?? "general"
@@ -71,7 +75,7 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
   const mcr = s.mcrs.find((r) => r.materialId === m.id)
   const openMcr = mcr && mcr.open ? mcr : undefined
   const terminal = m.status === "Obsolete" || !!ended
-  const next = LIFECYCLE_NEXT[m.status].filter((x) => !(m.status === "Data Completion" && x === "Active"))
+  const lcKinds = (Object.keys(LIFECYCLE_DIALOGS) as LifecycleKind[]).filter((k) => k !== "delete" && !lifecycleBlocker(k, m.status))
 
   const startEdit = (key: keyof MaterialViews) => {
     setEditKey(key)
@@ -184,10 +188,50 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
       <F label="Strategy">{show(v.strategy)}</F>
       <F label="ABC / XYZ">{show([v.abc, v.xyz].filter(Boolean).join(" / "))}</F>
       <F label="Reorder point / max stock">{v.reorderPoint != null ? `${v.reorderPoint} / ${v.maxStock} ${m.baseUom}` : undefined}</F>
-      <p className="mt-2 text-xs">
-        Safety stock per warehouse is kept on <DocLinkText to={R.ss(`material=${m.id}`)}>INV-PLAN-SAFETY</DocLinkText>.
-      </p>
     </>,
+  )
+  const ssRows = s.safetyStock.filter((r) => r.materialId === m.id)
+  const planningTab = (
+    <div className="flex flex-col gap-4">
+      {planning}
+      <Section title={`Safety stock by warehouse (${ssRows.length})`} action={<DocLinkText to={R.ss(`material=${m.id}`)}>Open INV-PLAN-SAFETY</DocLinkText>}>
+        {ssRows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No safety stock row for this material. It is set per warehouse on INV-PLAN-SAFETY.</p>
+        ) : (
+          <Table>
+            <TableHeader className="bg-table-head">
+              <TableRow>
+                <TableHead>Warehouse</TableHead>
+                <TableHead className="text-right">Safety stock</TableHead>
+                <TableHead className="text-right">Item default</TableHead>
+                <TableHead className="text-right">ADU</TableHead>
+                <TableHead className="text-right">Lead time (d)</TableHead>
+                <TableHead className="text-right">Max stock</TableHead>
+                <TableHead>Alerts</TableHead>
+                <TableHead>Change</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {ssRows.map((r) => (
+                <TableRow key={r.id} className="h-8 text-[13px]">
+                  <TableCell className="font-mono">
+                    <DocLinkText to={R.ss(`row=${r.id}`)}>{r.warehouseId}</DocLinkText>
+                  </TableCell>
+                  <TableCell className="tabular text-right">{fmtNumber(ssEffective(r))} {r.uom}</TableCell>
+                  <TableCell className="tabular text-right">{fmtNumber(r.defaultSs)}</TableCell>
+                  <TableCell className="tabular text-right">{r.adu}</TableCell>
+                  <TableCell className="tabular text-right">{r.ltDays}</TableCell>
+                  <TableCell className="tabular text-right">{fmtNumber(r.maxStock)}</TableCell>
+                  <TableCell className="text-xs">{ssAlerts(r).map((a) => a.code).join(", ") || <span className="text-muted-foreground">None</span>}</TableCell>
+                  <TableCell>{r.pending ? <Chip kind="change">{r.pending.changeId}</Chip> : ""}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        <p className="text-xs text-muted-foreground">Read-only here: Planner or Warehouse supervisor edits on INV-PLAN-SAFETY; a change above 25% goes to the Planning Manager (§10.1).</p>
+      </Section>
+    </div>
   )
   const irs = s.infoRecords.filter((x) => x.materialId === m.id)
   const sl = s.sourceList.filter((x) => x.materialId === m.id)
@@ -212,23 +256,67 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
       )}
       <Section title={`Info records (${irs.length})`} action={<DocLinkText to={`/purchasing/info-records?material=${m.id}`}>Open MM-IR-001</DocLinkText>}>
         {irs.length ? (
-          <ul className="flex flex-col gap-1 text-sm">
-            {irs.map((x) => (
-              <li key={x.id} className="flex flex-wrap items-center gap-2">
-                <DocLinkText to={R.ir(x.id)}>{x.id}</DocLinkText> {x.vendorId} · {fmtMoney(x.price, x.currency)} per {x.priceUnit} {m.baseUom} · {x.leadDays} days <IrStatusBadge status={irStatus(s, x.id, TODAY)} />
-              </li>
-            ))}
-          </ul>
+          <Table>
+            <TableHeader className="bg-table-head">
+              <TableRow>
+                <TableHead>Info record</TableHead>
+                <TableHead>Vendor</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Lead time (d)</TableHead>
+                <TableHead>Valid</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {irs.map((x) => (
+                <TableRow key={x.id} className="h-8 text-[13px]">
+                  <TableCell><DocLinkText to={R.ir(x.id)}>{x.id}</DocLinkText></TableCell>
+                  <TableCell className="font-mono">{x.vendorId}</TableCell>
+                  <TableCell className="tabular text-right">{fmtMoney(x.price, x.currency)} per {x.priceUnit} {m.baseUom}</TableCell>
+                  <TableCell className="tabular text-right">{x.leadDays}</TableCell>
+                  <TableCell>{fmtDate(x.validFrom)}{x.validTo ? ` to ${fmtDate(x.validTo)}` : " onward"}</TableCell>
+                  <TableCell><IrStatusBadge status={irStatus(s, x.id, TODAY)} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         ) : (
           <p className="text-sm text-muted-foreground">No info record. The MCR Purchasing task creates the first one.</p>
         )}
       </Section>
       <Section title={`Source list (${sl.length} rows)`} action={<DocLinkText to={R.sl(m.id)}>Open MM-SL-001</DocLinkText>}>
-        <p className="text-sm">{sl.length ? sl.map((r) => `${r.vendorId}${r.fixed ? " (fixed)" : ""}${r.blocked ? " (blocked)" : ""}`).join(", ") : "No source list rows; the policy decides the source."}</p>
+        {sl.length ? (
+          <Table>
+            <TableHeader className="bg-table-head">
+              <TableRow>
+                <TableHead>Vendor</TableHead>
+                <TableHead>Valid</TableHead>
+                <TableHead>Fixed</TableHead>
+                <TableHead>MRP relevant</TableHead>
+                <TableHead>State</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sl.map((r) => (
+                <TableRow key={`${r.vendorId}-${r.validFrom}`} className="h-8 text-[13px]">
+                  <TableCell className="font-mono">{r.vendorId}</TableCell>
+                  <TableCell>{fmtDate(r.validFrom)}{r.validTo ? ` to ${fmtDate(r.validTo)}` : " onward"}</TableCell>
+                  <TableCell>{r.fixed ? "Fixed" : "No"}</TableCell>
+                  <TableCell>{r.mrpRelevant ? "Yes" : "No"}</TableCell>
+                  <TableCell>{r.blocked ? <Chip kind="block">Blocked</Chip> : "Valid"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <p className="text-sm text-muted-foreground">No source list rows; the policy decides the source.</p>
+        )}
+        <p className="text-xs text-muted-foreground">Read-only here; the Buyer maintains info records and the Purchasing Manager the source list (§7.2, §7.4).</p>
       </Section>
     </div>
   )
-  const production = dl(
+  const ebomAhead = s.x.ebomAhead.find((e) => e.materialId === m.id)
+  const productionFields = dl(
     <>
       <F label="Production scheduler">{userName(v.schedulerId)}</F>
       <F label="Default issue warehouse">{show(v.issueWarehouse)}</F>
@@ -239,6 +327,22 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
       <F label="Routing">{show(v.routingRef)}</F>
       <F label="Work notes">{show(v.workNotes)}</F>
     </>,
+  )
+  const production = (
+    <div className="flex flex-col gap-4">
+      {ebomAhead && (
+        <Alert role="status">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>EBOM is ahead of the MBOM</AlertTitle>
+          <AlertDescription>
+            <span>
+              <DocLinkText to={`/engineering/boms/${ebomAhead.ebomRef}`}>{ebomAhead.ebomRef}</DocLinkText> rev {ebomAhead.ebomRev} is newer than the active <DocLinkText to={`/engineering/mbom-transform/${ebomAhead.mbomRef}`}>{ebomAhead.mbomRef}</DocLinkText> rev {ebomAhead.mbomRev}. {ebomAhead.note} Production keeps using the active MBOM until Engineering activates the next one (Engineering owns this; shown here for information).
+            </span>
+          </AlertDescription>
+        </Alert>
+      )}
+      {productionFields}
+    </div>
   )
   const warehouse = dl(
     <>
@@ -265,6 +369,8 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
   const vc = v.valuationClass
   const rate = rateOf(s, m.id)
   const live = liveRows(s.acctDetermination)
+  const checkKeys = Array.from(new Set(SIM_TRANSACTIONS.flatMap((t) => t.legs.map((l) => l.key))))
+  const glGaps = checkKeys.filter((k) => !resolveRow(live, k, vc))
   const sims = SIM_TRANSACTIONS.filter((t) => ["grn", "issue", "pgi", "adj-", "scrap"].includes(t.id)).map((t) => ({ t, legs: simulate(live, t.id, vc, rate) }))
   const val = s.valuations.filter((x) => x.materialId === m.id).sort((a, b) => b.validFrom.localeCompare(a.validFrom))
   // E&O Reserve % (read-only, §3.11 [DOC:p.147]): the rate applied by the last posted E&O run
@@ -306,6 +412,10 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
       )}
       {isValuated(m.type) && (
         <Section title="GL preview: how this material posts" action={<DocLinkText to="/materials/account-determination">MM-VAL-001 (read only)</DocLinkText>}>
+          <p role="status" className={cn("flex items-center gap-2 rounded-md border px-3 py-2 text-sm", glGaps.length && "border-status-blocked")}>
+            {glGaps.length ? <TriangleAlert className="size-4" aria-hidden="true" /> : null}
+            {glGaps.length ? `GL determination check failed (E-MM-21): ${[...new Set(glGaps)].join(", ")} do not resolve for class ${vc ?? "none"}. Activation and postings would be refused.` : `GL determination check passed: every event key (${checkKeys.length}) resolves for class ${vc ?? "none"}.`}
+          </p>
           <p className="text-xs text-muted-foreground">Resolved through the released account determination matrix, exact (key + class + qualifier), then key + class, then key only (Book II §5.2). One base unit at the current rate.</p>
           <Table>
             <TableHeader className="bg-table-head">
@@ -494,7 +604,7 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
   const tabs = [
     { id: "general", label: "General", content: general },
     { id: "units", label: "Units", content: units },
-    { id: "planning", label: "Planning", content: planning },
+    { id: "planning", label: "Planning", content: planningTab },
     { id: "purchasing", label: "Purchasing", content: purchasing },
     { id: "production", label: "Production", content: production },
     { id: "warehouse", label: "Warehouse", content: warehouse },
@@ -535,11 +645,11 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
           ) : undefined,
           actions: (
             <>
-              {!terminal && next.length > 0 && (
-                <Button variant="outline" onClick={() => (setTo(next[0]), setDlg("lifecycle"))}>
-                  Change lifecycle
+              {!terminal && lcKinds.map((k) => (
+                <Button key={k} variant="outline" onClick={() => setLc(k)}>
+                  {LIFECYCLE_DIALOGS[k].label}
                 </Button>
-              )}
+              ))}
               {!terminal && (m.status === "Data Completion" || m.status === "Draft") && (
                 <Button variant="outline" onClick={() => setDlg("end")}>
                   {m.status === "Data Completion" ? "Reject material" : "Delete draft"}
@@ -550,12 +660,17 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
                   Set block
                 </Button>
               )}
-              <Button variant="outline" asChild>
-                <Link to={`/materials/creation-requests?new=1&copy=${m.id}`}>Copy from</Link>
+              <Button variant="outline" onClick={() => setDlg("copy")}>
+                Copy from
               </Button>
-              <Button variant="outline" disabled title="One plant at go-live (Book II §3.3); extension is not available">
+              <Button variant="outline" onClick={() => setDlg("extend")} title={s.x.plantSrc.dec07 ? undefined : "One plant at go-live (Book II §3.3): the dialog explains and stays disabled until DEC-07 fires"}>
                 Extend to plant
               </Button>
+              {isValuated(m.type) && (
+                <Button variant="outline" onClick={() => setDlg("sim")}>
+                  <Calculator aria-hidden="true" /> Simulate GL
+                </Button>
+              )}
               <Button variant="ghost" onClick={() => toast.success(`Label for ${m.id} sent to the default label printer (simulated)`)}>
                 <Printer aria-hidden="true" /> Print label
               </Button>
@@ -573,7 +688,7 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
               {fmtNumber(onHand(s, m.id))} {m.baseUom}
             </KV>
             <KV k="Stock value">{fmtMoney(ownValue(s, m.id))}</KV>
-            <KV k="Plant">PL-TBD-01 {WAREHOUSES.length} warehouses</KV>
+            <KV k="Plants">{s.plantData.filter((p) => p.materialId === m.id).map((p) => p.plantId).join(", ") || "PL-TBD-01"} · {WAREHOUSES.length} warehouses</KV>
             {ended && (
               <KV k={ended.how}>
                 {fmtDate(ended.on)} by {userName(ended.by)}: {ended.reason} <Reading id="RD-MM-23" />
@@ -607,33 +722,6 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
         ]}
       />
       <DialogShell
-        open={dlg === "lifecycle"}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={`Change lifecycle of ${m.id}`}
-        description={`Acting as ${role}. Current status ${m.status}.`}
-        consequence={to === "Obsolete" ? `${m.id} becomes Obsolete: terminal, read-only, no new documents. The where-used sweep must be empty (V-MM-20).` : `${m.id} moves from ${m.status} to ${to}; the documents below are affected.`}
-        requireReason
-        confirmLabel="Change lifecycle"
-        destructive={to === "Obsolete" || to === "Blocked"}
-        wide
-        onConfirm={(reason) => (to ? confirmRun(setLifecycle(m.id, to, reason), `${m.id} is now ${to}`) : "Choose a target status.")}
-      >
-        <Label htmlFor="lc-to">New status</Label>
-        <Select value={to} onValueChange={(x) => setTo(x as MStatus)}>
-          <SelectTrigger id="lc-to">
-            <SelectValue placeholder="Choose" />
-          </SelectTrigger>
-          <SelectContent>
-            {next.map((x) => (
-              <SelectItem key={x} value={x}>
-                {x}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {impactList("Impact: where used")}
-      </DialogShell>
-      <DialogShell
         open={dlg === "end"}
         onOpenChange={(o) => !o && setDlg(null)}
         title={m.status === "Data Completion" ? `Reject ${m.id}` : `Delete draft ${m.id}`}
@@ -648,43 +736,11 @@ export function MaterialDetail({ tab: forcedTab }: { tab?: string }) {
         {impactList("References")}
         <Reading id="RD-MM-23" />
       </DialogShell>
-      <DialogShell
-        open={dlg === "block"}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={`Blocks on ${m.id}`}
-        consequence={`${block} stops: ${BLOCK_SETTER[block].blocks}. Set by the ${BLOCK_SETTER[block].role}. The documents below are affected.`}
-        requireReason
-        wide
-        confirmLabel="Set block"
-        onConfirm={(reason) => confirmRun(setBlock(m.id, block, reason), `${block} set on ${m.id}`)}
-      >
-        {m.blocks.length > 0 && (
-          <ul className="flex flex-col gap-1 text-sm">
-            {m.blocks.map((b) => (
-              <li key={b.block} className="flex items-center gap-2">
-                <Chip kind="block">{b.block}</Chip> {b.reason}
-                <Button size="sm" variant="ghost" className="ml-auto" onClick={() => run(removeBlock(m.id, b.block), `${b.block} removed`)}>
-                  Remove
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Label htmlFor="blk">Block to set</Label>
-        <Select value={block} onValueChange={(x) => setBlk(x as MaterialBlock)}>
-          <SelectTrigger id="blk">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(BLOCK_SETTER) as MaterialBlock[]).map((b) => (
-              <SelectItem key={b} value={b}>
-                {b} (set by {BLOCK_SETTER[b].role})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {impactList("Impact: where used")}
-      </DialogShell>
+      {lc && <LifecycleDialog kind={lc} materialId={m.id} open onOpenChange={(o) => !o && setLc(null)} />}
+      <FunctionBlockDialog materialId={m.id} open={dlg === "block"} onOpenChange={(o) => !o && setDlg(null)} />
+      <ExtendToPlantDialog materialId={m.id} open={dlg === "extend"} onOpenChange={(o) => !o && setDlg(null)} />
+      <CopyFromDialog materialId={m.id} open={dlg === "copy"} onOpenChange={(o) => !o && setDlg(null)} />
+      <SimulateGlDialog materialId={m.id} open={dlg === "sim"} onOpenChange={(o) => !o && setDlg(null)} />
       <DialogShell
         open={dlg === "edit"}
         onOpenChange={(o) => !o && setDlg(null)}

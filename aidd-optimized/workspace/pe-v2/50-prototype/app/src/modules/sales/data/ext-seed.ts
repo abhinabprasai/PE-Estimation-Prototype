@@ -10,6 +10,7 @@ import type { InstalledBaseStatus, RmaStatus, WarrantyClaimBadge } from "@/data/
 import { addDays, product, type Activity, type DB, type Quotation, type SalesOrder, type Schedule, type SOLine } from "./model"
 import type { AsBuiltLine, CustExt, DesignEntry, Ib, Lead, LeadSource, LeadStage, Requirement, Rma, RmaClass, RmaLine, RmaReason, SupplyOption } from "./ext-model"
 import { freightDefault, restockDefault } from "./ext-model"
+import { buildFxSeed } from "../fx/seed"
 
 const A = (at: string, by: string, text: string): Activity => ({ at, by, text })
 const WH = "WH-TBD-01 Fargo, ND"
@@ -232,6 +233,12 @@ function buildIb(db: DB): Ib[] {
       history: [{ on: d.shipDate, text: `Shipped on ${d.id} (${d.pgiId}). Installed base record created at PGI`, doc: { type: "delivery", id: d.id } }, ...(delivered ? [{ on: pod!.date!, text: `${pod!.id} recorded. Status Installed (POD date)`, doc: { type: "pod" as const, id: pod!.id } }] : []), ...(commissioned ? [{ on: addDays(pod!.date!, 12), text: "Commissioning date captured. Status In Service" }] : [])],
     })
   }
+  // EPC-bought units ship to a job site; the owner's final site is not known until someone records it (IB-001 unknown-site worklist).
+  for (const x of out)
+    if (["CUS-TBD-0017", "CUS-TBD-0035"].includes(x.customerId)) {
+      x.history.push({ on: x.shipDate, text: `Shipped to ${x.site.split(",")[0]}, a contractor job site. The final installation site is not recorded` })
+      x.site = "Not recorded"
+    }
   // EPC hand-over: an O'Hara-Bell job-site unit assigned to the owner utility, an ownership transfer on record.
   const handed = out.filter((x) => x.deliveryId === "DLV-TBD-0061")[1]
   if (handed) {
@@ -331,6 +338,8 @@ function buildRmas(db: DB): Rma[] {
   push({ id: "RMA-TBD-0010", cls: "RC1", status: "Received", warranty: "Yes", cust: "CUS-TBD-0017", refType: "Serial Number", refDoc: d61[0], reason: "Defective — Warranty", detail: "Pole-mount unit hums loudly and runs hot at 60% load; replaced by the contractor from stock.", requested: "2026-09-22", statusSince: "2026-09-29",
     lines: [{ no: 10, itemId: "FIN-TBD-0167PL", serial: d61[0], qtyAuth: 1, origPrice: 6980, expected: "Replace" }] }, { 10: 1 }, (r) => {
     r.receivedDate = "2026-09-29"; r.lines[0].condition = "Undamaged"
+    r.lines.push({ no: 20, itemId: "FIN-TBD-0167PL", qtyAuth: 0, qtyRecd: 1, origPrice: 0, valuation: valuationOf("FIN-TBD-0167PL", 6980), customerProperty: true, unauthorized: true, condition: "Undamaged", notes: "Second pole-mount unit in the same crate, not on the RMA" })
+    r.activity.push(A("2026-09-29", "Receiving clerk", "Unauthorized Return line 20: 1 × FIN-TBD-0167PL booked with supervisor override. Own inspection required; append by change (re-approval) or return at customer cost"))
     r.receipts = [{ id: "RCP-TBD-0105", date: "2026-09-29", by: "Owen Pelletier", lines: [{ line: 10, qty: 1, condition: "Undamaged", serial: d61[0] }], posted17: 5410 }]
     r.activity.push(A("2026-09-24", "Quality Manager", "Approved (CS Manager, then Quality Manager for the warranty claim). Status Authorized"), A("2026-09-29", "Receiving clerk", "Return receipt RCP-TBD-0105. Serial verified (SP-19). Status Received. Return inspection created"))
   })
@@ -420,7 +429,7 @@ const DIST_ASBUILT = (item: string): AsBuiltLine[] => [
 ].filter((l) => l.qty > 0)
 
 // ============================================================================ the extension
-export function extendSeed(base: Omit<DB, "leads" | "custExt" | "supply" | "reallocations" | "rmas" | "ib" | "asBuilt" | "spareStock" | "seq2">): DB {
+export function extendSeed(base: Omit<DB, "leads" | "custExt" | "supply" | "reallocations" | "rmas" | "ib" | "asBuilt" | "spareStock" | "seq2" | "fx">): DB {
   const db = base as DB
   // hero phase 1 sales documents
   db.orders.unshift(heroOrder())
@@ -440,11 +449,11 @@ export function extendSeed(base: Omit<DB, "leads" | "custExt" | "supply" | "real
   if (so377) so377.milestones = [20, 10, 20, 30, 15, 5].map((pct, i) => ({ pct, label: i === 4 ? "Delivery" : `Milestone ${i + 1}`, state: i === 0 ? "Invoice request posted" : "Open", irId: i === 0 ? "IR-TBD-0122" : undefined }))
   db.deliveries.push({
     id: "DLV-TBD-0031", soId: "SO-2026-00301", customerId: "CUS-TBD-0048", shipTo: "Omaha North 115 kV substation, 16500 Fort Street, Omaha, NE 68116", incoterms: "DAP", status: "Delivered/Closed",
-    rule: "Split, mandatory: over-dimensional units", ruleId: "RULE-TBD", refs: [{ soId: "SO-2026-00301", line: 10, sched: 10, qty: 1 }],
+    rule: "Split, mandatory: over-dimensional units", ruleId: "DLV-SPLIT-M4", refs: [{ soId: "SO-2026-00301", line: 10, sched: 10, qty: 1 }],
     flags: { supply: "passed", credit: "passed", quality: "passed", documents: "passed" }, equipment: "Multi-axle hydraulic trailer, 180 t", permits: ["Oversize/overweight permit, Nebraska DOT", "Escort vehicles, two"],
     door: "1", slot: "2026-08-11 05:00–07:00", carrier: "Heartland Heavy Haul", pro: "PRO 8031-0301", transitDays: 3, freight: 48600, freightPaidBy: "PE-paid", shipDate: "2026-08-11",
     pgiId: "PGI-TBD-0031", pgiPeriod: "2026-08", irId: "IR-TBD-0031", warehouse: WH,
-    activity: [A("2026-07-30", "Shipping office", "Delivery created. Grouped by: Split, mandatory: over-dimensional units (RULE-TBD)"), A("2026-08-10", "Quality engineer", "Pre-shipment inspection passed (final test IL-TBD-0302 and FTR on file)"), A("2026-08-11", "Shipping office", "SP-18 load scan of HU-TBD-0131. PGI-TBD-0031 posted in period 2026-08 (#25, #26)"), A("2026-08-14", "Shipping office", "POD-TBD-0031 recorded. Status Delivered/Closed; milestone invoice request IR-TBD-0031 (15%)")],
+    activity: [A("2026-07-30", "Shipping office", "Delivery created. Grouped by: Split, mandatory: over-dimensional units (DLV-SPLIT-M4)"), A("2026-08-10", "Quality engineer", "Pre-shipment inspection passed (final test IL-TBD-0302 and FTR on file)"), A("2026-08-11", "Shipping office", "SP-18 load scan of HU-TBD-0131. PGI-TBD-0031 posted in period 2026-08 (#25, #26)"), A("2026-08-14", "Shipping office", "POD-TBD-0031 recorded. Status Delivered/Closed; milestone invoice request IR-TBD-0031 (15%)")],
   })
   db.hus.push({ id: "HU-TBD-0131", sscc: "000614141000001931", deliveryId: "DLV-TBD-0031", item: "FIN-TBD-20MVA", expectedKg: 41800, actualKg: 41950, status: "Shipped", labelPrinted: true, serial: "SN-TBD-20M-0301", scaleAttempts: 1 })
   db.serials.push({ id: "SN-TBD-20M-0301", item: "FIN-TBD-20MVA", status: "Shipped", deliveryId: "DLV-TBD-0031" })
@@ -474,6 +483,7 @@ export function extendSeed(base: Omit<DB, "leads" | "custExt" | "supply" | "real
     "RAW-TBD-RAD": { qty: 16 }, "RAW-TBD-OIL": { qty: 38000 }, "TRADE-TBD-ARR": { qty: 140 }, "TRADE-TBD-ELB": { qty: 0, leadWeeks: 3 }, "RAW-TBD-BSH145": { qty: 0 }, "RAW-TBD-OLTC": { qty: 2 },
   }
   db.seq2 = { lead: 443, opp: 437, cus: 61, qt: 430, rma: 16, ib: 2000, rea: 1, ncr: 48, rwo: 13, cmr: 42, rcp: 111, ext: 1 }
+  db.fx = buildFxSeed(db)
   return db
 }
 

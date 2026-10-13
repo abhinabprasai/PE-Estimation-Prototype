@@ -15,7 +15,7 @@ import { useSlice } from "@/store"
 import { postIndexValue, newSurchargeVersion } from "../data/actions"
 import { indexAt, surchargeFor } from "../data/logic"
 import type { SurchargeRec } from "../data/types"
-import { report, Section, useDemoState } from "../components/common"
+import { Reading, report, Section, useDemoState } from "../components/common"
 import { DocLink } from "../components/common"
 import { SelectField, TextField, userName, SkeletonTable } from "../components/bits"
 
@@ -159,8 +159,43 @@ export function Surcharges() {
             ))}
           </TableBody>
         </Table>
-        <PostingPreview title="True-up at PGI" lines={[{ template: 38, amount: trueUpTotal, detail: "(surcharge at ship-month index − surcharge at order-month index) per rule" }]} period="2026-08" />
-        <p className="text-xs text-muted-foreground">The sales delivery screen posts it; shown here so the rule owner sees what the index drives.</p>
+        <PostingPreview title="Worked example at PGI" lines={[{ template: 38, amount: trueUpTotal, detail: "(surcharge at ship-month index − surcharge at order-month index) per rule" }]} period="2026-08" />
+        <Section title={`Posted true-ups (${s.trueUps.length})`}>
+          {s.trueUps.length ? (
+            <Table>
+              <TableHeader className="bg-table-head">
+                <TableRow>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Sales order</TableHead>
+                  <TableHead>Contract</TableHead>
+                  <TableHead>Order month to ship month</TableHead>
+                  <TableHead>Lines</TableHead>
+                  <TableHead className="text-right">#38 amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {s.trueUps.map((t) => (
+                  <TableRow key={t.id} className="h-8 align-top text-[13px]">
+                    <TableCell>
+                      <DocLink r={{ type: "delivery", id: t.deliveryId }} />
+                    </TableCell>
+                    <TableCell>
+                      <DocLink r={{ type: "salesOrder", id: t.soId }} />
+                    </TableCell>
+                    <TableCell className="font-mono">{t.agreementId}</TableCell>
+                    <TableCell>
+                      {t.orderMonth} to {t.shipMonth}
+                    </TableCell>
+                    <TableCell>{t.lines.map((l) => `line ${l.line} x ${l.qty} ${l.ruleId} ${fmtNumber(l.indexAtOrder, 2)} to ${fmtNumber(l.indexAtShip, 2)}`).join("; ")}</TableCell>
+                    <TableCell className="tabular text-right">{fmtMoney(t.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nothing yet. When a delivery on a Ship-Date Adjusted contract posts goods issue (sales.pgiPosted), this screen reprices the surcharge at the ship-month index and posts the difference through #38 <Reading id="OQ-PF-24" />.</p>
+          )}
+        </Section>
       </div>
     )
 

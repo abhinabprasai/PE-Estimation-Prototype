@@ -19,6 +19,7 @@ import { fmtMoney } from "@/lib/format"
 import { useCore, useSlice } from "@/store"
 import { recall as act } from "../data/actions"
 import type { PopulationRow, QtRecall } from "../data/types"
+import { ContactLog, PiiLog } from "./RecallContacts"
 import { ActivityList, DocLinkText, NotFound, Pick, Reading, Section, TextField, customerName, materialText, report, useDataState, userName } from "../components/bits"
 
 export const RCL_RULES: [string, string, string][] = [
@@ -222,6 +223,7 @@ export function RecallDetail() {
           { id: "pop", label: "Population", count: r.population.length, content: <Population r={r} /> },
           { id: "contain", label: "Containment", content: <Containment r={r} onHold={() => setDlg("hold")} /> },
           { id: "notify", label: "Notification", content: <Notification r={r} onExport={() => setDlg("export")} /> },
+          { id: "contact", label: "Contact log", content: <ContactLog r={r} /> },
           { id: "recover", label: "Recovery", content: <Recovery r={r} /> },
           { id: "eff", label: "Effectiveness", content: <Effectiveness r={r} /> },
           { id: "activity", label: "Activity", content: <ActivityList items={r.activity} /> },
@@ -240,17 +242,7 @@ export function RecallDetail() {
           return report(x, (v) => `${v.held} blocked, ${v.noop} already held`) ? null : (x as { error: string }).error
         }}
       />
-      <DialogShell
-        open={dlg === "export"}
-        onOpenChange={(o) => !o && setDlg(null)}
-        title={`Export notification list for ${r.id}`}
-        consequence={`Exports ${r.population.filter((p) => p.where === "In field" || p.where === "Returned").length} customer site rows with the approved text. The export is logged as a PII disclosure.`}
-        confirmLabel="Export list"
-        onConfirm={() => {
-          const x = act.exportList(r.id)
-          return report(x, "Notification list exported") ? null : (x as { error: string }).error
-        }}
-      />
+      <ExportDialog r={r} open={dlg === "export"} onClose={() => setDlg(null)} />
       <DialogShell
         open={dlg === "rmas"}
         onOpenChange={(o) => !o && setDlg(null)}
@@ -409,7 +401,42 @@ function Notification({ r, onExport }: { r: QtRecall; onExport: () => void }) {
         <ul className="text-sm">{byCustomer.map((c) => <li key={c}>{customerName(c)}: {list.filter((p) => p.customerId === c).map((p) => p.serial).join(", ")}</li>)}</ul>
         <p className="text-xs text-muted-foreground">{r.notification?.exportedOn ? `Exported ${r.notification.exportedOn} (logged as a PII disclosure)` : "Not exported."}</p>
       </Section>
+      <div className="lg:col-span-2">
+        <PiiLog recallId={r.id} />
+      </div>
     </div>
+  )
+}
+
+function ExportDialog({ r, open, onClose }: { r: QtRecall; open: boolean; onClose: () => void }) {
+  const [ack, setAck] = useState(false)
+  const n = r.population.filter((p) => p.where === "In field" || p.where === "Returned").length
+  return (
+    <DialogShell
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setAck(false)
+        if (!o) onClose()
+      }}
+      title={`Export notification list for ${r.id}`}
+      description="The list holds customer names, sites and serial numbers: personal and commercial data."
+      consequence={`Exports ${n} customer site rows with the approved text and writes a PII disclosure entry (who, when, rows, purpose). It cannot be undone; the entry stays on the campaign.`}
+      confirmLabel="Export list"
+      requireReason
+      reasonLabel="Purpose of the disclosure (required)"
+      confirmDisabled={!ack}
+      onConfirm={(purpose) => {
+        const x = act.exportList(r.id, purpose)
+        if (!report(x, "Notification list exported and logged as a PII disclosure")) return (x as { error: string }).error
+        setAck(false)
+        return null
+      }}
+    >
+      <label className="flex min-h-8 items-center gap-2 text-sm">
+        <input type="checkbox" className="size-4" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+        I confirm the file goes only to the recall notification mailing and is not kept outside the campaign.
+      </label>
+    </DialogShell>
   )
 }
 

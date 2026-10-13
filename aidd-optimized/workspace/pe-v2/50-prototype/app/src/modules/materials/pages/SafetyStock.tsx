@@ -75,8 +75,14 @@ export function SafetyStock() {
     },
     { id: "mult", header: `x ${MONTHS[mon]}`, value: (r) => r.multipliers?.[mon] ?? 1, align: "right", mono: true, cell: (r) => <span className={cn(!r.multipliers && "text-muted-foreground")}>{(r.multipliers?.[mon] ?? 1).toFixed(2)}</span> },
     { id: "eff", header: "Effective SS", value: (r) => ssEffective(r), align: "right", mono: true, sortable: true, cell: (r) => `${fmtNumber(ssEffective(r))} ${r.uom}` },
-    { id: "sug", header: "Suggested SS", value: () => "", align: "right", cell: () => <span className="text-muted-foreground" title="Reserved for the Phase 2 statistical engine (§10.2)">Phase 2</span> },
-    { id: "sl", header: "Service level", value: () => "", align: "right", cell: () => <span className="text-muted-foreground" title="Reserved for the Phase 2 statistical engine (§10.2)">Phase 2</span> },
+    {
+      id: "sug", header: "Suggested SS", value: (r) => s.x.stat.suggestions[r.id]?.suggested ?? "", align: "right", mono: true,
+      cell: (r) => (s.x.stat.suggestions[r.id] ? <span title="Statistical suggestion (read-only; never overwrites the planner's value)">{fmtNumber(s.x.stat.suggestions[r.id].suggested)}</span> : <span className="text-muted-foreground" title="Reserved for the Phase 2 statistical engine (§10.2); activate it on the statistical safety stock screen">{s.x.stat.active ? "No demand" : "Phase 2"}</span>),
+    },
+    {
+      id: "sl", header: "Service level", value: (r) => s.x.stat.suggestions[r.id]?.level ?? "", align: "right", mono: true,
+      cell: (r) => (s.x.stat.suggestions[r.id] ? `${(s.x.stat.suggestions[r.id].level * 100).toFixed(1)}%` : <span className="text-muted-foreground" title="Reserved for the Phase 2 statistical engine (§10.2)">{s.x.stat.active ? "No demand" : "Phase 2"}</span>),
+    },
     { id: "adu", header: "ADU", value: (r) => r.adu, align: "right", mono: true },
     { id: "lt", header: "LT days", value: (r) => r.ltDays, align: "right", mono: true },
     { id: "rop", header: "ROP", value: (r) => reorderPoint(r), align: "right", mono: true, sortable: true },

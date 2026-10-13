@@ -7,6 +7,7 @@
 import { MATERIALS, TODAY, WORK_CENTERS } from "@/data/shared"
 import type { Activity, ISODate, MaterialId, ProductionOrderStatus, SerialNo, WorkCenterId } from "@/data/domain"
 import { addWorkdays, applySchedule, deterministic, escalateLate, nextWorkday, opHours, round2, schedule, SHIP_PREP_DAYS } from "../lib/plan"
+import { extraSeed } from "./extra"
 import type {
   AtRiskRecord,
   CompBatch,
@@ -353,7 +354,7 @@ export function seed(): PlanningProductionState {
     { id: "WO-2026-00404", item: "FIN-TBD-5000SS", qty: 1, status: "Released", orderType: "MTS", priority: 9, done: 0, serial: "SN-TBD-5M-0404", created: "2026-10-05" },
     { id: "WO-2026-00410", item: "FIN-TBD-2500PM", qty: 4, status: "Released", orderType: "MTS", priority: 10, done: 0, lotSerialPrefix: "SN-TBD-25P-0410", created: "2026-10-06" },
     { id: "WO-2026-00411", item: "FIN-TBD-1000PM", qty: 6, status: "In Progress", orderType: "MTS", priority: 5, done: 2, inProgress: true, lotSerialPrefix: "SN-TBD-10P-0411", created: "2026-09-28", hf: 1.08, mf: 1.02 },
-    { id: "WO-2026-00412", item: "FIN-TBD-0167PL", qty: 20, status: "In Progress", orderType: "MTS", priority: 7, done: 5, inProgress: true, lotSerialPrefix: "SN-TBD-PL-0412", created: "2026-09-25", hf: 0.97, mf: 1.01 },
+    { id: "WO-2026-00412", item: "FIN-TBD-0167PL", qty: 20, status: "In Progress", orderType: "MTS", priority: 7, done: 4, lotSerialPrefix: "SN-TBD-PL-0412", created: "2026-09-25", hf: 0.97, mf: 1.01 },
     { id: "WO-2026-00413", item: "FIN-TBD-0167PL", qty: 12, status: "Created", orderType: "MTS", priority: 12, done: 0, created: "2026-10-07", plannedOrderId: "PLO-TBD-0405" },
     { id: "WO-2026-00414", item: "FIN-TBD-2500PM", qty: 2, status: "Created", orderType: "MTS", priority: 13, done: 0, created: "2026-10-08", plannedOrderId: "PLO-TBD-0406", gate: { inspectionPlansActive: false } },
     { id: "WO-2026-00415", item: "FIN-TBD-1000PM", qty: 4, status: "Released", orderType: "MTS", priority: 11, done: 0, lotSerialPrefix: "SN-TBD-10P-0415", created: "2026-10-02", plannedOrderId: "PLO-TBD-0407" },
@@ -791,6 +792,8 @@ export function seed(): PlanningProductionState {
     X("EX-09", "CONS-TBD-PAINT", "2026-10-23", 400, "2026-10-07", "No valid source: Coastal Coatings Ltd. Disqualified; no other AVL row or info record", { supply: { type: "plannedOrder", id: "PLO-TBD-0425" } }),
     X("EX-09", "RAW-TBD-CT600", "2026-12-01", 9, "2026-10-09", "Material Draft; no info record or AVL row (VEN-TBD-0115 onboarding Draft)", { peg: { soId: "SO-2026-00377", line: 10, sched: 10 } }),
     X("EX-01", "RAW-TBD-OLTC", "2027-01-15", 3, "2026-10-06", "Phase 2 OLTCs: no supply; LLR-2026-0011 waits in WF-INBOX", { peg: { soId: "SO-2026-00377", line: 10, sched: 10 }, supply: { type: "plannedOrder", id: "PLO-TBD-0379" }, runId: "MRP-TBD-1006" }),
+    X("EX-10", "RAW-TBD-FOIL", "2026-11-04", 1500, "2026-10-08", "Network demand at Fargo (PL-TBD-01) is sourced from Duluth (PL-TBD-03) over lane LN-TBD-02, which is inactive: the transfer proposal cannot be placed", { buy: false, runId: "MRP-TBD-1009" }),
+    X("EX-10", "SEMI-TBD-CORE25", "2026-11-12", 4, "2026-10-09", "Supplying plant PL-TBD-03 has no valid production version for SEMI-TBD-CORE25 (routing RTG-TBD-CORE25 rev A is Draft)", { buy: false, runId: "MRP-TBD-1009" }),
     X("EX-06", "RAW-TBD-PLATE", "2026-10-01", 6000, "2026-10-02", "PO-TBD-0386 plate overdue", { supplyDate: "2026-10-01", resolved: { action: "Expedite / re-date", by: "Olivia Grant", on: "2026-10-03", note: "Vendor re-dated to Oct 12" } }),
   ]
   // aging spread: older raised dates on a few
@@ -872,6 +875,7 @@ export function seed(): PlanningProductionState {
       .filter((w) => w.status !== "Created" && w.status !== "Cancelled" && MATERIALS.find((m) => m.id === w.itemId)?.stdCost == null)
       .map((w, i) => ({ id: `CVA-TBD-${String(301 + i).padStart(4, "0")}`, itemId: w.itemId, woId: w.id, raisedOn: w.createdOn, text: `${w.itemId} released on ${w.id} without a standard cost` })),
     seq: 500,
+    ...extraSeed(),
   }
 }
 

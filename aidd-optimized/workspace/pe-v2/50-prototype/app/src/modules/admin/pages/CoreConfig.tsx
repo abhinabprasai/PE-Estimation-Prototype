@@ -9,14 +9,14 @@ import { useState } from "react"
 import { Link, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Chip, DataTable, KV, RulesPanel, StatusBadge, useFirstVisitLoading } from "@/components/patterns"
+import { Chip, DataTable, ErrorAlert, KV, RulesPanel, StatusBadge, useFirstVisitLoading } from "@/components/patterns"
 import { ConfigPage, DialogShell } from "@/components/templates"
 import { LEGAL_ENTITIES, TODAY } from "@/data/shared"
 import { addDays } from "@/lib/format"
 import { useSlice } from "@/store"
 import { INVENTORY_LABEL } from "../data/catalog"
-import { proposeSetting } from "../data/actions"
-import type { Setting } from "../data/types"
+import { proposeSeries, proposeSetting } from "../data/actions"
+import type { NumberSeries, Setting } from "../data/types"
 import { act, Field, StateText, userName } from "../components/common"
 
 const SETTING_SECTIONS: [string, string][] = [
@@ -35,6 +35,7 @@ export function CoreConfig() {
   const s = useSlice("admin")
   const loading = useFirstVisitLoading("CFG-CORE")
   const [editing, setEditing] = useState<Setting | null>(null)
+  const [editingSeries, setEditingSeries] = useState<NumberSeries | null>(null)
 
   return (
     <ConfigPage
@@ -55,6 +56,9 @@ export function CoreConfig() {
       onSectionChange={(id) => setParams({ section: id })}
       effectiveDated
     >
+      {!["numbers", "periods", "tax", "sod", ...SETTING_SECTIONS.map(([id]) => id)].includes(section) && (
+        <ErrorAlert title={`Section "${section}" not found`} onDismiss={() => setParams({ section: "numbers" })}>The core configuration set has ten sections; pick one from the section list.</ErrorAlert>
+      )}
       {section === "numbers" && (
         <DataTable
           rows={s.series}
@@ -68,6 +72,8 @@ export function CoreConfig() {
             { id: "next", header: "Next number", value: (n) => n.next, align: "right", mono: true, cell: (n) => (n.next ? n.next : "ACC") },
             { id: "gap", header: "Gap policy", value: (n) => (n.gapFree ? "Gap-free" : "Gap-tolerant"), filterable: true },
             { id: "src", header: "Source", value: (n) => n.source },
+            { id: "chg", header: "Next version", value: (n) => n.changes.find((c) => c.state !== "Rejected")?.format ?? "", cell: (n) => { const c = n.changes.filter((x) => x.state !== "Rejected").at(-1); return c ? <span className="text-xs">{c.format}, next {c.next} from {c.effectiveFrom} · <StateText tone={c.state === "Pending approval" ? "attention" : "muted"}>{c.state}</StateText></span> : <span className="text-xs text-muted-foreground">None</span> } },
+            { id: "act", header: "", cell: (n) => <Button size="sm" variant="outline" disabled={n.next === 0 || n.changes.some((c) => c.state === "Pending approval")} title={n.next === 0 ? "Invoice numbers come from ACC (V2.0), outside the knowledge base" : undefined} onClick={() => setEditingSeries(n)}>Propose change</Button> },
           ]}
         />
       )}
@@ -75,7 +81,7 @@ export function CoreConfig() {
 
       {section === "periods" && (
         <div className="flex flex-col gap-4">
-          <p className="text-sm">Period control gates every posting date. One period record per entity per month; the full control lives on <Link className="text-link underline-offset-4 hover:underline" to="/configuration/periods">INV-CONFIG-PERIOD</Link>.</p>
+          <p className="text-sm">Period control gates every posting date. One period record per entity per month; the full control lives on <Link className="text-link underline-offset-4 hover:underline" to="/inventory/configuration/fiscal-periods">INV-CONFIG-PERIOD</Link>.</p>
           <dl className="grid gap-4 md:grid-cols-2">
             {LEGAL_ENTITIES.map((e) => {
               const ps = s.periods.filter((p) => p.entityId === e.id && (p.status === "Open" || p.status === "Soft Close"))
@@ -83,7 +89,7 @@ export function CoreConfig() {
                 <KV key={e.id} k={`${e.name} (${e.currency})`}>
                   <span className="flex flex-wrap items-center gap-2">
                     {ps.map((p) => (
-                      <Link key={p.id} to={`/configuration/periods?section=${e.id}&p=${p.id}`} className="flex items-center gap-1">
+                      <Link key={p.id} to={`/inventory/configuration/fiscal-periods?section=${e.id}&p=${p.id}`} className="flex items-center gap-1">
                         <span className="font-mono text-link">{p.month}</span>
                         <StatusBadge kind="fiscalPeriod" status={p.status} size="sm" />
                         <span className="text-xs text-muted-foreground">inventory {INVENTORY_LABEL[p.status]}</span>
@@ -94,7 +100,7 @@ export function CoreConfig() {
               )
             })}
           </dl>
-          <Button variant="outline" className="self-start" asChild><Link to="/configuration/periods?section=check">Check a posting date</Link></Button>
+          <Button variant="outline" className="self-start" asChild><Link to="/inventory/configuration/fiscal-periods?section=check">Check a posting date</Link></Button>
         </div>
       )}
 
@@ -105,7 +111,7 @@ export function CoreConfig() {
             <KV k="Nexus rows">{s.tax.nexus.length} across {new Set(s.tax.nexus.map((n) => n.entityId)).size} entities</KV>
             <KV k="Threshold alerts open">{s.tax.thresholds.filter((t) => t.alertRaisedOn && !s.tax.nexus.some((n) => n.state === t.state)).map((t) => t.state).join(", ") || "None"}</KV>
           </dl>
-          <Button variant="outline" className="self-start" asChild><Link to="/configuration/tax">Open tax configuration</Link></Button>
+          <Button variant="outline" className="self-start" asChild><Link to="/inventory/configuration/tax">Open tax configuration</Link></Button>
         </div>
       )}
 
@@ -157,9 +163,11 @@ export function CoreConfig() {
           ["C-44", "Master data is not period-controlled", "DOC:p.41 §9.2"],
           ["W.1-O", "Changes to a posting-gating configuration add the Controller", "DOC:p.11 W.1"],
           ["B§2", "Gap-free series where finance requires (invoices), gap-tolerant elsewhere", "DOC:p.185 B §2"],
+          ["CFG-NS", "Number series are maintained under change control: a change is a new dated version, never an in-place edit; the next number never goes down", "DOC:p.276 §15; p.170 §18.2"],
         ]}
       />
       <ChangeDialog setting={editing} onClose={() => setEditing(null)} />
+      <SeriesDialog series={editingSeries} onClose={() => setEditingSeries(null)} />
     </ConfigPage>
   )
 }
@@ -196,6 +204,38 @@ function ChangeDialog({ setting, onClose }: { setting: Setting | null; onClose: 
           {setting.versions.map((v) => <li key={v.changeId}>{v.value} · from {v.effectiveFrom} · {v.state} · {v.by === "PRD seed" ? "PRD seed" : userName(v.by)} · {v.note}</li>)}
         </ol>
       )}
+    </DialogShell>
+  )
+}
+
+function SeriesDialog({ series, onClose }: { series: NumberSeries | null; onClose: () => void }) {
+  const [format, setFormat] = useState("")
+  const [next, setNext] = useState("")
+  const [from, setFrom] = useState(addDays(TODAY, 23))
+  const owner = series ? (series.gapFree ? "Controller" : "Plant IT") : ""
+  return (
+    <DialogShell
+      open={!!series}
+      onOpenChange={(o) => {
+        if (!o) {
+          setFormat("")
+          setNext("")
+          onClose()
+        }
+      }}
+      title={`Propose change: ${series?.object ?? ""} number series`}
+      consequence={series ? `Creates a new version (${format || series.format}, next ${next || series.next} from ${from}) and sends it to the ${owner} in WF-INBOX. Numbers already issued and the series in force stay as they are; a gap-free series stays gap-free.` : undefined}
+      requireReason
+      reasonLabel="Why it changes (required)"
+      confirmLabel="Send for approval"
+      onConfirm={(note) => (series ? act(proposeSeries(series.id, format || series.format, Number(next || series.next), from, note)) : "No series.")}
+    >
+      <div className="grid grid-cols-3 gap-4">
+        <Field id="ns-fmt" label="Format" hint="Keep a sequence token, for example {SEQ:5}."><Input id="ns-fmt" value={format} onChange={(e) => setFormat(e.target.value)} placeholder={series?.format} /></Field>
+        <Field id="ns-next" label="Next number" hint={series ? `Not below ${series.next}.` : undefined}><Input id="ns-next" type="number" value={next} onChange={(e) => setNext(e.target.value)} placeholder={String(series?.next ?? "")} /></Field>
+        <Field id="ns-from" label="Effective from"><Input id="ns-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
+      </div>
+      <p className="text-xs text-muted-foreground">The register names no owner for a number series (AR-30): the Controller approves a gap-free series, Plant IT the others.</p>
     </DialogShell>
   )
 }

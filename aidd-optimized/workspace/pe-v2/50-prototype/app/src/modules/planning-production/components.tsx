@@ -13,13 +13,18 @@ import { fmtNumber } from "@/lib/format"
 import { store, useMutate, type MutateCtx } from "@/store"
 import type { PlanningProductionState } from "./data/types"
 
+export type ExtraMode = "offline" | "degraded" | "readonly" | "conflict"
 export function useScreenState(key: string) {
   const [params, setParams] = useSearchParams()
   const first = useFirstVisitLoading(key)
   const forced = params.get("state")
+  const mode = (["offline", "degraded", "readonly", "conflict"] as const).find((m) => m === forced)
   return {
     loading: first || forced === "loading",
     empty: forced === "empty",
+    mode: mode as ExtraMode | undefined,
+    /** Offline, read-only and conflict states refuse writes; degraded keeps them. */
+    readOnly: mode === "offline" || mode === "readonly" || mode === "conflict",
     error: forced === "error" ? "The planning service did not answer (simulated). Nothing was changed; try again." : undefined,
     retry: () => {
       params.delete("state")
@@ -29,7 +34,7 @@ export function useScreenState(key: string) {
 }
 export type ScreenState = ReturnType<typeof useScreenState>
 
-export function StatePreview() {
+export function StatePreview({ extended }: { extended?: boolean } = {}) {
   const [params, setParams] = useSearchParams()
   const v = params.get("state") ?? "live"
   return (
@@ -51,9 +56,43 @@ export function StatePreview() {
           <SelectItem value="loading">Loading</SelectItem>
           <SelectItem value="empty">Empty</SelectItem>
           <SelectItem value="error">Error</SelectItem>
+          {extended && (
+            <>
+              <SelectItem value="offline">Offline</SelectItem>
+              <SelectItem value="degraded">Degraded</SelectItem>
+              <SelectItem value="readonly">Read-only</SelectItem>
+              <SelectItem value="conflict">Conflict</SelectItem>
+            </>
+          )}
         </SelectContent>
       </Select>
     </span>
+  )
+}
+
+const MODE_TEXT: Record<ExtraMode, { title: string; body: string }> = {
+  offline: { title: "Offline", body: "The connection to the planning service is lost. This screen shows the last data it loaded and refuses changes until the connection returns (nothing is queued from this office view)." },
+  degraded: { title: "Degraded", body: "A supporting service is slow or partly down (simulated). Figures below come from the last published snapshot and may lag; changes still save." },
+  readonly: { title: "Read-only", body: "This view is read-only in the current scenario (simulated lock, for example during period close). Changes are refused." },
+  conflict: { title: "Conflict", body: "Someone else changed these records after you opened this screen (simulated). Reload to see their version before you change anything: your edit would overwrite it." },
+}
+/** Banner for the offline, degraded, read-only and conflict states (previewed with ?state=...). */
+export function StateBanner({ st }: { st: { mode?: ExtraMode } }) {
+  if (!st.mode) return null
+  const m = MODE_TEXT[st.mode]
+  return (
+    <p role="status" className="mb-4 rounded-md border border-status-pending bg-status-pending-tint px-4 py-2 text-sm">
+      <strong>{m.title}.</strong> {m.body}
+    </p>
+  )
+}
+/** Authorization state: the acting role may not do this; shows why in words and returns false. */
+export function AccessNote({ roles, role, what }: { roles: readonly string[]; role: string; what: string }) {
+  if (roles.includes(role)) return null
+  return (
+    <p role="status" className="mb-4 rounded-md border px-4 py-2 text-sm">
+      <strong>Not authorized for changes.</strong> {what} is done by {roles.join(", ")}. You are acting as {role}, so this screen is read-only for you. Use Acting as to switch role. <Chip kind="design" note="The specification has no role-by-action matrix (ASM-PERM-1); the roles named here come from the rule cited on the screen or are a design reading.">Reading</Chip>
+    </p>
   )
 }
 

@@ -4,7 +4,7 @@
 // Posts template #36, net zero at entity level. Analyst defines, Controller posts.
 import { useMemo, useState } from "react"
 import { useParams } from "react-router"
-import { RotateCcw, Send } from "lucide-react"
+import { Plus, RotateCcw, Send, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -13,20 +13,75 @@ import { Chip, EmptyState, ErrorAlert, KV, PostingPreview, RulesPanel } from "@/
 import type { CostCenterId } from "@/data/domain"
 import { fmtDate, fmtMoney, fmtNumber } from "@/lib/format"
 import { useSlice } from "@/store"
-import { editSkf, postAllocation, rerunAllocation } from "../data/actions"
+import { addSegment, defineCycle, editSkf, postAllocation, removeSegment, rerunAllocation } from "../data/actions"
 import { computeAllocation } from "../data/slice"
 import { SENDER_BALANCES } from "../data/seed"
-import type { AllocCycleRec } from "../data/types"
+import type { AllocCycleRec, AllocSegment, Driver } from "../data/types"
 import { Reading, report, Section, TextState, useDemoState } from "../components/common"
-import { ccName, DetailFrame, RecLink, SelectField, userName, SkeletonTable } from "../components/bits"
+import { ccName, DetailFrame, RecLink, SelectField, TextField, userName, SkeletonTable } from "../components/bits"
+import { allCenters } from "./Centers"
 
 const PERIODS = ["2026-08", "2026-09", "2026-10"]
+const DRIVERS: Driver[] = ["Fixed %", "Headcount", "Sq Ft", "Machine Hours", "Labor Hours", "Revenue Share"]
+
+/** Sender, receiver, driver and account range for one segment (Book I H §5). Used by Define and Add segment. */
+function SegmentFields({ v, onChange }: { v: SegForm; onChange: (v: SegForm) => void }) {
+  const s = useSlice("purchasingFinance")
+  const leaves = allCenters(s).filter((c) => c.postable && c.status !== "Inactive")
+  const toggle = (k: "senders" | "receivers", id: string) => onChange({ ...v, [k]: v[k].includes(id) ? v[k].filter((x) => x !== id) : [...v[k], id] })
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-4">
+        {(["senders", "receivers"] as const).map((k) => (
+          <fieldset key={k} className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+            <legend className="px-1 text-sm font-medium">{k === "senders" ? "Senders" : "Receivers"}</legend>
+            {leaves.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={v[k].includes(c.id)} onChange={() => toggle(k, c.id)} />
+                <span className="font-mono">{c.id}</span> {c.name}
+              </label>
+            ))}
+          </fieldset>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <SelectField id="seg-drv" label="Driver" value={v.driver} onChange={(d) => onChange({ ...v, driver: d })} options={DRIVERS.map((d) => ({ value: d, label: d }))} />
+        <TextField id="seg-acc" label="Account range" value={v.accountRange} onChange={(x) => onChange({ ...v, accountRange: x })} hint="For example 6000-6999" />
+      </div>
+      {v.driver === "Fixed %" && (
+        <div className="grid grid-cols-3 gap-2">
+          {v.receivers.map((r) => (
+            <TextField key={r} id={`seg-fx-${r}`} label={`${r} %`} value={v.fixed[r] ?? ""} onChange={(x) => onChange({ ...v, fixed: { ...v.fixed, [r]: x } })} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+export interface SegForm {
+  senders: string[]
+  receivers: string[]
+  driver: Driver
+  accountRange: string
+  fixed: Record<string, string>
+}
+const emptySeg = (): SegForm => ({ senders: [], receivers: [], driver: "Headcount", accountRange: "6000-6999", fixed: {} })
+const segInput = (v: SegForm) => ({
+  senderIds: v.senders as AllocSegment["senderIds"],
+  receiverIds: v.receivers as AllocSegment["receiverIds"],
+  driver: v.driver,
+  accountRange: v.accountRange,
+  fixedPct: v.driver === "Fixed %" ? Object.fromEntries(v.receivers.map((r) => [r, Number(v.fixed[r] ?? 0)])) : undefined,
+})
 
 export function AllocationList() {
   const s = useSlice("purchasingFinance")
   const st = useDemoState("CO-ALC-001")
   const [sec, setSec] = useState("cycles")
   const [edit, setEdit] = useState<Record<string, string>>({})
+  const [defining, setDefining] = useState(false)
+  const [nm, setNm] = useState("")
+  const [seg, setSeg] = useState<SegForm>(emptySeg())
   const cycles = [...s.allocationCycles].sort((a, b) => a.sequence - b.sequence)
   let body: React.ReactNode
   if (st.loading) body = <SkeletonTable cols={6} rows={5} />
@@ -36,7 +91,7 @@ export function AllocationList() {
         {st.error}
       </ErrorAlert>
     )
-  else if (st.empty) body = <EmptyState title="No allocation cycles defined">Define a cycle: ordered segments of senders, account range, receivers and a driver.</EmptyState>
+  else if (st.empty) body = <EmptyState title="No allocation cycles defined">Use Define cycle to add ordered segments of senders, account range, receivers and a driver.</EmptyState>
   else if (sec === "cycles")
     body = (
       <Table>
@@ -121,6 +176,11 @@ export function AllocationList() {
         title: "Allocation cycles",
         description: "Period-end distribution of shared costs (close checklist step 5b). Cycles run in their defined order and net to zero at entity level.",
         actions: st.menu,
+        primary: (
+          <Button onClick={() => setDefining(true)}>
+            <Plus aria-hidden="true" /> Define cycle
+          </Button>
+        ),
       }}
       sections={[
         { id: "cycles", label: "Cycles in sequence" },
@@ -131,6 +191,23 @@ export function AllocationList() {
     >
       <div className="flex flex-col gap-4">
         {body}
+        <DialogShell
+          open={defining}
+          onOpenChange={(o) => !o && setDefining(false)}
+          wide
+          title="Define an allocation cycle"
+          confirmLabel="Define cycle"
+          consequence="Adds the cycle at the end of the sequence with its first segment. It posts only when the Controller runs it. The Controlling analyst defines; a cycle with a posted run keeps its definition."
+          onConfirm={() => {
+            const r = defineCycle({ name: nm, ...segInput(seg) })
+            const err = report(r, (id) => `${id} defined`)
+            if (!err) (setNm(""), setSeg(emptySeg()), setDefining(false))
+            return err
+          }}
+        >
+          <TextField id="cyc-name" label="Cycle name" value={nm} onChange={setNm} />
+          <SegmentFields v={seg} onChange={setSeg} />
+        </DialogShell>
         <RulesPanel
           rules={[
             ["H §5", "Cycles run in defined order; segments: senders, account range, receivers, driver", "[DOC:p.114 §5]"],
@@ -159,7 +236,8 @@ export function AllocationDetail() {
 function CycleBody({ c, menu }: { c: AllocCycleRec; menu: React.ReactNode }) {
   const s = useSlice("purchasingFinance")
   const [period, setPeriod] = useState("2026-10")
-  const [dlg, setDlg] = useState<null | "post" | "rerun">(null)
+  const [dlg, setDlg] = useState<null | "post" | "rerun" | "segment">(null)
+  const [seg, setSeg] = useState<SegForm>(emptySeg())
   const preview = useMemo(() => computeAllocation(c, period, s.skf), [c, period, s.skf])
   const total = Math.round(preview.reduce((t, l) => t + l.amount, 0) * 100) / 100
   const senderTotal = c.senderCostCenterIds.reduce((t, x) => t + (SENDER_BALANCES[period]?.[x] ?? 0), 0)
@@ -249,6 +327,12 @@ function CycleBody({ c, menu }: { c: AllocCycleRec; menu: React.ReactNode }) {
             label: "Segments",
             count: c.segments.length,
             content: (
+              <div className="flex flex-col gap-2">
+              <div>
+                <Button size="sm" variant="outline" onClick={() => setDlg("segment")}>
+                  <Plus aria-hidden="true" /> Add segment
+                </Button>
+              </div>
               <Table>
                 <TableHeader className="bg-table-head">
                   <TableRow>
@@ -257,6 +341,7 @@ function CycleBody({ c, menu }: { c: AllocCycleRec; menu: React.ReactNode }) {
                     <TableHead>Accounts</TableHead>
                     <TableHead>Driver</TableHead>
                     <TableHead>Receivers</TableHead>
+                    <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -267,10 +352,16 @@ function CycleBody({ c, menu }: { c: AllocCycleRec; menu: React.ReactNode }) {
                       <TableCell>{g.accountRange}</TableCell>
                       <TableCell>{g.driver}</TableCell>
                       <TableCell>{g.receiverIds.join(", ")}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="ghost" aria-label={`Remove segment ${g.no}`} onClick={() => report(removeSegment(c.id, g.no), `Segment ${g.no} removed`)}>
+                          <Trash2 aria-hidden="true" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+              </div>
             ),
           },
           {
@@ -315,6 +406,21 @@ function CycleBody({ c, menu }: { c: AllocCycleRec; menu: React.ReactNode }) {
       />
       <DialogShell open={dlg === "post"} onOpenChange={(o) => !o && setDlg(null)} title={`Post ${c.id} for ${period}`} confirmLabel="Post" consequence={`Posts ${fmtMoney(total)} through template #36 from ${c.senderCostCenterIds.join(", ")} to ${c.receiverCostCenterIds.length} receivers, net zero at entity level. Earlier cycles in the sequence must be posted first. Controller only.`} onConfirm={() => report(postAllocation(c.id, period), (rid) => `${rid} posted`)}>
         <PostingPreview lines={[{ template: 36, amount: total }]} period={period} />
+      </DialogShell>
+      <DialogShell
+        open={dlg === "segment"}
+        onOpenChange={(o) => !o && setDlg(null)}
+        wide
+        title={`Add a segment to ${c.id}`}
+        confirmLabel="Add segment"
+        consequence="Appends a segment to the cycle. Allowed only while the cycle has no posted run. Controlling analyst."
+        onConfirm={() => {
+          const err = report(addSegment(c.id, segInput(seg)), "Segment added")
+          if (!err) (setSeg(emptySeg()), setDlg(null))
+          return err
+        }}
+      >
+        <SegmentFields v={seg} onChange={setSeg} />
       </DialogShell>
       <DialogShell open={dlg === "rerun"} onOpenChange={(o) => !o && setDlg(null)} title={`Rerun ${c.id} for ${period}`} confirmLabel="Reverse and repost" consequence={`Reverses ${posted?.id} (${fmtMoney(posted?.total ?? 0)}) and posts a replacement at the current key figures (${fmtMoney(total)}). Both runs are retained. Controller only.`} onConfirm={() => report(rerunAllocation(c.id, period), (rid) => `${rid} replaces ${posted?.id}`)}>
         <PostingPreview lines={[{ template: 36, amount: -(posted?.total ?? 0), detail: `Reversal of ${posted?.id}` }, { template: 36, amount: total, detail: "Replacement" }]} period={period} />

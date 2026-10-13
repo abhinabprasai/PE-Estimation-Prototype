@@ -2,7 +2,7 @@
 
 > **What this is.** The owner's guide for `src/modules/sales/`. Sales and service: the PRD's Sales (8) and Returns (5) modules. Holds the FL-09 build (moved here from src/pages and src/data in the foundation pass, behaviour unchanged).
 >
-> **Where it stands.** Sales pass, 11 October 2026. Every screen in the group is built and claimed (table below). The pack station now runs on the shared `KioskPage` + `ScanField`, so critique F-01 is fixed there. The hero thread is walkable: LEAD-TBD-0301 → QT-TBD-0301-V1/V2 → SO-2026-00301 → DLV-TBD-0031 → POD-TBD-0031 → IB-TBD-0301 → RMA-TBD-0012.
+> **Where it stands.** Feature-list pass, 12 October 2026. The 20 feature-list entries below are built at their routes and claimed "full"; the partial rows (quotations, orders, customer tax, cockpit, pack station, RMA detail, installed base, leads) are completed (see "Feature rows on screens already owned"). The earlier Sales pass of 11 October 2026 had every PRD screen built and claimed (first table). The pack station now runs on the shared `KioskPage` + `ScanField`, so critique F-01 is fixed there. The hero thread is walkable: LEAD-TBD-0301 → QT-TBD-0301-V1/V2 → SO-2026-00301 → DLV-TBD-0031 → POD-TBD-0031 → IB-TBD-0301 → RMA-TBD-0012.
 >
 > **What we need from you.** Build the screens below inside this folder only. Anything you need outside it goes under "Requests to foundation" at the end.
 
@@ -111,6 +111,20 @@ Every list takes `?state=empty` and `?state=error` to show those states; the fir
 | SR-22 | RMA-RECEIPT | Bin proposal: the putaway engine (INV 15.6) is not built; bins Qn-01..Qn-08 of the RMA's quarantine zone in line order, skipping bins held by open RMAs. Freight claim amount = damaged lines at valuation. |
 | SR-23 | OM-LEAD | Product class of a lead = make class (ETO / MTO / MTS) of the catalogue item its kVA maps to (unmapped = ETO). Average age per stage = days since the lead entered its current stage. |
 | SR-24 | OM-PACK-* | Packaging bill per transformer HU (1 heavy skid, 1 accessory crate, 2 desiccant bags) for #27 "backflush at standard" = $611.40. |
+| SR-25 | FX-OM-LEADIMPORT | Inbound review statuses (New, Needs review, Possible duplicate, Accepted, Merged, Rejected) and the capture confidence figure are design values; the channels (web form, email, trade contact import) are the PRD's. |
+| SR-26 | FX-OM-DLVRUN, OM-DLV-001 | The PRD says every split or merge stores the rule that fired and that E-DLV-01 names it, but gives no ids. Ids DLV-SPLIT-M1..M5, DLV-SPLIT-E1..E3, DLV-MERGE-1, DLV-GROUP-0 are design values; the rule texts are the PRD's (p.207 §2.3). Vehicle capacity 20,000 kg is a design value ("weight over vehicle capacity" has no figure); the 7-day window is the PRD's default N. A merge group becomes one delivery per order because the delivery record is single-order. |
+| SR-27 | FX-OM-CHANGE | Cancellation fee is contract-based in the PRD with no figure: default 10% for ETO, 5% otherwise. "Production Manager" is not a role in the shared list: the work order disposition is decided by the Production supervisor, Planning Manager or Production Scheduler. |
+| SR-28 | FX-OM-CHANGE, OM-QT, FX-OM-EAC, FX-OM-REPORTS | Margin target 22% and floor 15% (the PRD says "below target" and "floor" without figures; its examples are 22% and 18% per product class). A price change on a confirmed order below standard cost plus 15% is refused and goes through the Pricing Manager, Sales Director and CFO route. |
+| SR-29 | OM-QT, OM-SO, FX-OM-CHANGE | The price waterfall (PB00 steps 1 to 4, then the discount) is the PRD's; the winning step is rebuilt from the line price (a price under the list rate reads as a customer agreement, at list as the price list, ETO lines come from the cost estimate). The October list change used by Reprice is +3.5% on list items. |
+| SR-30 | all feature screens | The nine-state selector ("Show state", `?state=`) is a prototype device; the real app reaches each state by itself. |
+| SR-32 | FX-OM-SCALE | Scale device states (connected, error, stale) are the feature list's; the stale limit of 10 s and the readout behaviour are design values (the PRD names only IF-20 and DEC-08). |
+| SR-33 | FX-OM-REPORTS | "Config per company: reps see margin Y/N" [p.56 §6]: the prototype default is N, so Sales rep sees no margin report. |
+| SR-34 | FX-OM-REPORTS | Bookings = value of orders created in the month (not Draft or Rejected); billings = invoice-posted orders in their closing month; backlog = running bookings less billings per dimension; entity = US or Canadian by order currency; CAD at 1.36 (OQ-42). |
+| SR-37 | FX-RMA-BILLABLE | Repair quote validity 30 days. |
+| SR-38 | OM-CUST tax tab | Default tax code list (S1, S1-CA, E-IC, Z-EXP): S1, U1 and E-IC are the PRD's codes, the Canadian and export codes are design values. |
+| SR-39 | OM-PACK-* | Pack order # follows the delivery number (PK-{YYYY}-{SEQ:5} is the PRD's format); "per picklist" means one pack order per schedule line of the delivery, "per shipment" one for the whole delivery. |
+| SR-40 | OM-PACK-* | Photos (four corners and the nameplate) are required for ETO and heavy units only and are shown at the station, not enforced at pack completion (the PRD says "config per item category"). |
+| SR-41 | IB-001 | Unknown-site worklist: installed base records whose site is "Not recorded" (units bought by EPC contractors ship to a job site). Assignment is by Customer service, CS Manager or Sales admin. |
 
 ## Requests to foundation
 
@@ -129,3 +143,61 @@ Write one row per change you need in a shared file. Do not edit the shared file 
 | FR-13 | src/store/events.ts | Catalog entry `sales.rmaSlaBreached { rmaId, notify, businessDays }` (module-only today) so the alert rules can route it | RMA SLA alert [DOC:p.27 §3.10, INV 15.11] | open |
 | FR-14 | src/data/shared/org.ts | Warehouse `type` (Quarantine, Finished goods, Spares ...) plus quarantine zones, so the RMA Return Warehouse lists quarantine warehouses from the master (SR-18) | RMA create "only warehouses of type Quarantine selectable" [DOC:p.23 §3.4.1] | open |
 | FR-15 | src/data/shared/customers.ts | Customer `class` values to the PRD list: Investor-Owned Utility, Municipal Utility, Co-op, EPC Contractor, Distributor, OEM, Industrial, Government. The sales seed already uses them; the shared master still has the old design values | OM-CUST Customer Class [DOC:p.49 §2.1] | open |
+| FR-16 | src/data/shared/materials.ts, src/data/domain/ids.ts | Material type KIT (non-stocked, non-valuated) and a sales BOM usage, so sales kit headers come from the master instead of the `db.fx.kits` design list | FX-OM-KIT [DOC:p.257 §6.1] | open |
+| FR-17 | src/data/domain/status.ts | A pack order record kind with Not Started, In Progress, Packed, Cancelled [DOC:p.31 §5.2]; the pack queue draws these with family badges until then | OM-PACK-LIST-001 | open |
+| FR-18 | src/store/events.ts | Promote `planning.promiseDecided` (planning request R-3) to the shared catalog; the sales slice already consumes it and writes the promise onto the quote or order line | CTP-DLG embed (OM-QT, OM-SO) | open |
+| FR-19 | src/data/domain/approvals.ts | Approval kinds for "Sales change order" (price change below floor), "Cancellation fee waiver" and "De-peg" (Sales Director) so these go through ApprovalButton and WF-INBOX; today de-peg, credit memo release and billing plan edits are decided inside the screen by the named role | FX-OM-CHANGE, FX-OM-CREDIT, FX-RMA-CREDITMEMO | open |
+| FR-20 | src/data/domain/docflow.ts | Document types for shipment (SHP-TBD-nnnn), credit memo request, repair quote and change order, so the DocumentFlowPanel can link them; they show as search hits only today | OM-SHP-001/002, FX-RMA-*, FX-OM-CHANGE | open |
+| FR-21 | src/data/screens-features.ts | `CTP-DLG`'s registry route is the order SO-2026-00402; this module now claims `/sales/orders/SO-2026-00402` and renders the order with the planning Promise Dialog. Moving the registry route to `/production/at-risk/promise` (planning host) removes the duplicate claim | CTP-DLG | open |
+
+## Feature-list entries (added 12 October 2026)
+
+The user's feature list (`00-inputs/feature-list-2026-10.md`) is part of the prototype's scope together with the PRD. The feature mapper registered the rows below in `src/data/screens-features.ts`. Each has a placeholder route today. Build it at that path with `screenId` and a `built` claim, as for any registry screen. Routes, archetypes and ids marked FX- are design values. Rows that are a tab or panel of a screen you already own (for example Material Detail views, the RMA detail tabs, the Customer tax tab) have no entry: they are in the "Feature rows" list below and count as scope of that screen.
+
+| Screen ID | Title | Route | Archetype | Wave | Flows | Feature-list section | Built |
+|---|---|---|---|---|---|---|---|
+| FX-OM-LEADIMPORT | Lead import and inbound capture review | `/sales/leads/import` | Workbench (design value) | W2 | FL-02 | Sales & Order Management | full |
+| FX-OM-QT2SO | Quote to order conversion dialog | `/sales/dialogs/quote-to-order` | Dialog (design value) | W2 | FL-01, FL-02 | Sales & Order Management | full |
+| FX-OM-KIT | Sales kit BOM explode on quote and order lines | `/sales/dialogs/kit-explode` | Dialog (design value) | W2 | FL-01 | Sales & Order Management | full |
+| FX-OM-BILLPLAN | Billing plan and milestone editor | `/sales/billing-plan` | Detail (design value) | W2 | FL-02 | Sales & Order Management | full |
+| FX-OM-EAC | ETO order cost panel (EAC) | `/sales/eto-cost` | Detail (design value) | W2 | FL-02 | Sales & Order Management | full |
+| FX-OM-ATP | ATP partial-availability dialog | `/sales/dialogs/atp-partial` | Dialog (design value) | W2 | FL-01, FL-09 | Sales & Order Management | full |
+| FX-OM-CHANGE | Sales change order, cancellation and reprice dialogs | `/sales/dialogs/change-cancel-reprice` | Dialog (design value) | W2 | FL-01, FL-02 | Sales & Order Management | full |
+| FX-OM-CREDIT | Credit release and de-peg decision dialogs | `/sales/dialogs/credit-release-depeg` | Dialog (design value) | W2 | FL-09 | Sales & Order Management | full |
+| FX-OM-CUSTPROP | Customer property return and SO closure reconciliation | `/sales/dialogs/customer-property` | Dialog (design value) | W2 | FL-05 | Sales & Order Management | full |
+| FX-OM-DLVRUN | Delivery creation run wizard | `/sales/deliveries/create-run` | Wizard (design value) | W2 | FL-09, FL-01 | Sales & Order Management | full |
+| OM-SHP-001/002 | Shipments | `/sales/shipments`, `/sales/shipments/:id` | List (design value) | W2 | FL-09, FL-01 | Sales & Order Management | full |
+| FX-OM-EXPORT | Export documentation checklist on shipment | `/sales/dialogs/export-docs` | Dialog (design value) | W2 | FL-09 | Sales & Order Management | full |
+| FX-OM-PGI | PGI confirmation and PGI reversal dialogs | `/sales/dialogs/pgi` | Dialog (design value) | W2 | FL-09, FL-01 | Sales & Order Management | full |
+| FX-OM-LOADSHIP | Load and ship scan flow (TC77, SP-18) | `/sales/load-ship` | Kiosk (design value) | W2 | FL-09 | Sales & Order Management | full |
+| FX-OM-SCALE | Pack station live scale readout | `/sales/dialogs/scale-readout` | Dialog (design value) | W2 | FL-09 | Sales & Order Management | full |
+| FX-OM-REPORTS | Sales reports (seven) | `/sales/reports`, `/sales/reports/:id` | Dashboard (design value) | W2 | - | Sales & Order Management | full |
+| FX-RMA-DIALOGS | RMA action dialogs | `/sales/dialogs/rma-actions` | Dialog (design value) | W5 | FL-05 | RMA, Warranty & Service | full |
+| FX-RMA-CREDITMEMO | Credit memo request panel and Controller credit release | `/sales/dialogs/credit-memo` | Dialog (design value) | W5 | FL-05 | RMA, Warranty & Service | full |
+| FX-RMA-BILLABLE | Billable repair quote and customer approval gate | `/sales/dialogs/billable-repair` | Dialog (design value) | W5 | FL-05 | RMA, Warranty & Service | full |
+| FX-RMA-EXCLUSIONS | Warranty exclusions catalog | `/service/warranty-exclusions` | Config (design value) | W5 | FL-05 | RMA, Warranty & Service | full |
+
+## Feature rows on screens already owned (completed 12 October 2026)
+
+| Registry id | Route | What was added | Where |
+|---|---|---|---|
+| OM-QT-001/2 | `/sales/quotations/:id` | Tabs: Lines (price source badge and PB00 waterfall per line, lead time with the ±25% band on a Budgetary quote, per-line CTP chip from the planning module, commodity surcharge lines with index, base, date and math, kit lines), ETO configuration (datasheet), Cost and margin (estimate link, margin %, floor and target check, approval route), Versions (chain and side-by-side diff), Win and loss (structured reasons), Activity. Budgetary watermark banner; quote type switch on a Draft. "Convert to order" opens FX-OM-QT2SO | pages/Quotations.tsx, pages/fx/QuotationPanels.tsx |
+| OM-SO-001/2 | `/sales/orders/:id` | Readiness chips (supply, credit, quality, documents), ETO milestone strip (six slices, invoice-request state), per-line price waterfall and source badge, planning Promise Dialog and per-line CTP chip (replaces the FL-09 CTP stub; `planning.promiseDecided` writes the promise back), links to the billing plan and the ETO cost panel, Change order / Reprice / Cancel / Add kit line / Credit decision dialogs, ATP dialog now FX-OM-ATP | pages/Orders.tsx |
+| OM-LEAD-001/2 | `/sales/leads` | Verified: pipeline board beside the register (`?view=register`). Added the entry to Lead import and inbound review | pages/Leads.tsx |
+| OM-CUST-001/2 | `/sales/customers/:id` | Tax tab: registrations per jurisdiction, default tax code, exemption certificates (read-only embed of ACC 19.2), use-tax accrual (vendor field, read-only), tax address role, determination precedence with the customer's result | pages/fx/CustomerTax.tsx |
+| OM-DLV-001 | `/sales/deliveries` | E-DLV-01 rule ids on cards, in the panel and in the rules list; carrier tender state with Reassign carrier and Carrier accepted; hand-offs to the creation run wizard, shipments, load and ship, PGI dialogs and the PGI reversal checks; nine-state bar | pages/Deliveries.tsx |
+| OM-PACK-* | `/sales/packing`, `/sales/packing/station/:id` | Queue: PK-{YYYY}-{SEQ:5}, pack order status (Not Started, In Progress, Packed), required ship date red when today or past, creation rule (per picklist / per shipment). Station: centre scan with the items on the left and the HU tree on the right, E-PCK-02 on a wrong scan, short-pack (Short Pick, Damage, Hold), nest HUs, move or split contents between HUs, photo checklist, live scale readout (connected, error, stale) | pages/Packing.tsx, pages/fx/ScaleReadout.tsx |
+| RMA-LIST/CREATE | `/sales/rma/:id` | Verified: seven tabs (Overview, Lines, Receipts, Inspection, Financials, Documents, Activity), No-Reference and Recall-class variants. Added Approve or reject, Unauthorized-line decision, the credit memo panel and the billable repair quote on Financials | pages/Rma.tsx |
+| IB-001 | `/service/installed-base` | Verified: service history (History tab) and warranty extension approval. Added the unknown-site worklist with bulk site assignment (`?view=unknown-site`) | pages/InstalledBase.tsx, pages/fx/UnknownSites.tsx |
+
+### Data and state added
+
+`db.fx` (src/modules/sales/fx/model.ts) lives inside the `sales` slice so one action can change an order and its feature record in a single atomic write. Seeded: nine inbound captures and one import batch, billing plans for the ETO orders, ETO cost panels for SO-2026-00301 and SO-2026-00377 (the spine values for CE-TBD-0301 and CE-TBD-0377), three sales kits, shipment extensions for every delivery (one carrier rejection on the Quality Cleared delivery, one failed PSI on a Packed delivery), eight demo orders that exercise each split and merge rule of the run wizard, a change order, a de-peg waiting for the Sales Director, customer property on SO-2026-00377 and SO-2026-00301, quotation extensions (budgetary, surcharges, win and loss), tax profiles for every customer, six warranty exclusions, a blocked credit memo (customer on credit hold, E-RMA-07), a repair quote waiting for the customer on RMA-TBD-0011, an Unauthorized Return line on RMA-TBD-0010 and unknown-site installed base units for the EPC customers.
+
+Events: this module now consumes `planning.promiseDecided` (module event declared by the planning group). No new event is emitted: PGI, PGI reversal, POD and quotation won are emitted as before (FL-09 path unchanged).
+
+Role gates follow the PRD only where it names a role (ASM-PERM-1): billing plan edits are Finance (p.56 §6), the credit release of a held credit memo is the Controller, a de-peg is decided by the Sales Director, reopen is the Controller within 30 days, cancel is the CS Manager, short-pack is a supervisor. The default acting role is Sales rep, so switch "Acting as" to try the others; a refused action says which role does it.
+
+### Nine states
+
+Every feature screen shows a "Show state" selector (`?state=normal|empty|loading|validation|authorization|conflict|offline|degraded|read-only`). Empty and loading replace the content, validation starts the forms with their messages, authorization / conflict / offline / read-only disable the write controls with the reason, degraded tags values Stale. Kiosk screens (load and ship, pack station) take the same states.

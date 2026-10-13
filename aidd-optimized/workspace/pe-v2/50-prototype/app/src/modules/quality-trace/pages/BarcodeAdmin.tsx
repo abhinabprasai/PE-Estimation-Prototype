@@ -4,7 +4,7 @@
 // templates, resolve scan exceptions. Arrives from the Configuration area. Postings and scans: none.
 
 import { useState } from "react"
-import { useSearchParams } from "react-router"
+import { Link, useSearchParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -14,6 +14,8 @@ import { SCAN_POINTS, type ScanPointCode } from "@/data/domain"
 import { useSlice } from "@/store"
 import { bc } from "../data/actions"
 import type { LabelTemplate, Printer, Reprint, ScanException } from "../data/types"
+import { FailedPrintQueue, PrinterHealth, TelemetryLog } from "./BarcodeQueues"
+import { ReprintDialog, ReprintLog, ApprovalQueue } from "./ReprintGovernance"
 import { Pick, Section, TextField, report, useDataState, userName, SkeletonTable } from "../components/bits"
 
 export const BC_RULES: [string, string, string][] = [
@@ -27,7 +29,9 @@ const SECTIONS = [
   { id: "printers", label: "Printers" },
   { id: "templates", label: "Label templates" },
   { id: "policies", label: "Scan point policies" },
+  { id: "failed", label: "Failed-print queue" },
   { id: "reprints", label: "Reprint log" },
+  { id: "telemetry", label: "Scan telemetry" },
   { id: "exceptions", label: "Scan exceptions" },
 ]
 
@@ -37,15 +41,21 @@ export function BarcodeAdmin() {
   const [params, setParams] = useSearchParams()
   const sec = params.get("s") ?? "printers"
   const openEx = s.scanExceptions.filter((x) => !x.resolvedOn).length
+  const failedJobs = s.printJobs.filter((j) => j.status === "Failed").length
   return (
     <ConfigPage
       header={{
         title: "Label and Scan Administration",
         screenId: "BC-ADMIN",
         description: "The print and scan infrastructure: devices per station, label templates, scan point policies and the offline-conflict queue. Plant IT owns it.",
-        chips: openEx ? <Chip kind="flag">{openEx} scan exceptions open</Chip> : undefined,
+        chips: (
+          <>
+            {openEx ? <Chip kind="flag">{openEx} scan exceptions open</Chip> : null}
+            {failedJobs ? <Chip kind="flag">{failedJobs} failed prints</Chip> : null}
+          </>
+        ),
       }}
-      sections={SECTIONS.map((x) => (x.id === "exceptions" ? { ...x, label: `Scan exceptions (${openEx})` } : x))}
+      sections={SECTIONS.map((x) => (x.id === "exceptions" ? { ...x, label: `Scan exceptions (${openEx})` } : x.id === "failed" ? { ...x, label: `Failed-print queue (${failedJobs})` } : x))}
       section={sec}
       onSectionChange={(v) => (params.set("s", v), setParams(params, { replace: true }))}
       effectiveDated={sec === "templates"}
@@ -59,6 +69,8 @@ export function BarcodeAdmin() {
           {sec === "printers" && <Printers rows={ds.empty ? [] : s.printers} />}
           {sec === "templates" && <Templates rows={ds.empty ? [] : s.labelTemplates} />}
           {sec === "policies" && <Policies />}
+          {sec === "failed" && <FailedPrintQueue />}
+          {sec === "telemetry" && <TelemetryLog />}
           {sec === "reprints" && <Reprints rows={ds.empty ? [] : s.reprints} />}
           {sec === "exceptions" && <Exceptions rows={ds.empty ? [] : s.scanExceptions} />}
           <RulesPanel rules={BC_RULES} />
@@ -78,6 +90,7 @@ function Printers({ rows }: { rows: Printer[] }) {
     { id: "model", header: "Model", value: (p) => p.model, filterable: true },
     { id: "addr", header: "Address", value: (p) => p.address, mono: true },
     { id: "labels", header: "Label types", value: (p) => p.labelTypes.join(", ") },
+    { id: "health", header: "Health", value: (p) => (!p.active ? "Inactive" : (p.health ?? "Online")), filterable: true, cell: (p) => <PrinterHealth health={p.health} active={p.active} /> },
     { id: "reg", header: "Registered", value: (p) => p.registeredOn, mono: true },
     { id: "active", header: "Active", value: (p) => (p.active ? "Active" : "Inactive"), filterable: true, cell: (p) => <Switch checked={p.active} aria-label={`${p.id} active`} onCheckedChange={() => report(bc.togglePrinter(p.id), `${p.id} ${p.active ? "deactivated" : "activated"}`)} /> },
   ]
@@ -204,33 +217,23 @@ function Policies() {
 }
 
 function Reprints({ rows }: { rows: Reprint[] }) {
-  const s = useSlice("qualityTrace")
-  const [o, setO] = useState({ label: "", template: s.labelTemplates[0]?.name ?? "", printer: s.printers.find((p) => p.active)?.id ?? "", reason: "" })
-  const cols: Column<Reprint>[] = [
-    { id: "id", header: "Reprint", value: (r) => r.id, mono: true, sortable: true },
-    { id: "label", header: "Label", value: (r) => r.labelId, mono: true },
-    { id: "tpl", header: "Template", value: (r) => r.template, filterable: true },
-    { id: "prn", header: "Printer", value: (r) => r.printerId, filterable: true },
-    { id: "by", header: "By", value: (r) => userName(r.by) },
-    { id: "on", header: "On", value: (r) => r.on, sortable: true, mono: true },
-    { id: "reason", header: "Reason", value: (r) => r.reason },
-  ]
+  const [open, setOpen] = useState(false)
+  const waiting = rows.filter((r) => r.state === "Awaiting Quality approval")
   return (
     <>
-      <Section title="Reprint a label">
-        <div>
-          <div className="grid gap-4 sm:grid-cols-4">
-            <TextField id="rp-label" label="Label ID" value={o.label} onChange={(v) => setO({ ...o, label: v })} />
-            <Pick id="rp-tpl" label="Template" value={o.template} onChange={(v) => setO({ ...o, template: v })} options={s.labelTemplates.map((t) => t.name)} />
-            <Pick id="rp-prn" label="Printer" value={o.printer} onChange={(v) => setO({ ...o, printer: v })} options={s.printers.filter((p) => p.active).map((p) => ({ value: p.id, label: `${p.id} · ${p.station}` }))} />
-            <TextField id="rp-reason" label="Reason (required)" value={o.reason} onChange={(v) => setO({ ...o, reason: v })} />
-          </div>
-        </div>
-        <div>
-          <Button onClick={() => report(bc.reprint(o.label, o.template, o.printer, o.reason), "Reprint sent and logged") && setO({ ...o, label: "", reason: "" })}>Reprint</Button>
-        </div>
+      <Section title="Reprint a label" action={<Button onClick={() => setOpen(true)}>Reprint a label</Button>}>
+        <p className="text-sm text-muted-foreground">
+          Every reprint needs a reason code; serial and nameplate reprints wait for Quality approval; reprints are marked DUPLICATE except location labels.{" "}
+          <Link className="text-link underline-offset-4 hover:underline" to="/configuration/barcode/reprint">Reprint governance</Link>
+        </p>
       </Section>
-      <DataTable rows={rows} columns={cols} rowId={(r) => r.id} densityKey="BC-RPR" searchText={(r) => `${r.labelId} ${r.reason}`} initialSort={{ id: "on", dir: "desc" }} empty={{ title: "No reprints logged" }} />
+      {waiting.length > 0 && (
+        <Section title={`Waiting for Quality approval (${waiting.length})`}>
+          <ApprovalQueue rows={waiting} />
+        </Section>
+      )}
+      <ReprintLog rows={rows} />
+      {open && <ReprintDialog open onOpenChange={setOpen} />}
     </>
   )
 }
@@ -250,6 +253,9 @@ function Exceptions({ rows }: { rows: ScanException[] }) {
   ]
   return (
     <>
+      <p className="text-sm text-muted-foreground">
+        Offline replay conflicts are decided with the queued scan against the current state on <Link className="text-link underline-offset-4 hover:underline" to="/configuration/barcode/scan-exceptions">the scan exception queue</Link>. Quick resolution is kept here for plain cases.
+      </p>
       <DataTable rows={rows} columns={cols} rowId={(x) => x.id} densityKey="BC-SCX" searchText={(x) => `${x.code} ${x.device} ${x.conflict}`} empty={{ title: "No scan exceptions", body: "Offline conflicts at sync appear here." }} />
       <DialogShell
         open={!!res}

@@ -156,6 +156,8 @@ export interface NativeFile {
   checksum: string
   scan: "Clean"
 }
+/** A markup pinned on the PDF rendition while a revision is In Review (position in % of the sheet). */
+export type Redline = LineComment & { id?: string; page?: number; x?: number; y?: number; resolved?: boolean; resolvedBy?: Id.UserId }
 export type DocRevisionX = DocRevision & {
   native: string[]
   nativeFiles?: NativeFile[]
@@ -163,7 +165,9 @@ export type DocRevisionX = DocRevision & {
   stamp?: string
   titleBlock: TitleBlock
   releasedOn?: string
-  redlines: LineComment[]
+  redlines: Redline[]
+  /** Reviewer approvals recorded while In Review; release stays the Engineering Manager's action [DOC:p.64 §5.2]. */
+  reviewerApprovals?: { by: Id.UserId; on: string; note?: string }[]
   checksum: string
 }
 export type DocRecord = Omit<ControlledDocument, "type" | "security" | "revisions"> & {
@@ -325,4 +329,52 @@ export interface ImportProposal {
   createdOn: string
   lines: ImportProposalLine[]
   committed?: { on: string; by: Id.UserId; added: number; placeholders: number }
+}
+
+// ---------------------------------------------------------------- CAD vs EBOM comparison (FX-CAD-COMPARE, IF-17)
+/** Current vault assembly for an EBOM; the connector extracts it on demand or at PDM release [DOC:p.198 §3]. */
+export interface CadAssembly {
+  id: string
+  ebomId: Id.EbomId
+  vaultRev: string
+  /** Vault revision the ERP structure was last aligned with. */
+  alignedRev: string
+  vaultTx: string
+  checkedInAt: string
+  lines: ImportProposalLine[]
+  /** Comparison reviewed with no structure change needed (clears the CAD-ahead banner). */
+  reviewed?: { on: string; by: Id.UserId; note: string }
+}
+
+// ---------------------------------------------------------------- PDM linkage (FX-CAD-PDM, Book III Part G §4)
+/** The four PDM states the PRD maps to an ERP effect, plus the connector's publish outcomes and the unlinked case.
+ *  The PRD gives no status list for linkage (OQ-21): shown as text, never as a badge. */
+export type PdmState =
+  | "In work (checked out)"
+  | "Change order opened"
+  | "Release approved"
+  | "Released, rendition published"
+  | "Publish failed"
+  | "Obsolete in PDM"
+  | "Not linked (ERP only)"
+export interface PdmLink {
+  id: string
+  documentId: Id.DocumentId
+  vaultPath?: string
+  vaultRev?: string
+  state: PdmState
+  /** PDM change order number, cross-referenced to the ERP ECR. */
+  pdmCo?: string
+  linkedEcr?: Id.EcrId
+  linkedEco?: Id.EcoId
+  lastEvent?: string
+  note?: string
+  activity: Activity[]
+}
+
+/** Sales-kit header: a material of type KIT, non-stocked and non-valuated by default [DOC:p.256 §6.1]. */
+export interface KitHeader {
+  id: Id.MaterialId
+  description: string
+  stocked: boolean
 }

@@ -28,7 +28,7 @@ import type {
   Confirmation,
 } from "@/data/domain"
 
-export type ExCode = "EX-01" | "EX-02" | "EX-03" | "EX-04" | "EX-05" | "EX-06" | "EX-07" | "EX-08" | "EX-09"
+export type ExCode = "EX-01" | "EX-02" | "EX-03" | "EX-04" | "EX-05" | "EX-06" | "EX-07" | "EX-08" | "EX-09" | "EX-10"
 
 /** Exception messages EX-01..EX-07 [DOC:p.72 §3.2]; EX-08 and EX-09 [DOC:p.149; p.157 Book II] (asserted). */
 export const EX_CATALOG: Record<ExCode, { message: string; action: string; source: string; buy: boolean }> = {
@@ -41,6 +41,7 @@ export const EX_CATALOG: Record<ExCode, { message: string; action: string; sourc
   "EX-07": { message: "BOM/routing missing or unreleased for make item", action: "Open Engineering exception", source: "[DOC:p.72 §3.2]", buy: false },
   "EX-08": { message: "Inside planning fence: change not applied automatically", action: "Planner decision with reason", source: "[DOC:p.149 Book II §3.6]", buy: false },
   "EX-09": { message: "No valid source of supply", action: "Start RFQ or AVL qualification (buyer)", source: "[DOC:p.157 Book II §7.5]", buy: true },
+  "EX-10": { message: "Unworkable network demand: inactive lane or no valid production version at the supplying plant", action: "Reactivate lane or change sourcing (planner)", source: "[DOC:p.283 Book IX §4.4]", buy: false },
 }
 
 export interface MrpRun {
@@ -276,6 +277,8 @@ export interface WcOverride {
   /** Freeze horizon in working days, per work center (default 5) [DOC:p.193 Book III E §3]. */
   freezeDays?: number
   crew: number
+  /** Scenario what-if: extra hours per working day (overtime or an added shift). Not set on live records. */
+  extraHoursPerDay?: number
   alternate?: { wcId: WorkCenterId; efficiencyPct: number }
   cycleSize?: number
   cycleHours?: number
@@ -399,7 +402,9 @@ export interface CvaException {
   text: string
 }
 
-export interface PlanningProductionState {
+import type { ExtraState } from "./extra"
+
+export interface PlanningProductionState extends ExtraState {
   mrpRuns: MrpRun[]
   exceptions: MrpException[]
   plannedOrders: PPPlannedOrder[]

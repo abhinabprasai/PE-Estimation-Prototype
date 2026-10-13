@@ -1221,7 +1221,7 @@ function runStepIn(db: DB, ctx: MutateCtx, r: Rma, s: SettleStep) {
   if (s.done) return
   const c = db.customers.find((x) => x.id === r.customerId)!
   const l = r.lines.find((x) => x.no === s.line)
-  if (s.template === 19 && c.creditHold) {
+  if (s.template === 19 && c.creditHold && !s.released) {
     s.error = "E-RMA-07 Customer is on credit hold — credit requires Controller release"
     return
   }
@@ -1390,7 +1390,12 @@ export function recallRmas(db: DB, ctx: MutateCtx, recallId: string) {
   if (db.rmas.some((r) => r.recallId === recallId)) return
   const ib = db.ib.find((x) => x.id === "IB-TBD-0301")
   if (!ib) return
-  const field = ["SN-TBD-BSH-0301", "SN-TBD-BSH-0303"]
+  // Field population of THIS campaign (quality-trace): rows In field whose parent is the installed unit.
+  // Without a population for the campaign, only the hero campaign falls back to its seeded field serials.
+  const campaign = store.hasSlice("qualityTrace") ? store.getSlice("qualityTrace").recalls.find((r) => r.id === recallId) : undefined
+  const popSerials = campaign?.population.filter((p) => p.where === "In field" && p.parentSerial === ib.serial && !p.rmaId).map((p) => p.serial) ?? []
+  const field = popSerials.length ? popSerials : recallId === "RCL-2026-001" ? ["SN-TBD-BSH-0301", "SN-TBD-BSH-0303"] : []
+  if (!field.length) return
   const id = `RMA-TBD-${pad(db.seq2.rma++)}`
   db.rmas.unshift({
     id, cls: "RC3", status: "Draft", warranty: "Yes", customerId: ib.customerId, refType: "Serial Number", refDoc: ib.serial, reason: "Recall", reasonDetail: `Campaign ${recallId}: recover the remaining suspect HV bushings from ${ib.serial}.`,

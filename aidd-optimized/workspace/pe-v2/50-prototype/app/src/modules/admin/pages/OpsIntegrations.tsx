@@ -16,12 +16,13 @@ import { DialogShell, WorkbenchPage } from "@/components/templates"
 import { docRoute } from "@/data/domain"
 import { HERO } from "@/data/shared"
 import { store, useCore, useSlice } from "@/store"
-import { INTERFACES, interfaceById, jobById, type InterfaceDef } from "../data/catalog"
-import { canEditPayload, discard, markFixed, replay } from "../data/actions"
+import { INTERFACES, RECON_SCHEDULE, interfaceById, jobById, type InterfaceDef } from "../data/catalog"
+import { canEditPayload, discard, markFixed, replay, runRecon } from "../data/actions"
 import type { InterfaceMessage } from "../data/types"
 import { fmtDateTime, fmtDuration } from "../lib/time"
 import { act, Field, StateText } from "../components/common"
 import { EscalateDialog } from "./OpsJobs"
+import { SagaPanel } from "../components/SagaPanel"
 
 type Queue = "dlq" | "retrying" | "all"
 const failed = (m: InterfaceMessage) => m.state === "Dead-lettered" || m.state === "Retrying"
@@ -42,6 +43,7 @@ export function OpsIntegrations() {
   const active = s.messages.find((m) => m.id === msgId)
   const base = ifFilter ? s.messages.filter((m) => m.interfaceId === ifFilter) : s.messages
   const rows = base.filter((m) => (queue === "dlq" ? m.state === "Dead-lettered" : queue === "retrying" ? m.state === "Retrying" : true))
+  const latestRecon = (id: string) => s.recon.filter((r) => r.interfaceId === id).sort((a, b) => b.at.localeCompare(a.at))[0]
   const dlqDepth = (id: string) => s.messages.filter((m) => m.interfaceId === id && m.state === "Dead-lettered").length
   const setParam = (k: string, v?: string) => {
     const next = new URLSearchParams(params)
@@ -186,6 +188,8 @@ export function OpsIntegrations() {
         ))}
       </section>
 
+      <SagaPanel />
+
       <section aria-label="Message monitor">
         <h2 className="mb-2 text-sm font-semibold">Message monitor: interface catalog IF-01 to IF-20</h2>
         <DataTable<InterfaceDef>
@@ -211,12 +215,39 @@ export function OpsIntegrations() {
         />
       </section>
 
+      <section aria-label="Reconciliation reports">
+        <h2 className="mb-2 text-sm font-semibold">Reconciliation reports</h2>
+        <p className="mb-2 max-w-3xl text-sm">
+          The per-interface control of §3 runs on a schedule. A failed control opens an incident and pages on-call per Part D §5; it is never just logged [DOC:p.187 §4]. Run one now to check an interface after a fix.
+        </p>
+        <DataTable<InterfaceDef>
+          rows={INTERFACES}
+          rowId={(f) => f.id}
+          loading={loading}
+          densityKey="OPS-INT-recon"
+          caption="Reconciliation reports"
+          empty={{ title: "No interfaces." }}
+          columns={[
+            { id: "id", header: "Interface", value: (f) => `${f.id} ${f.name}`, cell: (f) => <span><span className="font-mono">{f.id}</span> {f.name}</span> },
+            { id: "ctl", header: "Control (§3)", value: (f) => f.reconciliation, className: "max-w-[280px]" },
+            { id: "sched", header: "Schedule", value: (f) => RECON_SCHEDULE[f.id] ?? "", cell: (f) => <span className="text-xs">{f.phase ? `${RECON_SCHEDULE[f.id]} · ${f.phase}` : RECON_SCHEDULE[f.id]}</span> },
+            { id: "last", header: "Last run", value: (f) => latestRecon(f.id)?.at ?? "", sortable: true, cell: (f) => { const r = latestRecon(f.id); return r ? <span className="text-xs tabular">{fmtDateTime(r.at)}<br />{r.by === "Scheduler" ? "Scheduler" : "Run by a user"}</span> : <span className="text-xs text-muted-foreground">No run yet</span> } },
+            { id: "res", header: "Result", value: (f) => latestRecon(f.id)?.result ?? "", filterable: true, cell: (f) => { const r = latestRecon(f.id); return r ? <StateText tone={r.result === "Exceptions" ? "attention" : "muted"}>{r.result === "Clean" ? "Clean" : `${r.exceptions} exception${r.exceptions === 1 ? "" : "s"}`}</StateText> : "" } },
+            { id: "finding", header: "Finding", value: (f) => latestRecon(f.id)?.finding ?? "", className: "max-w-[300px]" },
+            { id: "inc", header: "Incident", value: (f) => latestRecon(f.id)?.incidentId ?? "", cell: (f) => { const i = latestRecon(f.id)?.incidentId; const inc = s.incidents.find((x) => x.id === i); return i ? <span className="text-xs"><span className="font-mono">{i}</span> {inc ? `${inc.severity} · ${inc.state}` : ""}{inc?.paged?.length ? " · paged" : ""}</span> : "" } },
+            { id: "run", header: "", cell: (f) => <Button size="sm" variant="outline" onClick={() => act(runRecon(f.id))}>Run now</Button> },
+          ]}
+        />
+        <p className="mt-1 text-xs text-muted-foreground">The control text is the PRD's [DOC:pp.185-186 §3]; the run times and the severity of a failed control (S2 on a financially relevant interface, else S3) are design values (AR-29).</p>
+      </section>
+
       <RulesPanel
         rules={[
           ["B§3", "No module-to-module dependency exists unless it appears in the interface catalog with a contract in the registry", "DOC:p.187 B §3 Build Note"],
           ["B§4-a", "DLQ: inspect, edit-and-replay (edit rights restricted + audited), bulk replay after fix, discard with mandatory reason", "DOC:p.187 B §4"],
           ["B§4-b", "Discard of a financially relevant command requires Controller", "DOC:p.187 B §4"],
           ["B§4-c", "correlation_id propagates from the originating user action through every API call, event, job and journal line", "DOC:p.187 B §4"],
+          ["B§4-d", "Reconciliation reports: the per-interface controls run scheduled; failures raise incidents per Part D §5", "DOC:p.187 B §4"],
           ["B§2", "Transactional outbox: events written in the same transaction as the state change, published at-least-once", "DOC:p.185 B §2"],
         ]}
       />

@@ -11,10 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Chip, KV, RulesPanel, StatusBadge, type Column } from "@/components/patterns"
+import { Chip, KV, LifecycleStrip, RulesPanel, StatusBadge, type Column } from "@/components/patterns"
 import { DetailPage, DialogShell, ListPage } from "@/components/templates"
 import { USERS, CUSTOMERS } from "@/data/shared"
-import { fmtDate } from "@/lib/format"
+import { addDays, fmtDate } from "@/lib/format"
 import { useRole, useSlice } from "@/store"
 import type { UserId } from "@/data/domain"
 import { DetailState, NoPostings, RefLink, StatePreview, useAct, useActDialog, useScreenState } from "../components"
@@ -80,6 +80,7 @@ function RequestBody({ er }: { er: ErRecord }) {
   const typeChangeable = (er.status === "Open" || er.status === "In Design") && !er.checklist.some((r) => r.ref && (r.ref.type === "ebom" || r.ref.type === "mbom"))
   const [pick, setPick] = useState<UserId[]>(er.assigneeIds)
   const [due, setDue] = useState(er.due)
+  const backDue = addDays(er.promisedShip, -(er.productionLeadDays + er.longLeadDays))
   const prog = checklistProgress(s, er)
   const isEM = role === "Engineering Manager"
   const ebomRow = er.checklist.find((r) => r.key === "ebom")
@@ -131,9 +132,13 @@ function RequestBody({ er }: { er: ErRecord }) {
             <KV k="Customer">{customerName(er.customerId)}</KV>
             <KV k="Item"><span className="font-mono">{er.itemId}</span></KV>
             <KV k="Design type">{er.designType}{er.baseDesignEbomId && <> from <RefLink r={{ type: "ebom", id: er.baseDesignEbomId }} /></>}{typeChangeable && er.activity.some((a) => a.text.startsWith("Created automatically")) && er.designType === "New Design" && <Chip kind="design" note="The PRD does not say who picks the design type when the request is auto-created; it opens as New Design and the Engineering Manager sets it (reading R-ER-1)">default</Chip>}</KV>
-            <KV k="Release level"><StatusBadge kind="releaseLevel" status={er.releaseLevel} size="sm" /></KV>
+            <KV k="Release level">
+              <StatusBadge kind="releaseLevel" status={er.releaseLevel} size="sm" />
+              <LifecycleStrip kind="releaseLevel" status={er.releaseLevel} className="mt-1" />
+              <span className="block text-xs text-muted-foreground">Concept to Released for Production, forward only (C-21); the design is at its end state when it reaches Released for Production.</span>
+            </KV>
             <KV k="Design due date">
-              {fmtDate(er.due)}
+              {fmtDate(er.due)}{er.due !== backDue && <Chip kind="change" note={`The back-scheduled date is ${backDue}; the Engineering Manager edited it`}>Edited</Chip>}
               <span className="block text-xs text-muted-foreground">Promised ship {fmtDate(er.promisedShip)} − production {er.productionLeadDays} d − long-lead {er.longLeadDays} d <Chip kind="design" note="Lead times are design values; the formula is the PRD's [DOC:p.59]">lead times</Chip></span>
             </KV>
             <KV k="Engineers">{er.assigneeIds.length ? er.assigneeIds.map(userName).join(", ") : "Unassigned"}</KV>
@@ -276,9 +281,10 @@ function RequestBody({ er }: { er: ErRecord }) {
         )}
       </DialogShell>
       <DialogShell open={dlg === "due"} onOpenChange={(o) => !o && setDlg(null)} title="Edit design due date" confirmLabel="Save due date"
-        consequence={`Sends a schedule-impact warning to ${er.soId}.`} onConfirm={() => runD((d, c) => act.setDueDate(d, c, er.id, due), "Due date saved")}>
+        consequence={`Sends a schedule-impact warning to ${er.soId}.${due && due > backDue ? ` ${fmtDate(due)} is later than the back-scheduled date ${fmtDate(backDue)}: the promised ship date is at risk.` : ""}`} onConfirm={() => (due ? runD((d, c) => act.setDueDate(d, c, er.id, due), "Due date saved") : "Enter a due date.")}>
+        <p className="text-sm text-muted-foreground">Back-scheduled: promised ship {fmtDate(er.promisedShip)} − production {er.productionLeadDays} d − long-lead {er.longLeadDays} d = {fmtDate(backDue)}.</p>
         <Label htmlFor="due">Design due date</Label>
-        <Input id="due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <Input id="due" type="date" value={due} aria-invalid={!due} onChange={(e) => setDue(e.target.value)} />
       </DialogShell>
     </>
   )

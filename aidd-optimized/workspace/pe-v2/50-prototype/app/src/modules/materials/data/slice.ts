@@ -29,6 +29,8 @@ import {
 } from "./seed"
 import { R, allMaterials, logChange, newMcrTasks, nextSeq, rateOf, type MaterialsState } from "./state"
 import type { MaterialViews, McrRecord } from "./types"
+import { seedExt, extraStock } from "./ext"
+import { onDepegDecided } from "./ext-actions"
 import { applyFreeze, onCountDecided, onMchOrSupDecided, onPriceDecided, onSsDecided } from "./actions"
 
 export type { MaterialsState } from "./state"
@@ -84,13 +86,14 @@ export function seed(): MaterialsState {
     matEdits,
     views,
     history: seedHistory(),
-    stock: seedStock(),
+    stock: [...seedStock(), ...extraStock()],
     grns: seedGrns(),
     safetyStock: seedSafetyStock(),
     buffers: seedBuffers(),
     dqAssignments: [],
     salesPrices: seedSalesPrices(),
     ended: [],
+    x: seedExt(),
     seq: 430,
   }
 }
@@ -133,17 +136,24 @@ const PO_MATERIAL: Record<string, { materialId: Material["id"]; rate: number }> 
 
 function subscribe(api: StoreApi) {
   // Engineering placeholder: number reserved, material + MCR with tasks (§4.3; RD-MM-04, RD-MM-05)
+  // When the description starts with the placeholder number engineering already reserved
+  // ("RAW-TBD-PH0012: ..."), that number is used, so engineering's placeholder turns Active when the
+  // MCR activates (RD-MM-05); otherwise a RAW number is reserved here.
   api.on("engineering.placeholderNeeded", ({ engineeringRequestId, description }) =>
     api.mutate("materials", (d, ctx) => {
       const n = nextSeq(d)
-      const materialId = `RAW-TBD-P${n}` as Material["id"]
+      const m0 = /^(RAW|SEMI|CONS|PACK)-TBD-([A-Z0-9]+):\s*(.*)$/.exec(description)
+      const reserved = m0 && !allMaterials(d).some((x) => x.id === `${m0[1]}-TBD-${m0[2]}`) ? { id: `${m0[1]}-TBD-${m0[2]}` as Material["id"], type: m0[1] as Material["type"], text: m0[3] } : undefined
+      const type: Material["type"] = reserved?.type ?? "RAW"
+      const materialId = reserved?.id ?? (`RAW-TBD-P${n}` as Material["id"])
+      const text = reserved?.text ?? description
       const mcrId = `MCR-TBD-0${n}` as McrRecord["id"]
-      const m: Material = { id: materialId, materialNo: materialId, type: "RAW", description, groups: ["RAW"], baseUom: "EA", status: "Data Completion", blocks: [], batchFlag: false, valuationClass: "VC-3000", profitCenterId: "PC-200" }
+      const m: Material = { id: materialId, materialNo: materialId, type, description: text, groups: [type], baseUom: "EA", status: "Data Completion", blocks: [], batchFlag: type === "RAW", valuationClass: "VC-3000", profitCenterId: "PC-200" }
       d.created.push(m)
       d.views[materialId] = emptyViews(m, ["BSH Components"])
       d.mcrs.unshift({
-        id: mcrId, materialId, originRef: { type: "engineeringRequest", id: engineeringRequestId }, requestedType: "RAW", description, path: "Engineering Placeholder", stage: "Tasks open", open: true,
-        createdOn: ctx.today, createdBy: ctx.userId, group: "BSH Components", uom: "EA", tasks: newMcrTasks("RAW", ctx.today),
+        id: mcrId, materialId, originRef: { type: "engineeringRequest", id: engineeringRequestId }, requestedType: type, description: text, path: "Engineering Placeholder", stage: "Tasks open", open: true,
+        createdOn: ctx.today, createdBy: ctx.userId, group: "BSH Components", uom: "EA", tasks: newMcrTasks(type, ctx.today),
         activity: [{ at: ctx.today, by: "System", text: `Placeholder from ${engineeringRequestId}; number ${materialId} reserved; tasks generated` }],
       })
       logChange(d, ctx, materialId, "Record", "", "Number reserved (placeholder)", mcrId)
@@ -209,6 +219,7 @@ function subscribe(api: StoreApi) {
   })
   api.on("approval.decided", ({ kind, subject, outcome, requestId, reason }) => {
     if (subject.type !== "material") return
+    if (kind === "Reallocation of confirmed supply" && String(subject.id).startsWith("STK-")) onDepegDecided(api, String(subject.id), outcome)
     if (kind === "Material change") onMchOrSupDecided(api, subject.id, outcome, requestId, reason)
     if (kind === "Count variance") onCountDecided(api, subject.id, outcome, requestId, reason)
     if (kind === "Safety stock change") onSsDecided(api, subject.id, outcome, requestId)

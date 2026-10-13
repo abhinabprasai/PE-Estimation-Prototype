@@ -4,7 +4,7 @@
 // "Production Complete / Tested"; Fail routes to rework with retest scope. Scan SP-14 binds
 // instruments (calibration interlock E-QM-05). Arrives from orders at the Testing status.
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "react-router"
 import { Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -24,10 +24,10 @@ import { ActivityList, DocLinkText, NoList, NotFound, Outcome, Pick, Reading, Se
 import { NcrDialog } from "./Inspections"
 
 export const FIN_RULES: [string, string, string][] = [
-  ["QM-F1", "Characteristics materialise from the FIN plan with the unit's design values as bounds (winding resistance ±2%, no-load loss guarantee +10%, impedance ±7.5% two-winding).", "DOC:p.86 §3"],
+  ["QM-F1", "Characteristics materialise from the FIN plan with the unit's design values as bounds: winding resistance within the design-sheet tolerance, turns ratio ±0.5%, no-load loss at most the guarantee +10% (single unit), %Z ±7.5% (two-winding). The numeric band used for winding resistance (±2%) is a reading, QT-R24.", "DOC:p.86 §3"],
   ["QM-F2", "A run may span sessions; partial save keeps it open. Every test referencing an instrument scans its CAL label (SP-14); Overdue or Out of Service blocks with E-QM-05.", "DOC:p.86 §3; p.96 SP-14"],
   ["QM-F3", "All characteristics pass: Final Result Pass, FTR-{YYYY}-{SEQ:4} generated and attached to serial, WO and shipment set; milestone Production Complete / Tested fires.", "DOC:p.87 §4"],
-  ["QM-F4", "Any fail: NCR mandatory; WO stays Testing. Disposition Rework (RWO, retest of the failed scope), Engineering Review or Scrap (Controller + Engineering Manager).", "DOC:p.87 §4"],
+  ["QM-F4", "Any fail: NCR mandatory; WO stays Testing. Disposition Rework (RWO, retest of the failed scope), Engineering Review (ECR link) or Scrap, which needs the Controller and the Engineering Manager (two people) before the result is Fail. The WO stays Testing until Pass or the scrap approval.", "DOC:p.87 §4"],
   ["QM-F5", "Run history is preserved; nothing is overwritten. The Quality Manager countersigns the FTR; the tester cannot countersign their own.", "DOC:p.87 §4"],
 ]
 
@@ -36,6 +36,7 @@ const stage = (f: FinalTest) => {
   const last = f.runs[f.runs.length - 1]
   if (f.finalResult === "Pass") return "FTR issued"
   if (f.finalResult === "Fail") return "Scrapped"
+  if (f.disposition === "Scrap") return "Scrap awaiting approval"
   if (!last) return "Queued"
   if (!last.outcome) return "Run open"
   return last.outcome === "Fail" ? "Failed, rework" : "Queued"
@@ -45,6 +46,10 @@ const stage = (f: FinalTest) => {
 export function FinalTestList() {
   const s = useSlice("qualityTrace")
   const ds = useDataState("QM-FIN-001")
+  // orders that reached Testing arrive in the queue [DOC:p.87 §4]
+  useEffect(() => {
+    act.pullFromOrders()
+  }, [])
   const [params, setParams] = useSearchParams()
   const q = (params.get("q") as Q) ?? "queue"
   const setQ = (v: Q) => (params.set("q", v), setParams(params, { replace: true }))
@@ -56,8 +61,8 @@ export function FinalTestList() {
     { id: "item", header: "Unit", value: (f) => f.nameplate.mva, cell: (f) => <span title={materialText(f.itemId)}>{f.nameplate.mva} · {f.nameplate.voltage}</span> },
     { id: "wo", header: "Production order", value: (f) => f.woId, cell: (f) => <DocLinkText r={{ type: "productionOrder", id: f.woId }} /> },
     { id: "wos", header: "WO status", value: (f) => f.woStatusText, filterable: true },
-    { id: "so", header: "Sales order", value: (f) => f.soId, cell: (f) => <DocLinkText r={{ type: "salesOrder", id: f.soId }} /> },
-    { id: "cust", header: "Customer", value: (f) => customerName(f.customerId), filterable: true },
+    { id: "so", header: "Sales order", value: (f) => f.soId || "Stock order", cell: (f) => (f.soId ? <DocLinkText r={{ type: "salesOrder", id: f.soId }} /> : <span className="text-muted-foreground">Stock order</span>) },
+    { id: "cust", header: "Customer", value: (f) => customerName(f.customerId) || "Stock", filterable: true },
     { id: "prom", header: "Promised", value: (f) => f.promisedOn, sortable: true, mono: true, cell: (f) => <span className={cn(!f.finalResult && f.promisedOn < TODAY && "font-semibold text-destructive")}>{f.promisedOn}</span> },
     { id: "runs", header: "Runs", value: (f) => f.runs.length, align: "right", mono: true },
     { id: "stage", header: "Stage", value: stage, filterable: true },
@@ -97,6 +102,7 @@ export function FinalTestList() {
         rowHref: (f) => `/quality/final-test/${f.id}`,
         searchText: (f) => `${f.id} ${f.serial} ${f.woId} ${f.soId} ${f.ftrId ?? ""} ${customerName(f.customerId)}`,
         searchPlaceholder: "Search serial, WO, SO, FTR",
+        initialSort: { id: "prom", dir: "asc" },
         loading: ds.loading,
         error: ds.error,
         onRetry: ds.retry,
@@ -112,7 +118,7 @@ export function FinalTestDetail() {
   const { id } = useParams()
   const s = useSlice("qualityTrace")
   const ds = useDataState("QM-FIN-002")
-  const [dlg, setDlg] = useState<null | "complete" | "ncr" | "dispose" | "countersign">(null)
+  const [dlg, setDlg] = useState<null | "complete" | "ncr" | "dispose" | "countersign" | "scrap">(null)
   const f = s.finalTests.find((x) => x.id === id)
   if (ds.error) return <ErrorAlert title="Could not load the test record" action={<Button variant="outline" size="sm" onClick={ds.retry}>Retry</Button>}>{ds.error}</ErrorAlert>
   if (!f) return <NotFound what="final test record" id={id} back={{ to: "/quality/final-test", label: "Back to Final Test and FTR" }} />
@@ -126,6 +132,8 @@ export function FinalTestDetail() {
     <Button onClick={() => setDlg("complete")}>Complete run {run.run}</Button>
   ) : failed && !f.ncrId ? (
     <Button onClick={() => setDlg("ncr")}>Create NCR (mandatory)</Button>
+  ) : failed && f.disposition === "Scrap" ? (
+    <Button onClick={() => setDlg("scrap")}>Approve scrap ({f.scrapApprovals?.length ?? 0} of 2)</Button>
   ) : failed && f.disposition !== "Rework" ? (
     <Button onClick={() => setDlg("dispose")}>Record disposition</Button>
   ) : (
@@ -138,7 +146,7 @@ export function FinalTestDetail() {
           title: `${f.id} · Final test ${f.serial}`,
           screenId: "QM-FIN-001",
           crumbs: [{ label: "Final Test and FTR", to: "/quality/final-test" }, { label: f.id }],
-          description: `${materialText(f.itemId)} for ${customerName(f.customerId)}. Plan ${f.planId} rev ${f.planRev}; WO ${f.woId} is ${f.woStatusText}.`,
+          description: `${materialText(f.itemId)} for ${customerName(f.customerId) || "stock"}. Plan ${f.planId} rev ${f.planRev}; WO ${f.woId} is ${f.woStatusText}.`,
           chips: (
             <>
               <NoList text={f.finalResult ? `Final result ${f.finalResult}` : open ? `Run ${run.run} open` : failed ? `Run ${run.run} failed` : "Awaiting run"} />
@@ -149,7 +157,7 @@ export function FinalTestDetail() {
           primary,
           actions: (
             <>
-              {failed && f.ncrId && (
+              {failed && f.ncrId && !f.scrapApprovals?.length && (
                 <Button variant="outline" onClick={() => setDlg("dispose")}>
                   Change disposition
                 </Button>
@@ -170,7 +178,7 @@ export function FinalTestDetail() {
             <KV k="Voltage">{f.nameplate.voltage}</KV>
             <KV k="Impedance / cooling">{`${f.nameplate.impedance} · ${f.nameplate.cooling}`}</KV>
             <KV k="Taps">{f.nameplate.taps}</KV>
-            <KV k="Sales order"><DocLinkText r={{ type: "salesOrder", id: f.soId }} /></KV>
+            <KV k="Sales order">{f.soId ? <DocLinkText r={{ type: "salesOrder", id: f.soId }} /> : "Stock order (no customer yet)"}</KV>
             <KV k="Production order"><DocLinkText r={{ type: "productionOrder", id: f.woId }} /></KV>
             <KV k="Promised">{f.promisedOn}</KV>
             <KV k="FTR">{f.ftrId ? `${f.ftrId} · ${f.ftrIssuedOn}` : "Not issued"}</KV>
@@ -212,6 +220,28 @@ export function FinalTestDetail() {
       <NcrDialog sourceId={f.id} open={dlg === "ncr"} onClose={() => setDlg(null)} defaults={{ title: `${run ? finOutcome(f, run.run).failed.map((n) => f.spec.find((c) => c.seq === n)?.name).join(", ") : "Final test"} fail on ${f.serial}`, attributable: "Production" }} />
       <DisposeDialog f={f} open={dlg === "dispose"} onClose={() => setDlg(null)} />
       <DialogShell
+        open={dlg === "scrap"}
+        onOpenChange={(o) => !o && setDlg(null)}
+        title={`Approve scrap of ${f.serial}`}
+        consequence={`Records your approval as ${f.scrapApprovals?.some((a) => a.role === "Controller") ? "the Engineering Manager" : "the Controller or the Engineering Manager"}. Final result becomes Fail only when both have approved (two different people); production then posts the scrap on confirmation (#30).`}
+        confirmLabel="Approve scrap"
+        destructive
+        onConfirm={() => {
+          const r = act.approveScrap(f.id)
+          return report(r, "Scrap approval recorded") ? null : (r as { error: string }).error
+        }}
+      >
+        <ul className="text-sm">
+          {(f.scrapApprovals ?? []).map((a) => (
+            <li key={a.role}>{a.role}: {userName(a.by)} · {a.on}</li>
+          ))}
+          {!f.scrapApprovals?.length && <li className="text-muted-foreground">No approval yet. Needs the Controller and the Engineering Manager.</li>}
+        </ul>
+        <p className="text-xs text-muted-foreground">
+          Recorded on this screen <Reading id="QT-R18" />
+        </p>
+      </DialogShell>
+      <DialogShell
         open={dlg === "countersign"}
         onOpenChange={(o) => !o && setDlg(null)}
         title={`Countersign ${f.ftrId}`}
@@ -228,6 +258,10 @@ export function FinalTestDetail() {
 
 function Catalog({ f }: { f: FinalTest }) {
   return (
+    <div className="flex flex-col gap-2">
+    <p className="text-xs text-muted-foreground">
+      Bounds follow the design sheet and the specification (turns ratio ±0.5%, loss +10%, %Z ±7.5%). The winding-resistance band and the bands on excitation current and the 110% V and load-loss rows are design values <Reading id="QT-R24" />.
+    </p>
     <Table>
       <TableHeader className="bg-table-head">
         <TableRow>
@@ -276,6 +310,7 @@ function Catalog({ f }: { f: FinalTest }) {
         ))}
       </TableBody>
     </Table>
+    </div>
   )
 }
 
@@ -286,7 +321,7 @@ function Capture({ f, s }: { f: FinalTest; s: QualityTraceState }) {
   if (!open)
     return (
       <div className="flex flex-col gap-2 text-sm">
-        <p>{run ? `Run ${run.run} closed as ${run.outcome}.` : "No run yet."} {run?.outcome === "Fail" ? (f.disposition === "Rework" ? `Rework ${f.rwoId} is open; start the retest run when the unit is back at WC-500 (scope: ${finOutcome(f, run.run).failed.join(", ")}).` : "Create the NCR and record the disposition before a retest.") : "Start a run to capture results."}</p>
+        <p>{run ? `Run ${run.run} closed as ${run.outcome}.` : "No run yet."} {run?.outcome === "Fail" ? (f.disposition === "Rework" ? `Rework ${f.rwoId ?? "requested from Production planning"} is open; start the retest run when the unit is back at WC-500 (scope: ${finOutcome(f, run.run).failed.join(", ")}).` : f.disposition === "Scrap" ? `Scrap is awaiting the Controller and the Engineering Manager (${f.scrapApprovals?.length ?? 0} of 2).` : f.disposition === "Engineering Review" ? `Engineering Review ${f.ecrId ? `linked to ${f.ecrId}` : "requested: ECR to follow"}; no retest until the review returns.` : "Create the NCR and record the disposition before a retest.") : "Start a run to capture results."}</p>
         {f.ncrId && <p>NCR: <DocLinkText r={{ type: "ncr", id: f.ncrId }} />{f.rwoId && <> · Rework order: <DocLinkText r={{ type: "reworkOrder", id: f.rwoId }} /></>}</p>}
       </div>
     )
@@ -476,6 +511,8 @@ function Ftr({ f, s }: { f: FinalTest; s: QualityTraceState }) {
 
 function DisposeDialog({ f, open, onClose }: { f: FinalTest; open: boolean; onClose: () => void }) {
   const [d, setD] = useState<NonNullable<FinalTest["disposition"]>>("Rework")
+  const [ecr, setEcr] = useState("")
+  const ecrs = useSlice("engineering").ecrs
   return (
     <DialogShell
       open={open}
@@ -483,26 +520,31 @@ function DisposeDialog({ f, open, onClose }: { f: FinalTest; open: boolean; onCl
       title={`Disposition of failed test on ${f.serial}`}
       consequence={
         d === "Rework"
-          ? `Opens rework order RWO-TBD-${f.woId.slice(-4)} against ${f.ncrId}; the retest covers only the failed characteristics.`
+          ? `Asks Production planning for a rework order against ${f.ncrId} (the number arrives when it drafts the RWO); the retest covers only the failed characteristics.`
           : d === "Scrap"
-            ? `Final result Fail; the unit is scrapped. Production posts the scrap on confirmation (#30). Needs the Controller and the Engineering Manager.`
-            : "Holds the unit for an engineering review of the design values; no retest until it returns."
+            ? `Starts the scrap approval: the Controller and the Engineering Manager both approve before the final result is Fail and the unit is scrapped. Production then posts the scrap on confirmation (#30).`
+            : ecr
+              ? `Links the unit to ${ecr} and holds it for an engineering review; no retest until it returns.`
+              : "Requests an ECR from Engineering for the design values and holds the unit; no retest until the review returns."
       }
       confirmLabel="Record disposition"
       wide
       requireReason
       destructive={d === "Scrap"}
       onConfirm={(reason) => {
-        const r = act.dispose(f.id, d, reason)
+        const r = act.dispose(f.id, d, reason, { ecrId: ecr })
         return report(r, `Disposition ${d}`) ? null : (r as { error: string }).error
       }}
     >
       <Pick id="fin-disp" label="Disposition" value={d} onChange={setD} options={["Rework", "Engineering Review", "Scrap"] as NonNullable<FinalTest["disposition"]>[]} />
+      {d === "Engineering Review" && (
+        <Pick id="fin-ecr" label="ECR link (optional)" value={ecr || undefined} onChange={setEcr} placeholder="Request a new ECR" options={ecrs.map((e) => ({ value: e.id, label: `${e.id} · ${e.title}` }))} />
+      )}
       {d === "Scrap" && (
         <>
           <PostingPreview lines={[{ template: 30, amount: null, notPostedReason: "Posted by production when the scrap quantity is confirmed", detail: `${f.woId} ${f.serial}` }]} title="Posting downstream" />
           <p className="text-xs text-muted-foreground">
-            Dual sign-off recorded here <Reading id="QT-R18" />
+            Dual sign-off (Controller + Engineering Manager) recorded here <Reading id="QT-R18" />
           </p>
         </>
       )}

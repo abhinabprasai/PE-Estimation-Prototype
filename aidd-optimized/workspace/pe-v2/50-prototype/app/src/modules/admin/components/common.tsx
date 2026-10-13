@@ -63,3 +63,23 @@ export function SlaClock({ ageHours, slaHours, overdue, escalateTo }: { ageHours
 export function StateText({ children, tone = "default" }: { children: ReactNode; tone?: "default" | "attention" | "muted" }) {
   return <span className={cn("text-sm", tone === "attention" && "font-semibold text-status-pending-ink", tone === "muted" && "text-muted-foreground")}>{children}</span>
 }
+
+/** A removable list of chosen values with a select to add more (roles, users). */
+export function MultiAdd({ id, label, values, options, onChange, hint }: { id: string; label: string; values: string[]; options: { value: string; label: string }[]; onChange: (v: string[]) => void; hint?: ReactNode }) {
+  const left = options.filter((o) => !values.includes(o.value))
+  return (
+    <Field id={id} label={label} hint={hint}>
+      <div className="flex flex-wrap gap-1">
+        {values.length === 0 && <span className="text-xs text-muted-foreground">None chosen</span>}
+        {values.map((v) => (
+          <button key={v} type="button" className="inline-flex h-6 items-center gap-1 rounded-md border px-2 text-xs hover:bg-muted" aria-label={`Remove ${options.find((o) => o.value === v)?.label ?? v}`} onClick={() => onChange(values.filter((x) => x !== v))}>
+            {options.find((o) => o.value === v)?.label ?? v} <span aria-hidden="true">×</span>
+          </button>
+        ))}
+      </div>
+      <SimpleSelect id={id} value="" onChange={(v) => v && onChange([...values, v])} options={left} placeholder={left.length ? "Add…" : "All chosen"} disabled={!left.length} />
+    </Field>
+  )
+}
+
+export const money = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`

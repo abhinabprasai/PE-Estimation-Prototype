@@ -19,6 +19,7 @@ import { daysBetween, fmtDate } from "@/lib/format"
 import { useRole, useSlice } from "@/store"
 import { ActivityList, Item, RefLink, SoLink, StatePreview, matDesc, qty, useAct, useActDialog, useScreenState, Marker } from "../components"
 import * as act from "../lib/actions"
+import { RunMrpDialog } from "./RunMrp"
 import { EX_CATALOG, type ExCode, type MrpException, type MrpRun, type PPPlannedOrder } from "../data/types"
 
 const CODES = Object.keys(EX_CATALOG) as ExCode[]
@@ -64,6 +65,7 @@ export function MrpWorkbench() {
   const [redate, setRedate] = useState<{ id: string; date: string; note: string } | null>(null)
   const [convert, setConvert] = useState<string[] | null>(null)
   const [selPlo, setSelPlo] = useState<string[]>([])
+  const [runDlg, setRunDlg] = useState(false)
 
   const visibleEx = s.exceptions.filter((x) => !buyerView || x.buy)
   const open = visibleEx.filter((x) => !x.resolved)
@@ -119,16 +121,16 @@ export function MrpWorkbench() {
           screenId: "PP-MRP-001",
           description: buyerView ? "Buyer view: exceptions on bought items only (EX-01, EX-02, EX-03, EX-06, EX-09)." : "Nightly regenerative run; net change on demand. Act on exceptions, firm proposals (they survive the next regenerative run), convert with preview.",
           chips: buyerView ? <Chip kind="design" note="Buyers see their exceptions [DOC:p.259]; the filter is by bought item">Buyer filter</Chip> : <Chip kind="design" note="The nightly run time 01:00 is a design value; the PRD names a nightly regenerative run, not its time">Nightly 01:00</Chip>,
-          primary: <Button onClick={() => run((d, c) => act.runMrpNetChange(d, c), (id) => `${id} completed`)}>Run net change</Button>,
+          primary: <Button onClick={() => setRunDlg(true)}>Run MRP</Button>,
           actions: (
             <>
               <StatePreview />
-              <Button variant="outline" onClick={() => run((d, c) => act.runMrpRegenerative(d, c), (id) => `${id} regenerative run completed; firmed planned orders kept`)}>Run regenerative now</Button>
+              <Button variant="outline" asChild><Link to="/production/dialogs/run-mrp">Run dialog states</Link></Button>
               <Button variant="outline" asChild><Link to="/production/planned-orders">Planned orders</Link></Button>
             </>
           ),
           children: (
-            <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-9" role="list" aria-label="Exception types">
+            <div className="grid grid-cols-3 gap-2 md:grid-cols-5 xl:grid-cols-10" role="list" aria-label="Exception types">
               {CODES.map((c) => {
                 const xs = open.filter((x) => x.code === c)
                 const oldest = xs.reduce((a, x) => Math.max(a, age(x)), 0)
@@ -213,6 +215,8 @@ export function MrpWorkbench() {
             <span className="inline-flex gap-2">
               <Button size="sm" variant="outline" disabled={!selPlo.length} onClick={() => run((d, c) => act.firmPlanned(d, c, selPlo, true), `${selPlo.length} firmed`)}>Firm</Button>
               <Button size="sm" disabled={!selPlo.length} onClick={() => setConvert(selPlo)}>Convert with preview</Button>
+              <Button size="sm" variant="outline" disabled={!proposals.some((p) => p.firmed)} onClick={() => setConvert(proposals.filter((p) => p.firmed).map((p) => p.id))}>Convert all firmed ({proposals.filter((p) => p.firmed).length})</Button>
+              <Button size="sm" variant="ghost" disabled={!proposals.length} onClick={() => (setSelPlo(proposals.map((p) => p.id)), setConvert(proposals.map((p) => p.id)))}>Convert all open ({proposals.length})</Button>
             </span>
           }
           empty={{ title: "No open proposals", body: "Every proposal is converted or cancelled." }}
@@ -222,7 +226,9 @@ export function MrpWorkbench() {
         <h2 className="text-base font-semibold">Run history</h2>
         <DataTable<MrpRun> densityKey="PP-MRP-001-runs" rows={st.empty ? [] : s.mrpRuns} columns={runCols} rowId={(r) => r.id} loading={st.loading} empty={{ title: "No runs yet" }} />
       </section>
+      <RunMrpDialog open={runDlg} onOpenChange={setRunDlg} />
       <RulesPanel className="mt-6" rules={[
+        ["EX-10", "Network demand that cannot be placed (an inactive lane, or a supplying plant without a valid production version) raises EX-10; reactivating the lane clears it. Target state, live at activation (DEC-07)", "DOC:p.283 Book IX §4.4"],
         ["EX-01..EX-07", "Exception messages and their one-click actions", "DOC:p.72 §3.2"],
         ["EX-08 / EX-09", "Inside the planning fence the planner decides; no valid source sends the buyer to RFQ or AVL qualification", "DOC:p.149; p.157"],
         ["Convert", "Creates production order drafts and purchase requisitions with pegs preserved; the run ID is logged", "DOC:p.259 Book VI"],

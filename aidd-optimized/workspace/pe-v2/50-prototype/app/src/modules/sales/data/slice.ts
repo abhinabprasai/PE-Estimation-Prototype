@@ -1,9 +1,11 @@
 // The sales slice (FL-09 DB plus leads, customer master, backorders, RMAs and installed base),
 // registered with the root store from this folder.
-import { defineSlice, type SearchHit } from "@/store"
+import { defineSlice, type SearchHit, type StoreApi } from "@/store"
 import type { DocLink, DocRef } from "@/data/domain"
 import { TODAY, type DB } from "./model"
 import { buildSeed } from "./seed"
+import { applyDesignApproved, applyPromiseDecision } from "../fx/actions"
+import { shipIdOf } from "../fx/derive"
 import { applyReallocationDecision, ibFromPgi, ibFromPod, onRmaDecided, onRmaRequested, raiseRmaSlaAlerts, recallRmas, rmaApprovalCtx, rmaValue } from "./ext-actions"
 
 declare module "@/store/types" {
@@ -22,6 +24,12 @@ declare module "@/store/events" {
 
 const linkKindFor = (r: DocRef): DocLink["kind"] => (r.type === "reworkOrder" ? "reworks" : r.type === "ncr" || r.type === "scar" ? "escalates" : "creates")
 
+function raiseSeedRmaApprovals(api: StoreApi) {
+  const db = api.getSlice("sales")
+  for (const r of db.rmas.filter((x) => x.status === "Pending Approval"))
+    api.raiseApproval({ kind: "RMA approval", subject: { type: "rma", id: r.id }, title: `${r.id} ${r.cls} ${r.reason}, ${db.customers.find((c) => c.id === r.customerId)?.name}`, amount: rmaValue(r), ctx: rmaApprovalCtx(r) })
+}
+
 export const salesSlice = defineSlice({
   key: "sales",
   seed: buildSeed,
@@ -37,6 +45,16 @@ export const salesSlice = defineSlice({
       ...db.leads.map((l) => ({ title: l.id, subtitle: `Lead · ${l.stage} · ${l.company} · ${l.title}`, route: `/sales/leads/${l.id}`, ref: { type: "lead" as const, id: l.id }, group: "Sales" })),
       ...db.leads.filter((l) => l.oppId).map((l) => ({ title: l.oppId!, subtitle: `Opportunity · ${l.stage} · ${l.company}`, route: `/sales/leads/${l.id}`, ref: { type: "opportunity" as const, id: l.oppId! }, group: "Sales" })),
       ...db.rmas.map((r) => ({ title: r.id, subtitle: `RMA · ${r.cls} · ${r.status} · ${cname(r.customerId)}`, route: `/sales/rma/${r.id}`, ref: { type: "rma" as const, id: r.id }, status: { kind: "rma" as const, value: r.status }, group: "Returns" })),
+      ...Object.keys(db.fx.ship).map((id) => ({ title: shipIdOf(id), subtitle: `Shipment · ${db.deliveries.find((d) => d.id === id)?.status ?? ""} · ${db.fx.ship[id].tender} · ${id}`, route: `/sales/shipments/${shipIdOf(id)}`, status: db.deliveries.find((d) => d.id === id) ? { kind: "delivery" as const, value: db.deliveries.find((d) => d.id === id)!.status } : undefined, group: "Sales" })),
+      ...db.fx.inbound.map((c) => ({ title: c.id, subtitle: `Inbound capture · ${c.status} · ${c.channel} · ${c.company || "no company"}`, route: "/sales/leads/import", group: "Sales" })),
+      ...db.fx.changes.map((c) => ({ title: c.id, subtitle: `Sales change order v${c.version} · ${c.soId} · ${c.field}`, route: `/sales/orders/${c.soId}`, group: "Sales" })),
+      ...db.fx.cancels.map((c) => ({ title: c.id, subtitle: `Cancellation · ${c.soId} · ${c.state}`, route: `/sales/orders/${c.soId}`, group: "Sales" })),
+      ...db.fx.depegs.map((d) => ({ title: d.id, subtitle: `De-peg · ${d.soId} to ${d.toSo} · ${d.state}`, route: "/sales/dialogs/credit-release-depeg", group: "Sales" })),
+      ...db.fx.creditMemos.map((c) => ({ title: c.id, subtitle: `Credit memo request · ${c.rmaId} · ${c.state}`, route: `/sales/rma/${c.rmaId}`, group: "Returns" })),
+      ...db.fx.repairQuotes.map((q) => ({ title: q.id, subtitle: `Billable repair quote · ${q.rmaId} · ${q.state}`, route: `/sales/rma/${q.rmaId}`, group: "Returns" })),
+      ...db.fx.kits.map((k) => ({ title: k.id, subtitle: `Sales kit · ${k.name} · BOM ${k.status}`, route: "/sales/dialogs/kit-explode", group: "Sales" })),
+      ...db.fx.exclusions.map((e) => ({ title: e.code, subtitle: `Warranty exclusion · ${e.category} · ${e.active ? "Active" : "Inactive"}`, route: "/service/warranty-exclusions", group: "Returns" })),
+      ...db.fx.custProp.map((c) => ({ title: c.id, subtitle: `Customer property · ${c.soId} · ${c.description}`, route: "/sales/dialogs/customer-property", group: "Sales" })),
       ...db.ib.map((i) => ({ title: i.id, subtitle: `Installed base · ${i.status} · ${i.serial} · ${cname(i.customerId)}`, route: `/service/installed-base/${i.id}`, ref: { type: "installedBase" as const, id: i.id }, status: { kind: "installedBase" as const, value: i.status }, group: "Returns" })),
     ]
   },
@@ -72,6 +90,10 @@ export const salesSlice = defineSlice({
     for (const i of db.ib) if (i.id !== "IB-TBD-0301") out.push({ from: { type: "serial", id: i.serial }, to: { type: "installedBase", id: i.id }, kind: "installs" })
     return out
   },
+  afterReset: (api) => {
+    raiseSeedRmaApprovals(api)
+    api.mutate("sales", (d, ctx) => raiseRmaSlaAlerts(d, ctx))
+  },
   subscribe: (api) => {
     // Installed base: created automatically at PGI (p.253 IB-001 "Arrives from"); POD date marks it Installed.
     api.on("sales.pgiPosted", ({ deliveryId, serials }) => api.mutate("sales", (db) => ibFromPgi(db, deliveryId, serials)))
@@ -100,10 +122,12 @@ export const salesSlice = defineSlice({
     api.on("quality.recallStageChanged", ({ recallId, stage }) => {
       if (stage === "Recover") api.mutate("sales", (db, ctx) => recallRmas(db, ctx, recallId))
     })
-    // Seeded RMAs waiting for approval get their request in the shared engine at start.
-    const db = api.getSlice("sales")
-    for (const r of db.rmas.filter((x) => x.status === "Pending Approval"))
-      api.raiseApproval({ kind: "RMA approval", subject: { type: "rma", id: r.id }, title: `${r.id} ${r.cls} ${r.reason}, ${db.customers.find((c) => c.id === r.customerId)?.name}`, amount: rmaValue(r), ctx: rmaApprovalCtx(r) })
+    // Customer drawing approval from engineering (TR-001): evidence for the Design Approval milestone.
+    api.on("engineering.designApproved", (p) => api.mutate("sales", (db, ctx) => applyDesignApproved(db, ctx, p)))
+    // Promise Dialog decisions (planning module, CTP-DLG): the promise lands on the quote or order line.
+    api.on("planning.promiseDecided", (p) => api.mutate("sales", (db, ctx) => applyPromiseDecision(db, ctx, p)))
+    // Seeded RMAs waiting for approval get their request in the shared engine at start (and after Scenario reset).
+    raiseSeedRmaApprovals(api)
     // Receipt-to-inspection SLA: breaches open at start alert the Quality Manager; later breaches are
     // swept after each RMA receipt or status change below.
     api.mutate("sales", (d, ctx) => raiseRmaSlaAlerts(d, ctx))

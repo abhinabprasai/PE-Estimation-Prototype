@@ -77,8 +77,8 @@ export function duplicateCandidates(s: MaterialsState, description: string, grou
     .slice(0, 5)
 }
 /** "New material" always starts an MCR (C-47): the number is reserved, the material sits in Draft. */
-export function createMcr(i: NewMcrInput) {
-  return mutate((d, ctx) => {
+export function createMcrIn(d: MaterialsState, ctx: MutateCtx, i: NewMcrInput) {
+  {
     need(i.description.trim().length >= 8, "Enter a short description of at least 8 characters.", "description")
     need(i.groupL1 && i.groupL2, "Choose material group levels 1 and 2.", "group")
     if (i.mpn && i.manufacturer) {
@@ -102,7 +102,10 @@ export function createMcr(i: NewMcrInput) {
     })
     logChange(d, ctx, id, "Record", "", "Number reserved (Draft)", mcrId)
     return mcrId
-  })
+  }
+}
+export function createMcr(i: NewMcrInput) {
+  return mutate((d, ctx) => createMcrIn(d, ctx, i))
 }
 /** Submit for completion: material Draft to Data Completion, task SLAs start (§4.1, §4.2). */
 export function submitMcr(mcrId: string) {
@@ -136,6 +139,11 @@ export function completeTask(mcrId: string, taskId: string) {
       const m = getMaterial(d, r!.materialId)!
       const v = d.views[m.id]
       const def = defaultViews(m)
+      if (t.view.startsWith("General") && v.groupPath.length < 2) {
+        // An engineering placeholder arrives with only group level 1; the steward's General task closes the gap (RD-MM-40).
+        v.groupPath = [v.groupPath[0] ?? "Unclassified", "Other"]
+        r!.activity.unshift({ at: ctx.today, by: ctx.role, text: "Material group level 2 set to Other (reading RD-MM-40); refine it in the General view" })
+      }
       for (const k of TASK_FIELDS[t.view] ?? []) if (v[k] == null || (Array.isArray(v[k]) && !(v[k] as unknown[]).length)) (v as unknown as Record<string, unknown>)[k] = def[k]
       if (t.view === "Accounting & Costing" && isValuated(m.type) && !d.valuations.some((x) => x.materialId === m.id))
         d.valuations.push({ materialId: m.id, plantId: "PL-TBD-01", entityId: "LE-TBD-10", valuationClass: v.valuationClass ?? "", method: v.method === "Standard" ? "Standard" : "MAV", stdCost: v.method === "Standard" ? r!.estCost : undefined, mav: v.method === "Standard" ? undefined : r!.estCost, validFrom: ctx.today })
@@ -340,15 +348,15 @@ export function computeNew(old: string, mode: MchRecord["mode"], value: string, 
   if (mode === "Find/replace") return find ? old.split(find).join(value) : old
   return value
 }
-export function createMch(i: { title: string; fieldKey: string; mode: MchRecord["mode"]; rows: MchRowDraft[]; apply: MchRecord["apply"]; effective?: string; reason: string; ecoRef?: string }) {
-  return mutate((d, ctx) => {
+export function createMchIn(d: MaterialsState, ctx: MutateCtx, i: { title: string; fieldKey: string; mode: MchRecord["mode"]; rows: MchRowDraft[]; apply: MchRecord["apply"]; effective?: string; reason: string; ecoRef?: string }) {
+  {
     const f = fieldDef(i.fieldKey)
     need(f && f.cls !== 3, "Class 3 fields are never editable; the change is a supersession (§4.4).")
     const good = i.rows.filter((r) => !r.error)
     need(good.length > 0, "Every row failed validation; nothing to submit.")
     need(i.reason.trim(), "Enter the reason for the change.", "reason")
     need(i.apply === "Immediate" || (i.effective && i.effective > ctx.today), "An effective-dated change needs a future date.", "effective")
-    const id = `MCH-2026-00${nextSeq(d)}` as MchRecord["id"]
+    const id = `MCH-2026-${String(nextSeq(d)).padStart(4, "0")}` as MchRecord["id"]
     d.mchs.unshift({
       id, title: i.title || `${f!.label}: ${good.length} materials`, stage: "Draft", fieldKey: i.fieldKey, fieldClass: f!.cls as 1 | 2, mode: i.mode, apply: i.apply, effective: i.effective, approvalRefs: [],
       rows: good.map((r) => ({ materialId: r.materialId as Material["id"], field: f!.label, old: r.old, new: r.new })),
@@ -357,7 +365,10 @@ export function createMch(i: { title: string; fieldKey: string; mode: MchRecord[
       activity: [{ at: ctx.today, by: ctx.role, text: `Created from the simulation: ${good.length} rows, ${i.rows.length - good.length} excluded; Class ${f!.cls}` }],
     })
     return id
-  })
+  }
+}
+export function createMch(i: { title: string; fieldKey: string; mode: MchRecord["mode"]; rows: MchRowDraft[]; apply: MchRecord["apply"]; effective?: string; reason: string; ecoRef?: string }) {
+  return mutate((d, ctx) => createMchIn(d, ctx, i))
 }
 function applyRows(d: MaterialsState, ctx: MutateCtx, c: MchRecord) {
   let errors = 0
@@ -386,6 +397,7 @@ function applyRows(d: MaterialsState, ctx: MutateCtx, c: MchRecord) {
 export function applyMch(id: string, now = false) {
   return mutate((d, ctx) => {
     const c = d.mchs.find((x) => x.id === id)!
+    need(!c.valuation, "A valuation change is released by the Controller at the period boundary (§5.4).")
     if (c.fieldClass === 2) need(c.stage === "Approved" || c.stage === "Scheduled", "A Class 2 change applies only after approval through WF-INBOX.")
     else need(c.stage === "Draft" || c.stage === "Scheduled", "This change is not waiting to be applied.")
     if (c.apply === "Effective-dated" && c.effective && c.effective > ctx.today && !now) {
@@ -415,7 +427,7 @@ export function createSupersession(i: { predecessorId: string; successorId: stri
     need(["Active", "Restricted", "Blocked"].includes(p!.status), "Supersede is enabled for Active, Restricted or Blocked materials (§3.14).")
     need(!d.supersessions.some((x) => x.predecessorId === i.predecessorId && x.stage !== "Closed" && x.stage !== "Rejected"), `${i.predecessorId} already has an open supersession.`)
     need(i.reason.trim(), "Enter the reason.", "reason")
-    const id = `SUP-2026-00${nextSeq(d)}` as SupersessionRecord["id"]
+    const id = `SUP-2026-${String(nextSeq(d)).padStart(4, "0")}` as SupersessionRecord["id"]
     d.supersessions.unshift({
       id, predecessorId: p!.id, successorId: s!.id, policy: i.policy, effective: i.effective, relationship: i.relationship, stage: "Draft", reason: i.reason.trim(), disposition: i.policy === "Immediate" ? i.disposition ?? "Rework" : undefined,
       startQty: onHand(d, p!.id), createdOn: ctx.today, tasks: [], activity: [{ at: ctx.today, by: ctx.role, text: "Supersession record created" }],
@@ -1281,6 +1293,12 @@ export function onMchOrSupDecided(api: StoreApi, id: string, outcome: "Approved"
       }
       c.stage = "Approved"
       c.activity.unshift({ at: ctx.today, by: "WF-INBOX", text: `Approved in ${requestId}` })
+      if (c.valuation) {
+        // Valuation change (§5.4): approved, then released by the Controller at the period boundary (README R-13).
+        c.activity.unshift({ at: ctx.today, by: "System", text: `Waiting for the Controller to release it${c.valuation.effective > ctx.today ? ` at ${c.valuation.effective}` : ""}` })
+        if (c.valuation.effective > ctx.today) c.stage = "Scheduled"
+        return
+      }
       if (c.apply === "Effective-dated" && c.effective && c.effective > ctx.today) {
         c.stage = "Scheduled"
         c.activity.unshift({ at: ctx.today, by: "System", text: `Scheduled for ${c.effective}` })

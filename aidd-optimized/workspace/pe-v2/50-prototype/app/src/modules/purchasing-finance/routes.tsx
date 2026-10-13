@@ -18,6 +18,20 @@ import { MarginAnalysis } from "./pages/Margin"
 import { CenterList, CostCenterDetail, ProfitCenterDetail } from "./pages/Centers"
 import { AllocationDetail, AllocationList } from "./pages/Allocations"
 import { ReportDetail, ReportsIndex } from "./pages/Reports"
+import { AvlView } from "./pages/Avl"
+import { ContractDetail, ContractList } from "./pages/Contracts"
+import { StpDetail, StpList } from "./pages/Stp"
+import { DeviationDetail, DeviationList } from "./pages/SupplierDeviations"
+import { SubcontractDetail, SubcontractList } from "./pages/Subcontract"
+import { PoLineDialogsPage } from "./pages/PoLineDialogsPage"
+import { VendorPerformance } from "./pages/VendorPerformance"
+import { DriverRates } from "./pages/DriverRates"
+import { AgreementDetail, AgreementList } from "./pages/Agreements"
+import { MarginFloors } from "./pages/MarginFloors"
+import { CvaReportDetail, CvaReportsIndex } from "./pages/CvaReports"
+import { AlternateHierarchies, HierarchyEditor } from "./pages/Hierarchy"
+import { StatisticalKeyFigures } from "./pages/Skf"
+import { MyBudget } from "./pages/MyBudget"
 
 export const routes: ModuleRoute[] = [
   { path: "/purchasing/workbench", element: <BuyerWorkbench />, screenId: "PUR-WB-001" },
@@ -50,6 +64,28 @@ export const routes: ModuleRoute[] = [
   { path: "/controlling/allocations/:id", element: <AllocationDetail />, screenId: "CO-ALC-001/2" },
   { path: "/controlling/reports", element: <ReportsIndex />, screenId: "CO-R1..R4" },
   { path: "/controlling/reports/:id", element: <ReportDetail />, screenId: "CO-R1..R4" },
+  // ---- feature-list rows (routes are design values)
+  { path: "/purchasing/avl", element: <AvlView />, screenId: "FX-PUR-AVL" },
+  { path: "/purchasing/contracts", element: <ContractList />, screenId: "FX-PUR-CONTRACT" },
+  { path: "/purchasing/contracts/:id", element: <ContractDetail />, screenId: "FX-PUR-CONTRACT" },
+  { path: "/purchasing/stp", element: <StpList />, screenId: "FX-PUR-STP" },
+  { path: "/purchasing/stp/:id", element: <StpDetail />, screenId: "FX-PUR-STP" },
+  { path: "/purchasing/supplier-deviations", element: <DeviationList />, screenId: "FX-PUR-SUPDEV" },
+  { path: "/purchasing/supplier-deviations/:id", element: <DeviationDetail />, screenId: "FX-PUR-SUPDEV" },
+  { path: "/purchasing/subcontract-orders", element: <SubcontractList />, screenId: "FX-PUR-SUBCON" },
+  { path: "/purchasing/subcontract-orders/:id", element: <SubcontractDetail />, screenId: "FX-PUR-SUBCON" },
+  { path: "/purchasing/dialogs/po-line", element: <PoLineDialogsPage />, screenId: "FX-PUR-POLINE" },
+  { path: "/purchasing/vendor-performance", element: <VendorPerformance />, screenId: "FX-PUR-SCORECARD" },
+  { path: "/costing/driver-rates", element: <DriverRates />, screenId: "FX-CST-DRIVER" },
+  { path: "/pricing/agreements", element: <AgreementList />, screenId: "FX-PRC-AGREEMENTS" },
+  { path: "/pricing/agreements/:id", element: <AgreementDetail />, screenId: "FX-PRC-AGREEMENTS" },
+  { path: "/pricing/margin-floors", element: <MarginFloors />, screenId: "FX-PRC-FLOORS" },
+  { path: "/inventory/valuation/reports", element: <CvaReportsIndex />, screenId: "FX-CVA-REPORTS" },
+  { path: "/inventory/valuation/reports/:id", element: <CvaReportDetail />, screenId: "FX-CVA-REPORTS" },
+  { path: "/controlling/hierarchy", element: <HierarchyEditor />, screenId: "FX-CO-HIERARCHY" },
+  { path: "/controlling/alternate-hierarchies", element: <AlternateHierarchies />, screenId: "FX-CO-ALT" },
+  { path: "/controlling/statistical-key-figures", element: <StatisticalKeyFigures />, screenId: "CO-SKF-001" },
+  { path: "/controlling/my-budget", element: <MyBudget />, screenId: "FX-CO-BUDGET" },
 ]
 
 /** Extra sidebar entries (the registry already lists every screen of this group). */
@@ -77,4 +113,19 @@ export const built: Partial<Record<string, Built>> = {
   "CO-CC/PC-001/2": "full",
   "CO-ALC-001/2": "full",
   "CO-R1..R4": "full",
+  "FX-PUR-AVL": "full",
+  "FX-PUR-CONTRACT": "full",
+  "FX-PUR-STP": "full",
+  "FX-PUR-SUPDEV": "full",
+  "FX-PUR-SUBCON": "full",
+  "FX-PUR-POLINE": "full",
+  "FX-PUR-SCORECARD": "full",
+  "FX-CST-DRIVER": "full",
+  "FX-PRC-AGREEMENTS": "full",
+  "FX-PRC-FLOORS": "full",
+  "FX-CVA-REPORTS": "full",
+  "FX-CO-HIERARCHY": "full",
+  "FX-CO-ALT": "full",
+  "CO-SKF-001": "full",
+  "FX-CO-BUDGET": "full",
 }

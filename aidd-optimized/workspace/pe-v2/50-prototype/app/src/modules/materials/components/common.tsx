@@ -12,13 +12,14 @@ import type { Family, Material, MaterialType } from "@/data/domain"
 import { userById } from "@/data/shared"
 import { fmtMoney } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { READINGS, type IrStatus, type ReadingId, type SlaState } from "../lib/rules"
+import { READINGS, type IrStatus, type SlaState } from "../lib/rules"
+import { EXT_READINGS, type AnyReadingId } from "../lib/ext-rules"
 import { R } from "../data/state"
 
 /** A PRD-silent choice shown on screen; logged in README "Readings". */
-export function Reading({ id }: { id: ReadingId }) {
+export function Reading({ id }: { id: AnyReadingId }) {
   return (
-    <Chip kind="design" note={READINGS[id]}>
+    <Chip kind="design" note={id in READINGS ? READINGS[id as keyof typeof READINGS] : EXT_READINGS[id as keyof typeof EXT_READINGS]}>
       Reading {id}
     </Chip>
   )
